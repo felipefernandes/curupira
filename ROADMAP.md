@@ -12,11 +12,15 @@
 [x] O nome do usuário deve ser armazenado em uma variável de ambiente persistente e usado em todas as interações futuras.
 [x] Curupira deverá se lembrar, resumidamente, de aspectos chaves da persolidade e da forma que o usuário gosta de interagir com ele.
 
-# [Fase 4 - Heartbeat]
-[ ] Implementar um sistema de heartbeat enxuto e compatível com o hardware alvo (Raspberry Pi 3 Model B), considerando limitação de RAM e CPU ou algo similar.
+# [Fase 4 - Heartbeat] - Concluído
+[x] Implementar um sistema de heartbeat enxuto e compatível com o hardware alvo (Raspberry Pi 3 Model B), considerando limitação de RAM e CPU ou algo similar.
 
-# [Fase 5 - Skill: Lembretes]
-[ ] Implementar um sistema de lembretes que permita ao usuário definir lembretes para serem enviados no futuro.
+# [Fase 5 - Skill: Lembretes] - Concluído
+[x] Implementar um sistema de lembretes que permita ao usuário definir lembretes para serem enviados no futuro.
+[ ] Se o usuário perguntar algo do tipo "o que tem que fazer hoje?" ou "Quais são os meus lembretes de hoje | amanhã | semana | mes?", o Curupira deve responder com os lembretes que o usuário definiu.
+[ ] O usuário pode definir lembretes com prazo definido, como "lembrete para amanhã" ou "lembrete para semana que vem".
+[ ] O usuário pode pedir para remover lembretes existentes, como "remova lembrete de amanhã" ou "remova lembrete de semana que vem" ou "remova o lembrete sobre {assunto}" ou "remova todos os lembretes".
+[ ] O usuário pode pedir para alterar alguma propriedade de algum lembrete existe: data, descrição e etc.
 
 # [Fase 6 - Skill: Monitoramento de Hardware]
 [ ] Adicionar monitoramento de hardware (temperatura, uso de CPU/RAM).

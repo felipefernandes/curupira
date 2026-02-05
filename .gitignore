@@ -1,0 +1,12 @@
+
+# Environments
+.env
+.env.example
+venv/
+env/
+.venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class

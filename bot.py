@@ -211,11 +211,11 @@ async def post_init(application: Application):
         # System Heartbeat
         application.job_queue.run_repeating(system_heartbeat, interval=config.HEARTBEAT_INTERVAL, first=10, name="system_heartbeat")
         
-        # Proactive Test (Runs once 30s after startup)
-        if config.AUTHORIZED_USER_ID:
-             application.job_queue.run_once(proactive_ping, when=30, chat_id=config.AUTHORIZED_USER_ID, name="proactive_test")
+        # Proactive Test (Disabled for Production)
+        # if config.AUTHORIZED_USER_ID:
+        #      application.job_queue.run_once(proactive_ping, when=30, chat_id=config.AUTHORIZED_USER_ID, name="proactive_test")
         
-        logging.info("Jobs agendados: Heartbeat & Proactive Ping Stub")
+        logging.info("Jobs agendados: Heartbeat")
     else:
         logging.error("JobQueue não está disponível!")
 

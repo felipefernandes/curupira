@@ -89,6 +89,7 @@ Fatos sobre o Usuário:
 1. Criar Lembrete:
 Se o usuário pedir para ser lembrado, calcule o tempo relativo em minutos e use:
 [[REMINDER|MINUTES|MESSAGE]]
+Nota: 'MESSAGE' deve ser curto, claro e com a grafia correta em português (corrija typos se necessário).
 
 2. Listar Lembretes:
 SOMENTE se o usuário perguntar explicitamente "quais são meus lembretes?" ou "o que tenho pendente?", use:

@@ -24,11 +24,17 @@
 [x] O usuário pode pedir para remover lembretes existentes, como "remova lembrete de amanhã" ou "remova lembrete de semana que vem" ou "remova o lembrete sobre {assunto}" ou "remova todos os lembretes".
 [ ] O usuário pode pedir para alterar alguma propriedade de algum lembrete existe: data, descrição e etc.
 
-# [Fase 6 - Skill: Monitoramento de Hardware]
+# [Fase 6 - Skill: Previsão do Tempo / "Vai chover?"]
+[ ] O usuário pode perguntar algo do tipo "Vai chover hoje?" ou "Qual é a previsão do tempo para amanhã?".
+[ ] O Curupira deve responder com a previsão do tempo para a localização do usuário.
+[ ] O Curupira deve usar uma API de previsão do tempo para obter a previsão do tempo (exemplo: Open-Meteo ou wttr.in).
+[ ] O curupira precisa perguntar ao usuário qual é a sua localização, caso ele não tenha informado anteriormente, e salvar essa informação em uma variável de ambiente persistente. Alternativamente, o curupira pode usar a localização do usuário obtida através do Telegram ou configurar o IP-API para descobrir a localização do usuário baseado no IP do dispositivo.
+
+# [Fase 7 - Skill: Monitoramento de Hardware]
 [ ] Adicionar monitoramento de hardware (temperatura, uso de CPU/RAM).
 
-# [Fase 7 - Skill: Automação de Tarefas]
+# [Fase 8 - Skill: Automação de Tarefas]
 [ ] Adicionar automação de tarefas definidas pelo usuário.
 
-# [Fase 8 - Skill: Gerenciamento de Arquivos]
+# [Fase 9 - Skill: Gerenciamento de Arquivos]
 [ ] Adicionar gerenciamento de arquivos (criar, ler, escrever, deletar, mover, copiar, renomear, listar, etc.).

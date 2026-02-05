@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import logging
 from skills.memory import MemoryManager
 from skills.reminders import ReminderManager
+from skills.weather_manager import WeatherManager
 
 # Configure Logging
 logging.basicConfig(
@@ -21,6 +22,7 @@ gemini_client = None
 groq_client = None
 memory_manager = MemoryManager()
 reminder_manager = ReminderManager()
+weather_manager = WeatherManager()
 
 # Onboarding States
 WAITING_NAME = 1
@@ -105,6 +107,16 @@ Exemplos:
 - "Quais meus lembretes?" -> "Vou verificar... [[REMINDER_LIST]]"
 - "Cancele o lembrete 3" -> "Cancelando... [[REMINDER_DELETE|3]]"
 - "Obrigado" -> "De nada!" (SEM COMANDOS)
+
+4. Previsão do Tempo:
+Se o usuário perguntar sobre o clima/tempo:
+[[WEATHER|NOME_DA_CIDADE]]
+Se o usuário NÃO disser a cidade, verifique se você já sabe onde ele mora (fato 'user_city'). Se souber, use a cidade do fato. Se não souber, PERGUNTE a cidade primeiro.
+
+Exemplos:
+- "Vai chover em Sorocaba?" -> "Vou verificar! [[WEATHER|Sorocaba]]"
+- Usuário: "Vai chover?" (Você Sabe que ele é de SP) -> "Vendo para SP... [[WEATHER|São Paulo]]"
+- Usuário: "Vai chover?" (Você NÃO sabe a cidade) -> "De qual cidade você é?"
 
 [Histórico da Conversa]
 {context_history}
@@ -273,7 +285,15 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logging.error(f"Erro ao deletar lembrete: {e}")
             reply_text = reply_text.replace(delete_match.group(0), "❌ Erro ao cancelar o lembrete.").strip()
 
-    # 4. Log Response
+    # 4. WEATHER
+    weather_match = re.search(r"\[\[WEATHER\|(.*?)\]\]", reply_text)
+    if weather_match:
+        city = weather_match.group(1)
+        weather_info = await weather_manager.get_weather_card(city)
+        # Append card to the reply
+        reply_text = reply_text.replace(weather_match.group(0), weather_info).strip()
+
+    # 5. Log Response
     
     # 4. Log Response
     await memory_manager.log_message(user_id, "model", reply_text)

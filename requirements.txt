@@ -3,3 +3,4 @@ google-genai
 groq
 python-dotenv
 aiosqlite
+httpx

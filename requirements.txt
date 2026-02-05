@@ -2,3 +2,4 @@ python-telegram-bot
 google-genai
 groq
 python-dotenv
+aiosqlite

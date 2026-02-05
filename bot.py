@@ -1,9 +1,10 @@
 from google import genai
 from groq import Groq
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, Application
 import config
 import logging
+from skills.memory import MemoryManager
 
 # Configure Logging
 logging.basicConfig(
@@ -14,6 +15,7 @@ logging.basicConfig(
 # AI Setup
 gemini_client = None
 groq_client = None
+memory_manager = MemoryManager()
 
 logging.info(f"Iniciando bot com provedor: {config.AI_PROVIDER}")
 
@@ -45,7 +47,19 @@ def is_authorized(user_id):
 async def acesso_negado(update: Update):
     await update.message.reply_text("⛔ Acesso negado. Este bot é privado.")
 
-async def get_ai_response(user_msg):
+async def get_ai_response(user_msg, context_history="", facts=""):
+    full_prompt = f"""
+[System Context]
+Persona: Curupira (Assistente Pessoal / Guardião do Sistema)
+Fatos sobre o Usuário:
+{facts}
+
+[Histórico da Conversa]
+{context_history}
+
+[Mensagem Atual]
+User: {user_msg}
+"""
     try:
         if config.AI_PROVIDER == 'groq':
             if not groq_client:
@@ -55,7 +69,7 @@ async def get_ai_response(user_msg):
                 messages=[
                     {
                         "role": "user",
-                        "content": user_msg,
+                        "content": full_prompt,
                     }
                 ],
                 model="llama-3.3-70b-versatile",
@@ -68,7 +82,7 @@ async def get_ai_response(user_msg):
 
             response = gemini_client.models.generate_content(
                 model="gemini-2.0-flash", 
-                contents=user_msg
+                contents=full_prompt
             )
             return response.text
         
@@ -88,10 +102,29 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     user_msg = update.message.text
+    user_name = update.message.from_user.username or "Unknown"
+    full_name = update.message.from_user.full_name or "Unknown"
+    
     await update.message.reply_chat_action(action="typing")
     
-    response_text = await get_ai_response(user_msg)
+    # 1. Register User & Log Message
+    await memory_manager.add_user(user_id, user_name, full_name)
+    await memory_manager.log_message(user_id, "user", user_msg)
+    
+    # 2. Retrieve Context
+    context_history = await memory_manager.get_context(user_id)
+    facts = await memory_manager.get_facts(user_id)
+    
+    # 3. Get AI Response
+    response_text = await get_ai_response(user_msg, context_history, facts)
+    
+    # 4. Log Response
+    await memory_manager.log_message(user_id, "model", response_text)
+    
     await update.message.reply_text(response_text)
+
+async def post_init(application: Application):
+    await memory_manager.init_db()
 
 # Status Command (Automation)
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -107,7 +140,7 @@ def main():
         print("Erro: TELEGRAM_TOKEN não configurado.")
         return
 
-    app = ApplicationBuilder().token(config.TELEGRAM_TOKEN).build()
+    app = ApplicationBuilder().token(config.TELEGRAM_TOKEN).post_init(post_init).build()
     
     app.add_handler(CommandHandler("status", status))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), responder))

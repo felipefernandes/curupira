@@ -6,17 +6,18 @@ Arquitetura: Python Minimalista (Assíncrono)
 
 1. Filosofia do Projeto
 
-O Curupira é uma alternativa "Lite" ao OpenClaw, focado em alta performance em hardware limitado. Ele deve ser modular, seguro e atuar como um assistente para um Agile Coach / Game Producer com foco em cibersegurança.
+O Curupira é uma alternativa "Lite" ao OpenClaw, projetado para alta performance em hardware limitado. Ele atua como um assistente pessoal inteligente, focado em monitoramento de sistema e automação de tarefas definidas pelo usuário.
 
 2. Pilares Técnicos
 
-* Cérebro: Google Gemini 1.5 Flash (via API) - Processamento pesado offboard.
-* Interface: Telegram (python-telegram-bot) - Baixo consumo de memória.
-* Segurança: - Whitelist rígida por USER_ID.
-  - Gestão de segredos via .env.
-  - Scripts de auditoria básica de sistema.
-* Eficiência: - Limite de memória Python (ZRAM assistido).
-  - Sem Interface Gráfica (Headless).
+* Cérebro: Google Gemini 1.5 Flash (Processamento principal) e Groq (LLaMA 3 - Alternativa rápida).
+* Interface: Telegram (python-telegram-bot) - Interface leve e universal.
+* Automação: 
+  - Execução de scripts e tarefas customizadas.
+  - Monitoramento de hardware (temperatura, CPU, RAM).
+* Eficiência: 
+  - Foco em baixo consumo de memória (Headless).
+  - Código assíncrono.
 
 3. Estrutura do Projeto (Sugestão para o Agente)
 ```
@@ -26,21 +27,26 @@ curupira/
 ├── requirements.txt    # Dependências mínimas
 ├── bot.py              # Núcleo do sistema (Core)
 ├── config.py           # Validação de ambiente
+├── ROADMAP.md          # Objetivos e Fases do Projeto
+├── openspec/           # Documentação e contexto do projeto
+│   └── project.md      # Contexto geral (Persona, Tech Stack)
 └── skills/             # Pasta modular para automações
-    ├── system.py       # Monitoramento de hardware
-    └── <outras ferramentas/habilidades>
+    └── system.py       # Monitoramento de hardware
 ```
 
 4. Requisitos de Setup Local (Instruções para o Antigravity)
 
 * Ambiente Virtual: Sempre utilizar `python3 -m venv venv`.
-* Dependências Core: - `python-telegram-bot`
-- `google-generativeai`
-- `python-dotenv`
+* Dependências Core: 
+    - `python-telegram-bot`
+    - `google-genai`
+    - `groq`
+    - `python-dotenv`
 * Variáveis Obrigatórias:
-- `TELEGRAM_TOKEN`
-- `GEMINI_API_KEY`
-- `AUTHORIZED_USER_ID`
+    - `TELEGRAM_TOKEN`
+    - `GEMINI_API_KEY`
+    - `GROQ_API_KEY` (Opcional, mas recomendado)
+    - `AUTHORIZED_USER_ID`
 
 5. Setup no Raspberry Pi (Deploy)
 
@@ -63,7 +69,7 @@ curupira/
 
 4.  **Configure o Ambiente**:
     - Crie o arquivo `.env`: `nano .env`
-    - Cole suas chaves (TELEGRAM_TOKEN, GEMINI_API_KEY, AUTHORIZED_USER_ID).
+    - Cole suas chaves (TELEGRAM_TOKEN, GEMINI_API_KEY, GROQ_API_KEY, AUTHORIZED_USER_ID).
 
 5.  **Execute**:
     ```bash
@@ -72,14 +78,13 @@ curupira/
 
 6. Comportamento Esperado (Persona)
 
-* O Curupira deve ser direto, técnico e protetor.
-* Se o comando vier de um usuário não autorizado, ignorar silenciosamente ou emitir alerta de segurança.
-* Se a temperatura do Pi subir (vcgencmd), o bot deve avisar o usuário proativamente.
+* O Curupira deve ser **amigável, perspicaz e direto**.
+* Ele é um assistente proativo, que conhece o sistema onde habita.
 * Respostas da IA devem ser formatadas em Markdown para melhor leitura no Telegram.
 
-6. Restrições de Desenvolvimento
+7. Restrições de Desenvolvimento
 
-* NÃO instale bibliotecas pesadas de Data Science localmente (Pandas/Numpy).
+* NÃO instale bibliotecas pesadas de Data Science localmente (Pandas/Numpy) para economizar RAM.
 * NÃO utilize bases de dados complexas (preferir JSON ou SQLite para persistência mínima).
 * SEMPRE priorize funções async para não travar o loop de eventos no Pi 3B.
 

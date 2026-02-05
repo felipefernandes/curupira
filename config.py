@@ -4,6 +4,9 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# Heartbeat Interval (in seconds) - Default: 30 minutes
+HEARTBEAT_INTERVAL = 30 * 60
+
 # Telegram Configuration
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 

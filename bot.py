@@ -187,12 +187,37 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         await update.message.reply_text(response_text, parse_mode=ParseMode.HTML)
     except Exception as e:
-        # Fallback if AI generates invalid HTML
         logging.error(f"Erro de parsing HTML: {e}")
         await update.message.reply_text(response_text)
 
+# --- JOB QUEUE CALLBACKS ---
+async def system_heartbeat(context: ContextTypes.DEFAULT_TYPE):
+    """Logs a heartbeat message to ensure system is alive."""
+    logging.info("💓 Status Heartbeat: Online. System is healthy.")
+
+async def proactive_ping(context: ContextTypes.DEFAULT_TYPE):
+    """Sends a proactive message to the user."""
+    job = context.job
+    chat_id = job.chat_id
+    if chat_id:
+        await context.bot.send_message(chat_id=chat_id, text="🔋 Sistema Proativo Iniciado. Estou monitorando.")
+        logging.info("Proactive ping sent.")
+
 async def post_init(application: Application):
     await memory_manager.init_db()
+    
+    # Register Jobs
+    if application.job_queue:
+        # System Heartbeat
+        application.job_queue.run_repeating(system_heartbeat, interval=config.HEARTBEAT_INTERVAL, first=10, name="system_heartbeat")
+        
+        # Proactive Test (Runs once 30s after startup)
+        if config.AUTHORIZED_USER_ID:
+             application.job_queue.run_once(proactive_ping, when=30, chat_id=config.AUTHORIZED_USER_ID, name="proactive_test")
+        
+        logging.info("Jobs agendados: Heartbeat & Proactive Ping Stub")
+    else:
+        logging.error("JobQueue não está disponível!")
 
 # Status Command (Automation)
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):

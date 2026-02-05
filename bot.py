@@ -1,6 +1,7 @@
 from google import genai
 from groq import Groq
 from telegram import Update
+from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, Application
 import config
 import logging
@@ -69,8 +70,13 @@ async def get_ai_response(user_msg, context_history="", facts=""):
 [System Context]
 Persona: Curupira {assistant_surname} (Assistente Pessoal / Guardião do Sistema)
 User Profile: {personal_name}
+User Profile: {personal_name}
 Fatos sobre o Usuário:
 {facts}
+
+[Instruções de Estilo]
+1. Formatação: Use tags HTML para formatar a resposta (<b>negrito</b>, <i>itálico</i>, <pre>código</pre>). NÃO use Markdown (como **negrito**), pois o Telegram não renderiza corretamente neste modo.
+2. Naturalidade: Seja natural e direto. Evite repetir o nome do usuário em toda frase. Aja como um amigo próximo que já conhece a pessoa, sem formalidades excessivas.
 
 [Histórico da Conversa]
 {context_history}
@@ -178,7 +184,12 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 4. Log Response
     await memory_manager.log_message(user_id, "model", response_text)
     
-    await update.message.reply_text(response_text)
+    try:
+        await update.message.reply_text(response_text, parse_mode=ParseMode.HTML)
+    except Exception as e:
+        # Fallback if AI generates invalid HTML
+        logging.error(f"Erro de parsing HTML: {e}")
+        await update.message.reply_text(response_text)
 
 async def post_init(application: Application):
     await memory_manager.init_db()

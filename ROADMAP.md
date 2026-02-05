@@ -19,9 +19,9 @@
 [x] Implementar um sistema de lembretes que permita ao usuário definir lembretes para serem enviados no futuro (MVP via JobQueue).
 
 # [Fase 5.5 - Skill: Lembretes (Gerenciamento Avançado)]
-[ ] Se o usuário perguntar algo do tipo "o que tem que fazer hoje?" ou "Quais são os meus lembretes de hoje | amanhã | semana | mes?", o Curupira deve responder com os lembretes que o usuário definiu.
-[ ] O usuário pode definir lembretes com prazo definido, como "lembrete para amanhã" ou "lembrete para semana que vem".
-[ ] O usuário pode pedir para remover lembretes existentes, como "remova lembrete de amanhã" ou "remova lembrete de semana que vem" ou "remova o lembrete sobre {assunto}" ou "remova todos os lembretes".
+[x] Se o usuário perguntar algo do tipo "o que tem que fazer hoje?" ou "Quais são os meus lembretes de hoje | amanhã | semana | mes?", o Curupira deve responder com os lembretes que o usuário definiu.
+[x] O usuário pode definir lembretes com prazo definido, como "lembrete para amanhã" ou "lembrete para semana que vem".
+[x] O usuário pode pedir para remover lembretes existentes, como "remova lembrete de amanhã" ou "remova lembrete de semana que vem" ou "remova o lembrete sobre {assunto}" ou "remova todos os lembretes".
 [ ] O usuário pode pedir para alterar alguma propriedade de algum lembrete existe: data, descrição e etc.
 
 # [Fase 6 - Skill: Monitoramento de Hardware]

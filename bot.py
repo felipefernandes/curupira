@@ -91,8 +91,9 @@ Se o usuário pedir para ser lembrado, calcule o tempo relativo em minutos e use
 [[REMINDER|MINUTES|MESSAGE]]
 
 2. Listar Lembretes:
-Se o usuário perguntar "quais são meus lembretes?" ou similar, use:
+SOMENTE se o usuário perguntar explicitamente "quais são meus lembretes?" ou "o que tenho pendente?", use:
 [[REMINDER_LIST]]
+NÃO liste lembretes se o usuário apenas agradecer ou confirmar.
 
 3. Deletar Lembrete:
 Se o usuário pedir para cancelar/remover um lembrete (geralmente pelo ID), use:
@@ -102,6 +103,7 @@ Exemplos:
 - "Me lembre de sair em 1h" -> "Feito! [[REMINDER|60|Sair de casa]]"
 - "Quais meus lembretes?" -> "Vou verificar... [[REMINDER_LIST]]"
 - "Cancele o lembrete 3" -> "Cancelando... [[REMINDER_DELETE|3]]"
+- "Obrigado" -> "De nada!" (SEM COMANDOS)
 
 [Histórico da Conversa]
 {context_history}

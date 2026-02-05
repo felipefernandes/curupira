@@ -1,11 +1,11 @@
 # [Fase 1 - SETUP] - Concluído
 [x] MVP, setup, arquivo de instalação amigável, fazer a primeira interação com o usuário via Telegram.
 
-# [Fase 2 - MEMÓRIA]
-[ ] Adicionar camadas de memória (curto e longo prazo).
-    [ ] Memória de Longo prazo: usar um banco de dados para armazenar informações. Requisito importante: Precisa ser extremamente leve e não consumir muita memória RAM. (Ex: ChromaDB, SQLite, ou algo similar), a escolha deve ser feita de forma inteligente e com boa integração com Modelos de Linguagem Grandes (LLMs) escolhidas e usadas no projeto.
-    [ ] Memória de Curto prazo: Usar um arquivo JSON para armazenar informações ou algo similar, que seja leve e não consuma muita memória RAM.
-    [ ] Como produto final, é desejável que o Curupira tenha uma memória de longo prazo que permita que ele se lembre de informações sobre o usuário e sobre o sistema.
+# [Fase 2 - MEMÓRIA] - Concluído
+[x] Adicionar camadas de memória (curto e longo prazo).
+    [x] Memória de Longo prazo: usar um banco de dados para armazenar informações. Requisito importante: Precisa ser extremamente leve e não consumir muita memória RAM. (Ex: ChromaDB, SQLite, ou algo similar), a escolha deve ser feita de forma inteligente e com boa integração com Modelos de Linguagem Grandes (LLMs) escolhidas e usadas no projeto.
+    [x] Memória de Curto prazo: Usar um arquivo JSON para armazenar informações ou algo similar, que seja leve e não consuma muita memória RAM.
+    [x] Como produto final, é desejável que o Curupira tenha uma memória de longo prazo que permita que ele se lembre de informações sobre o usuário e sobre o sistema.
 
 # [Fase 3 - Personalização]
 [ ] Na primeira interação que o Curupira tiver com o usuário, ele deve se apresentar e perguntar o nome do usuário. O curupira também deve perguntar ao usuário qual será o sobrenome que deseja que use, e esse sobrenome é o que o diferenciará dos outros Curupiras (deverá ser salvo em uma variável de ambiente persistente).

@@ -58,11 +58,24 @@ class MemoryManager:
     async def save_fact(self, user_id, key, value):
         """Saves a long-term fact."""
         async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("""
-                INSERT INTO facts (user_id, key, value, created_at)
-                VALUES (?, ?, ?, ?)
-            """, (user_id, key, value, datetime.now()))
+            # Check if exists first to update or insert
+            cursor = await db.execute("SELECT id FROM facts WHERE user_id = ? AND key = ?", (user_id, key))
+            row = await cursor.fetchone()
+            if row:
+                await db.execute("UPDATE facts SET value = ? WHERE id = ?", (value, row[0]))
+            else:
+                await db.execute("""
+                    INSERT INTO facts (user_id, key, value, created_at)
+                    VALUES (?, ?, ?, ?)
+                """, (user_id, key, value, datetime.now()))
             await db.commit()
+
+    async def get_fact_value(self, user_id, key):
+        """Retrieves a specific fact value."""
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute("SELECT value FROM facts WHERE user_id = ? AND key = ?", (user_id, key)) as cursor:
+                row = await cursor.fetchone()
+                return row[0] if row else None
 
     async def get_facts(self, user_id):
         """Retrieves all facts for a user as a formatted text list."""

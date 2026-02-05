@@ -17,6 +17,11 @@ gemini_client = None
 groq_client = None
 memory_manager = MemoryManager()
 
+# Onboarding States
+WAITING_NAME = 1
+WAITING_SURNAME = 2
+onboarding_states = {}
+
 logging.info(f"Iniciando bot com provedor: {config.AI_PROVIDER}")
 
 if config.AI_PROVIDER == 'gemini':
@@ -48,9 +53,22 @@ async def acesso_negado(update: Update):
     await update.message.reply_text("⛔ Acesso negado. Este bot é privado.")
 
 async def get_ai_response(user_msg, context_history="", facts=""):
+    # Extract personal names from facts if available
+    personal_name = "Usuário"
+    personal_surname = ""
+    
+    # Parse facts text to find names (simple parsing since get_facts returns "- key: value")
+    if facts:
+        for line in facts.split("\n"):
+            if "personal_name" in line:
+                personal_name = line.split(": ")[1].strip()
+            elif "personal_surname" in line:
+                personal_surname = line.split(": ")[1].strip()
+
     full_prompt = f"""
 [System Context]
 Persona: Curupira (Assistente Pessoal / Guardião do Sistema)
+User Profile: {personal_name} {personal_surname}
 Fatos sobre o Usuário:
 {facts}
 
@@ -110,6 +128,39 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 1. Register User & Log Message
     await memory_manager.add_user(user_id, user_name, full_name)
     await memory_manager.log_message(user_id, "user", user_msg)
+
+    # --- ONBOARDING FLOW START ---
+    # Check if we know the user's chosen surname (identity marker)
+    has_surname = await memory_manager.get_fact_value(user_id, "personal_surname")
+    
+    if not has_surname:
+        state = onboarding_states.get(user_id)
+        
+        if state is None:
+            # Start Onboarding
+            await update.message.reply_text("Olá! Sou o Curupira. Antes de começarmos, como gostaria de ser chamado?")
+            onboarding_states[user_id] = WAITING_NAME
+            await memory_manager.log_message(user_id, "model", "Olá! Sou o Curupira. Antes de começarmos, como gostaria de ser chamado?")
+            return
+
+        elif state == WAITING_NAME:
+            # Save Name, Ask Surname
+            await memory_manager.save_fact(user_id, "personal_name", user_msg)
+            await update.message.reply_text("Como sou único, qual sobrenome devo usar para me diferenciar dos outro Curupiras?")
+            onboarding_states[user_id] = WAITING_SURNAME
+            await memory_manager.log_message(user_id, "model", "Como sou único, qual sobrenome devo usar para me diferenciar dos outro Curupiras?")
+            return
+
+        elif state == WAITING_SURNAME:
+            # Save Surname, Finish
+            await memory_manager.save_fact(user_id, "personal_surname", user_msg)
+            del onboarding_states[user_id] # Clear state
+            
+            welcome_back = f"Entendido, Sr(a). {user_msg}. Configuração concluída! Como posso ajudar hoje?"
+            await update.message.reply_text(welcome_back)
+            await memory_manager.log_message(user_id, "model", welcome_back)
+            return
+    # --- ONBOARDING FLOW END ---
     
     # 2. Retrieve Context
     context_history = await memory_manager.get_context(user_id)

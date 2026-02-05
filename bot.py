@@ -210,7 +210,7 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_text = full_response
     
     # 1. CREATE REMINDER
-    reminder_match = re.search(r"\[\[REMINDER\|(\d+)\|(.*?)\]\]", full_response)
+    reminder_match = re.search(r"\[\[REMINDER\|(\d+)\|(.*?)\]\]", reply_text)
     if reminder_match:
         try:
             minutes = int(reminder_match.group(1))
@@ -231,43 +231,44 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 logging.info(f"Lembrete agendado: {reminder_msg} em {minutes} min (ID: {reminder_id})")
             
-            reply_text = full_response.replace(reminder_match.group(0), "").strip()
+            # Remove tag from reply_text (chaining)
+            reply_text = reply_text.replace(reminder_match.group(0), "").strip()
         except Exception as e:
             logging.error(f"Erro ao processar lembrete: {e}")
 
     # 2. LIST REMINDERS
-    if "[[REMINDER_LIST]]" in full_response:
+    if "[[REMINDER_LIST]]" in reply_text:
         reminders = await reminder_manager.get_active_reminders(user_id)
         if reminders:
-            list_text = "📅 **Seus Lembretes Pendentes:**\n\n"
-            for r_id, msg, r_at in sorted(reminders, key=lambda x: x[0]): # Sort by ID for easier deletion
-                # Format time
+            list_text = "\n📋 <b>Seus Lembretes:</b>\n"
+            for r_id, msg, r_at in sorted(reminders, key=lambda x: x[0]): 
                 if isinstance(r_at, str):
                     dt = datetime.fromisoformat(r_at)
                 else:
                     dt = r_at
-                list_text += f"🆔 <b>{r_id}</b>: {msg} (em {dt.strftime('%d/%m %H:%M')})\n"
+                # Polished format
+                list_text += f"▫️ <code>#{r_id}</code> - <b>{dt.strftime('%H:%M')}</b>: {msg}\n"
         else:
-            list_text = "Você não tem lembretes pendentes."
+            list_text = "\n🚫 <i>Você não tem lembretes pendentes.</i>"
         
-        reply_text = full_response.replace("[[REMINDER_LIST]]", list_text).strip()
+        reply_text = reply_text.replace("[[REMINDER_LIST]]", list_text).strip()
 
     # 3. DELETE REMINDER
-    delete_match = re.search(r"\[\[REMINDER_DELETE\|(\d+)\]\]", full_response)
+    delete_match = re.search(r"\[\[REMINDER_DELETE\|(\d+)\]\]", reply_text)
     if delete_match:
         try:
             r_id = int(delete_match.group(1))
             await reminder_manager.delete_reminder(r_id, user_id)
             
-            # Try to cancel job if in memory (best effort)
+            # Try to cancel job if in memory
             current_jobs = context.job_queue.get_jobs_by_name(f"reminder_{r_id}")
             for job in current_jobs:
                 job.schedule_removal()
             
-            reply_text = full_response.replace(delete_match.group(0), f"✅ Lembrete {r_id} cancelado.").strip()
+            reply_text = reply_text.replace(delete_match.group(0), f"🗑️ Lembrete <b>#{r_id}</b> removido.").strip()
         except Exception as e:
             logging.error(f"Erro ao deletar lembrete: {e}")
-            reply_text = "Erro ao cancelar o lembrete."
+            reply_text = reply_text.replace(delete_match.group(0), "❌ Erro ao cancelar o lembrete.").strip()
 
     # 4. Log Response
     

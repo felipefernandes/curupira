@@ -1,4 +1,4 @@
-import google.generativeai as genai
+from google import genai
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 import config
@@ -11,8 +11,7 @@ logging.basicConfig(
 )
 
 # Gemini Setup
-genai.configure(api_key=config.GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+client = genai.Client(api_key=config.GEMINI_API_KEY)
 
 # Security Filter
 def is_authorized(user_id):
@@ -34,7 +33,10 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_chat_action(action="typing")
     
     try:
-        response = model.generate_content(user_msg)
+        response = client.models.generate_content(
+            model="gemini-1.5-flash", 
+            contents=user_msg
+        )
         await update.message.reply_text(response.text)
     except Exception as e:
         error_msg = f"Erro ao processar: {str(e)}"

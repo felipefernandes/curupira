@@ -146,17 +146,26 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif state == WAITING_NAME:
             # Save Name, Ask Surname
             await memory_manager.save_fact(user_id, "personal_name", user_msg)
-            await update.message.reply_text("Como sou único, qual sobrenome devo usar para me diferenciar dos outro Curupiras?")
+            reply_text = f"OK {user_msg}, como sou único, qual sobrenome devo usar para me diferenciar dos outros Curupiras?"
+            await update.message.reply_text(reply_text)
             onboarding_states[user_id] = WAITING_SURNAME
-            await memory_manager.log_message(user_id, "model", "Como sou único, qual sobrenome devo usar para me diferenciar dos outro Curupiras?")
+            await memory_manager.log_message(user_id, "model", reply_text)
             return
 
         elif state == WAITING_SURNAME:
-            # Save Surname, Finish
+            # Save Surname (This seems to be the BOT'S surname/identifier based on user input), Finish
+            # We save it as personal_surname for now as per original spec, but the prompt should handle it.
+            # User Feedback: "usou o sobrenome dele 'Prime' para se referir ao usuário 'Felipe'"
             await memory_manager.save_fact(user_id, "personal_surname", user_msg)
             del onboarding_states[user_id] # Clear state
             
-            welcome_back = f"Entendido, Sr(a). {user_msg}. Configuração concluída! Como posso ajudar hoje?"
+            # Retrieve name for better UX
+            name = await memory_manager.get_fact_value(user_id, "personal_name") or "Usuário"
+            
+            welcome_back = f"Entendido, Sr(a). {name}. Configuração concluída! Como posso ajudar hoje?"
+            # Improved informal reply as requested:
+            welcome_back = f"Entendido! Configuração concluída! Como posso ajudar hoje?"
+            
             await update.message.reply_text(welcome_back)
             await memory_manager.log_message(user_id, "model", welcome_back)
             return

@@ -67,8 +67,8 @@ class WeatherManager:
         emoji = self._get_wmo_emoji(code)
 
         card = (
-            f"\n🌍 **Previsão para {name}:**\n"
-            f"🌡️ **Agora**: {temp}°C {emoji}\n"
-            f"☔ **Chuva**: {prob_rain}%\n"
+            f"\n🌍 <b>Previsão para {name}:</b>\n"
+            f"🌡️ <b>Agora</b>: {temp}°C {emoji}\n"
+            f"☔ <b>Chuva</b>: {prob_rain}%\n"
         )
         return card

@@ -42,7 +42,35 @@ curupira/
 - `GEMINI_API_KEY`
 - `AUTHORIZED_USER_ID`
 
-5. Comportamento Esperado (Persona)
+5. Setup no Raspberry Pi (Deploy)
+
+1.  **Clone o Repositório**:
+    ```bash
+    git clone https://github.com/felipefernandes/curupira.git
+    cd curupira
+    ```
+
+2.  **Crie o Ambiente Virtual**:
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate
+    ```
+
+3.  **Instale as Dependências**:
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+4.  **Configure o Ambiente**:
+    - Crie o arquivo `.env`: `nano .env`
+    - Cole suas chaves (TELEGRAM_TOKEN, GEMINI_API_KEY, AUTHORIZED_USER_ID).
+
+5.  **Execute**:
+    ```bash
+    python bot.py
+    ```
+
+6. Comportamento Esperado (Persona)
 
 * O Curupira deve ser direto, técnico e protetor.
 * Se o comando vier de um usuário não autorizado, ignorar silenciosamente ou emitir alerta de segurança.

@@ -1,4 +1,5 @@
 from google import genai
+from groq import Groq
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 import config
@@ -10,8 +11,31 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# Gemini Setup
-client = genai.Client(api_key=config.GEMINI_API_KEY)
+# AI Setup
+gemini_client = None
+groq_client = None
+
+logging.info(f"Iniciando bot com provedor: {config.AI_PROVIDER}")
+
+if config.AI_PROVIDER == 'gemini':
+    if config.GEMINI_API_KEY:
+        try:
+            gemini_client = genai.Client(api_key=config.GEMINI_API_KEY)
+            logging.info("Cliente Gemini inicializado.")
+        except Exception as e:
+            logging.error(f"Erro ao inicializar Gemini: {e}")
+    else:
+        logging.error("GEMINI_API_KEY não configurada.")
+
+elif config.AI_PROVIDER == 'groq':
+    if config.GROQ_API_KEY:
+        try:
+            groq_client = Groq(api_key=config.GROQ_API_KEY)
+            logging.info("Cliente Groq inicializado.")
+        except Exception as e:
+            logging.error(f"Erro ao inicializar Groq: {e}")
+    else:
+        logging.error("GROQ_API_KEY não configurada.")
 
 # Security Filter
 def is_authorized(user_id):
@@ -20,6 +44,40 @@ def is_authorized(user_id):
 # Authorized Check Handler
 async def acesso_negado(update: Update):
     await update.message.reply_text("⛔ Acesso negado. Este bot é privado.")
+
+async def get_ai_response(user_msg):
+    try:
+        if config.AI_PROVIDER == 'groq':
+            if not groq_client:
+                return "Erro: Cliente Groq não inicializado. Verifique a chave de API."
+            
+            chat_completion = groq_client.chat.completions.create(
+                messages=[
+                    {
+                        "role": "user",
+                        "content": user_msg,
+                    }
+                ],
+                model="llama3-8b-8192",
+            )
+            return chat_completion.choices[0].message.content
+
+        elif config.AI_PROVIDER == 'gemini':
+            if not gemini_client:
+                return "Erro: Cliente Gemini não inicializado. Verifique a chave de API."
+
+            response = gemini_client.models.generate_content(
+                model="gemini-2.0-flash", 
+                contents=user_msg
+            )
+            return response.text
+        
+        else:
+            return f"Erro: Provedor '{config.AI_PROVIDER}' desconhecido."
+
+    except Exception as e:
+        logging.error(f"Erro na geração de IA: {e}")
+        return f"Ocorreu um erro ao processar sua solicitação ({config.AI_PROVIDER}): {str(e)}"
 
 # Message Handler (AI)
 async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -32,16 +90,8 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_msg = update.message.text
     await update.message.reply_chat_action(action="typing")
     
-    try:
-        response = client.models.generate_content(
-            model="gemini-2.0-flash", 
-            contents=user_msg
-        )
-        await update.message.reply_text(response.text)
-    except Exception as e:
-        error_msg = f"Erro ao processar: {str(e)}"
-        logging.error(error_msg)
-        await update.message.reply_text("Ocorreu um erro ao processar sua solicitação.")
+    response_text = await get_ai_response(user_msg)
+    await update.message.reply_text(response_text)
 
 # Status Command (Automation)
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -49,7 +99,8 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await acesso_negado(update)
         return
 
-    await update.message.reply_text("✅ Sistema Online e você está autenticado!")
+    provider_status = f"IA: {config.AI_PROVIDER.upper()}"
+    await update.message.reply_text(f"✅ Sistema Online e você está autenticado!\n{provider_status}")
 
 def main():
     if not config.TELEGRAM_TOKEN:
@@ -61,7 +112,7 @@ def main():
     app.add_handler(CommandHandler("status", status))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), responder))
     
-    print("Bot Curupira iniciado com trava de segurança!")
+    print(f"Bot Curupira iniciado com trava de segurança! Provedor: {config.AI_PROVIDER}")
     app.run_polling()
 
 if __name__ == '__main__':

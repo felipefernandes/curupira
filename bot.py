@@ -55,20 +55,20 @@ async def acesso_negado(update: Update):
 async def get_ai_response(user_msg, context_history="", facts=""):
     # Extract personal names from facts if available
     personal_name = "Usuário"
-    personal_surname = ""
+    assistant_surname = ""
     
     # Parse facts text to find names (simple parsing since get_facts returns "- key: value")
     if facts:
         for line in facts.split("\n"):
             if "personal_name" in line:
                 personal_name = line.split(": ")[1].strip()
-            elif "personal_surname" in line:
-                personal_surname = line.split(": ")[1].strip()
+            elif "assistant_surname" in line:
+                assistant_surname = line.split(": ")[1].strip()
 
     full_prompt = f"""
 [System Context]
-Persona: Curupira (Assistente Pessoal / Guardião do Sistema)
-User Profile: {personal_name} {personal_surname}
+Persona: Curupira {assistant_surname} (Assistente Pessoal / Guardião do Sistema)
+User Profile: {personal_name}
 Fatos sobre o Usuário:
 {facts}
 
@@ -130,8 +130,8 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await memory_manager.log_message(user_id, "user", user_msg)
 
     # --- ONBOARDING FLOW START ---
-    # Check if we know the user's chosen surname (identity marker)
-    has_surname = await memory_manager.get_fact_value(user_id, "personal_surname")
+    # Check if we know the user's chosen surname (identity marker for the BOT)
+    has_surname = await memory_manager.get_fact_value(user_id, "assistant_surname")
     
     if not has_surname:
         state = onboarding_states.get(user_id)
@@ -153,16 +153,13 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         elif state == WAITING_SURNAME:
-            # Save Surname (This seems to be the BOT'S surname/identifier based on user input), Finish
-            # We save it as personal_surname for now as per original spec, but the prompt should handle it.
-            # User Feedback: "usou o sobrenome dele 'Prime' para se referir ao usuário 'Felipe'"
-            await memory_manager.save_fact(user_id, "personal_surname", user_msg)
+            # Save BOT Surname
+            await memory_manager.save_fact(user_id, "assistant_surname", user_msg)
             del onboarding_states[user_id] # Clear state
             
             # Retrieve name for better UX
             name = await memory_manager.get_fact_value(user_id, "personal_name") or "Usuário"
             
-            welcome_back = f"Entendido, Sr(a). {name}. Configuração concluída! Como posso ajudar hoje?"
             # Improved informal reply as requested:
             welcome_back = f"Entendido! Configuração concluída! Como posso ajudar hoje?"
             

@@ -42,6 +42,17 @@ class MemoryManager:
                     FOREIGN KEY(user_id) REFERENCES users(user_id)
                 )
             """)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS reminders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER,
+                    message TEXT,
+                    remind_at DATETIME,
+                    created_at DATETIME,
+                    status TEXT DEFAULT 'PENDING',
+                    FOREIGN KEY(user_id) REFERENCES users(user_id)
+                )
+            """)
             await db.commit()
             self.logger.info("Database initialized.")
 

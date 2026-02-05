@@ -14,15 +14,17 @@ clear
 # ASCII Art
 echo -e "${GREEN}"
 cat << "EOF"
-   ______                               _           
-  / ____/   __  _____  __  __  ____    (_)   _____  ____ _
- / /       / / / /   \/ / / / / __ \  / /   / ___/ / __ `/
-/ /___    / /_/ /     / /_/ / / /_/ / / /   / /    / /_/ / 
-\____/    \__,_/     / _,_/ / .___/ /_/   /_/     \__,_/  
-                    /_/    /_/                            
+    __  __ __  ____  __ __  ____ ____  ____    ____ 
+   /  ]|  |  ||    \|  |  ||    \    ||    \  /    |
+  /  / |  |  ||  D  )  |  ||  o  )  | |  D  )|  o  |
+ /  /  |  |  ||    /|  |  ||   _/|  | |    / |     |
+/   \_ |  :  ||    \|  :  ||  |  |  | |    \ |  _  |
+\     ||     ||  .  \     ||  |  |  | |  .  \|  |  |
+ \____| \__,_||__|\_|\__,_||__| |____||__|\_||__|__|
+                                                                                              
 EOF
 echo -e "${NC}"
-echo -e "${CYAN}:: O Protetor do Sistema (DietOpenclaw) para Raspberry Pi ::${NC}"
+echo -e "${CYAN}:: O AI Bot leve para Raspberry Pi ::${NC}"
 echo -e "--------------------------------------------------------"
 echo ""
 
@@ -91,13 +93,39 @@ if [ "$SETUP_ENV" = true ]; then
     echo -e "${GREEN}[OK] Arquivo .env criado/atualizado.${NC}"
 fi
 
+# Instalar CLI Global (Curupira Wrapper)
+echo -e "${YELLOW}[*] Instalando comando global 'curupira'...${NC}"
+WRAPPER_SRC="curupira_wrapper.sh"
+WRAPPER_DEST="/usr/local/bin/curupira"
+
+# Preparar o wrapper com os caminhos corretos
+CURRENT_DIR=$(pwd)
+CURRENT_USER=$(whoami)
+
+# Substituir placeholders em um arquivo temporário
+cp $WRAPPER_SRC curupira_tmp.sh
+sed -i "s|__PROJECT_DIR__|$CURRENT_DIR|g" curupira_tmp.sh
+sed -i "s|__USER_NAME__|$CURRENT_USER|g" curupira_tmp.sh
+
+# Mover para bin (precisa de sudo)
+echo -e "${BLUE}[i] Precisamos de permissão sudo para criar o comando global.${NC}"
+sudo mv curupira_tmp.sh $WRAPPER_DEST
+sudo chmod +x $WRAPPER_DEST
+
+if [ -f "$WRAPPER_DEST" ]; then
+    echo -e "${GREEN}[OK] Comando 'curupira' instalado!${NC}"
+else
+    echo -e "${RED}[!] Falha ao instalar comando global.${NC}"
+fi
+
 # Finalização
 echo ""
 echo -e "${GREEN}==============================================${NC}"
 echo -e "${GREEN}   INSTALAÇÃO CONCLUÍDA COM SUCESSO! 🍃      ${NC}"
 echo -e "${GREEN}==============================================${NC}"
 echo ""
-echo -e "Para iniciar o Curupira, execute:"
-echo -e "${CYAN}source venv/bin/activate${NC}"
-echo -e "${CYAN}python bot.py${NC}"
+echo -e "Agora você pode usar o comando global:"
+echo -e "${CYAN}curupira acorda${NC}   -> Para rodar agora"
+echo -e "${CYAN}sudo curupira daemon${NC} -> Para instalar e rodar em background (boot)"
 echo ""
+

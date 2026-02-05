@@ -4,6 +4,8 @@ from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, Application
 import config
+import re
+from datetime import datetime
 import logging
 from skills.memory import MemoryManager
 
@@ -54,6 +56,8 @@ async def acesso_negado(update: Update):
     await update.message.reply_text("⛔ Acesso negado. Este bot é privado.")
 
 async def get_ai_response(user_msg, context_history="", facts=""):
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
     # Extract personal names from facts if available
     personal_name = "Usuário"
     assistant_surname = ""
@@ -71,12 +75,19 @@ async def get_ai_response(user_msg, context_history="", facts=""):
 Persona: Curupira {assistant_surname} (Assistente Pessoal / Guardião do Sistema)
 User Profile: {personal_name}
 User Profile: {personal_name}
+Current Time: {now}
 Fatos sobre o Usuário:
 {facts}
 
 [Instruções de Estilo]
 1. Formatação: Use tags HTML para formatar a resposta (<b>negrito</b>, <i>itálico</i>, <pre>código</pre>). NÃO use Markdown (como **negrito**), pois o Telegram não renderiza corretamente neste modo.
 2. Naturalidade: Seja natural e direto. Evite repetir o nome do usuário em toda frase. Aja como um amigo próximo que já conhece a pessoa, sem formalidades excessivas.
+
+[Ferramentas / Comandos]
+Se o usuário pedir para ser lembrado de algo, calcule o tempo relativo em MINUTOS e adicione este código oculto no final da sua resposta:
+[[REMINDER|MINUTES|MESSAGE]]
+Exemplo: "Me lembre de sair em 1 hora" -> "Pode deixar! [[REMINDER|60|Sair de casa]]"
+Exemplo: "Me lembre em 10 minutos de beber água" -> "Combinado! [[REMINDER|10|Beber água]]"
 
 [Histórico da Conversa]
 {context_history}
@@ -179,18 +190,43 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     facts = await memory_manager.get_facts(user_id)
     
     # 3. Get AI Response
-    response_text = await get_ai_response(user_msg, context_history, facts)
+    full_response = await get_ai_response(user_msg, context_history, facts)
+    
+    # Process Commands (Reminders)
+    reply_text = full_response
+    reminder_match = re.search(r"\[\[REMINDER\|(\d+)\|(.*?)\]\]", full_response)
+    
+    if reminder_match:
+        try:
+            minutes = int(reminder_match.group(1))
+            reminder_msg = reminder_match.group(2)
+            
+            # Schedule Job
+            if context.job_queue:
+                context.job_queue.run_once(execute_reminder, when=minutes*60, chat_id=user_id, data=reminder_msg)
+                logging.info(f"Lembrete agendado: {reminder_msg} em {minutes} min")
+            
+            # Remove tag from user view
+            reply_text = full_response.replace(reminder_match.group(0), "").strip()
+        except Exception as e:
+            logging.error(f"Erro ao processar lembrete: {e}")
     
     # 4. Log Response
-    await memory_manager.log_message(user_id, "model", response_text)
+    await memory_manager.log_message(user_id, "model", reply_text)
     
     try:
-        await update.message.reply_text(response_text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(reply_text, parse_mode=ParseMode.HTML)
     except Exception as e:
         logging.error(f"Erro de parsing HTML: {e}")
         await update.message.reply_text(response_text)
 
 # --- JOB QUEUE CALLBACKS ---
+async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
+    """Executes a scheduled reminder."""
+    job = context.job
+    message = job.data
+    await context.bot.send_message(chat_id=job.chat_id, text=f"⏰ Lembrete: {message}")
+
 async def system_heartbeat(context: ContextTypes.DEFAULT_TYPE):
     """Logs a heartbeat message to ensure system is alive."""
     logging.info("💓 Status Heartbeat: Online. System is healthy.")

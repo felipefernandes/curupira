@@ -14,15 +14,7 @@ import time
 
 # Configuração da API OpenRouter
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-# Lista de modelos gratuitos com fallback (IDs revisados e estáveis)
-FREE_MODELS = [
-    "google/gemini-2.0-flash-lite-preview-02-05:free", # Tentativa 1 (se voltar)
-    "google/gemini-2.0-flash-exp:free", # Mais estável
-    "google/gemini-2.0-pro-exp-02-05:free",
-    "deepseek/deepseek-r1-distill-llama-70b:free", # R1 Distill (costuma funcionar)
-    "meta-llama/llama-3-8b-instruct:free", # Modelo menor, menos congestionado
-    "qwen/qwen-2.5-vl-72b-instruct:free" # Qwen costuma ser robusto
-]
+OPENROUTER_MODELS_URL = "https://openrouter.ai/api/v1/models"
 
 SYSTEM_PROMPT = """Você é um revisor de código especializado do **projeto Curupira** - um assistente de IA agêntica projetado para rodar em hardware limitado (Raspberry Pi 3, 1GB RAM).
 
@@ -66,6 +58,38 @@ SYSTEM_PROMPT = """Você é um revisor de código especializado do **projeto Cur
 - Se não houver problemas: "✅ Código alinhado ao Manifesto Curupira"
 """
 
+
+def get_free_models() -> list:
+    """Consulta a API do OpenRouter para encontrar modelos gratuitos disponíveis."""
+    try:
+        req = urllib.request.Request(OPENROUTER_MODELS_URL)
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode("utf-8"))
+            
+        free_models = []
+        for model in data.get("data", []):
+            pricing = model.get("pricing", {})
+            # Verifica se o preço é zero (string ou number)
+            p_prompt = str(pricing.get("prompt", "1"))
+            p_completion = str(pricing.get("completion", "1"))
+            
+            if p_prompt == "0" and p_completion == "0":
+                # Prioriza modelos 'google' e 'meta' que costumam ser melhores p/ código
+                if "gemini" in model["id"] or "llama" in model["id"]:
+                    free_models.insert(0, model["id"])
+                else:
+                    free_models.append(model["id"])
+                    
+        return free_models
+    except Exception as e:
+        print(f"⚠️ Erro ao listar modelos: {e}", file=sys.stderr)
+        # Fallback para IDs que 'deveriam' existir se a listagem falhar
+        return [
+            "google/gemini-2.0-flash-exp:free",
+            "meta-llama/llama-3-8b-instruct:free"
+        ]
+
+
 def review_code_with_model(diff: str, api_key: str, model: str) -> str:
     """Tenta revisar com um modelo específico."""
     max_chars = 15000
@@ -80,8 +104,6 @@ def review_code_with_model(diff: str, api_key: str, model: str) -> str:
             {"role": "user", "content": f"Revise o seguinte diff de código:\n\n```diff\n{diff}\n```"}
         ],
         "temperature": 0.3, # Baixa temperatura é seguro
-        # Removido 'max_tokens' fixo para evitar conflitos em modelos menores
-        # Removido objeto 'provider' complexo que causava erro 400
     }
     
     headers = {
@@ -112,15 +134,24 @@ def review_code_with_model(diff: str, api_key: str, model: str) -> str:
         raise Exception(f"HTTP Error {e.code}: {error_body}")
 
 
-
 def review_code(diff: str, api_key: str) -> str:
     """It era sobre modelos gratuitos até conseguir sucesso."""
     if not diff.strip():
         return "✅ Nenhuma alteração de código para revisar."
     
+    # Busca dinâmica
+    print("🔄 Buscando modelos gratuitos disponíveis...", file=sys.stderr)
+    models = get_free_models()
+    
+    if not models:
+        return "❌ Nenhum modelo gratuito encontrado na API do OpenRouter no momento."
+        
+    print(f"✅ Modelos encontrados: {len(models)} ({', '.join(models[:3])}...)", file=sys.stderr)
+    
     errors = []
     
-    for model in FREE_MODELS:
+    # Tenta os top 5 encontrados
+    for model in models[:5]:
         try:
             print(f"🔄 Tentando modelo: {model}...", file=sys.stderr)
             return review_code_with_model(diff, api_key, model)
@@ -128,7 +159,6 @@ def review_code(diff: str, api_key: str) -> str:
             error_msg = str(e)
             print(f"⚠️ Falha no modelo {model}: {error_msg}", file=sys.stderr)
             errors.append(f"{model}: {error_msg}")
-            # Pequeno delay antes do próximo
             time.sleep(1)
             
     return f"❌ Não foi possível revisar com nenhum modelo gratuito.\nErros:\n" + "\n".join(errors)

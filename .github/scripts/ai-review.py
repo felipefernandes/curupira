@@ -59,10 +59,11 @@ SYSTEM_PROMPT = """Você é um revisor de código especializado do **projeto Cur
 - Try-except muito genéricos
 
 ## FORMATO DA RESPOSTA:
-- Seja construtivo e específico
-- Aponte linha/função do problema
-- Sugira correção quando possível
-- Se não houver problemas: "✅ Código alinhado ao Manifesto Curupira"
+- Seja construtivo e específico.
+- Aponte linha/função do problema.
+- Sugira correção quando possível (código snippets são bem-vindos).
+- ⛔ NÃO ofereça "ajuda para reescrever" ou interação futura (você é um script de CI, não um chat).
+- ✅ CASO DE SUCESSO (Sem bugs/problemas): Responda APENAS: "✅ **Aprovação Iara**: Código limpo, seguro e alinhado ao Manifesto. Pode fazer o merge! 🚀" (Não repita conselhos genéricos se não houver nada para corrigir).
 """
 
 

@@ -8,6 +8,8 @@ O **CurupiraBot** é um assistente virtual projetado para rodar em hardware mode
 
 > 📜 **Leia nosso [Manifesto Curupira](MANIFESTO.md) para entender a filosofia por trás do código.**
 
+[![🧜‍♀️ Iara - Revisora de Código](https://github.com/felipefernandes/curupira/actions/workflows/ai-code-review.yml/badge.svg)](https://github.com/felipefernandes/curupira/actions/workflows/ai-code-review.yml)
+
 ## 🚀 Funcionalidades Atuais
 
 *   **🧠 Memória Persistente**: Lembra do seu nome, suas preferências e contexto de conversas passadas.

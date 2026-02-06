@@ -110,6 +110,14 @@ def review_code_with_model(diff: str, api_key: str, model: str) -> str:
 
 
 def review_code(diff: str, api_key: str) -> str:
+    """
+    Executa a revisão de código tentando múltiplos modelos gratuitos em sequência.
+    Estratégia de Fallback:
+    1. Tenta meta-modelo 'openrouter/free' (escolha automática)
+    2. Tenta modelos específicos de alta qualidade (Gemini 2.0 Flash)
+    3. Tenta modelos alternativos (DeepSeek R1, Llama 3)
+     Se todos falharem, retorna mensagem de erro detalhada.
+    """
     if not diff.strip():
         return "✅ Nenhuma alteração de código para revisar."
     
@@ -121,10 +129,14 @@ def review_code(diff: str, api_key: str) -> str:
         try:
             print(f"🔄 Tentando modelo: {model}...", file=sys.stderr)
             return review_code_with_model(diff, api_key, model)
-        # Se passar daqui, deu sucesso
+        except (urllib.error.HTTPError, urllib.error.URLError) as e:
+            error_msg = str(e)
+            print(f"⚠️ Falha de conexão/HTTP no modelo {model}: {error_msg}", file=sys.stderr)
+            errors.append(f"{model}: {error_msg}")
+            time.sleep(1)
         except Exception as e:
             error_msg = str(e)
-            print(f"⚠️ Falha no modelo {model}: {error_msg}", file=sys.stderr)
+            print(f"⚠️ Erro inesperado no modelo {model}: {error_msg}", file=sys.stderr)
             errors.append(f"{model}: {error_msg}")
             time.sleep(1)
             

@@ -56,6 +56,7 @@ jobs:
         if: steps.diff.outputs.diff_size != '0'
         uses: actions/github-script@v7
         env:
+          # Previne injection e problemas de escaping ao passar conteúdo para o script JS
           REVIEW_CONTENT: ${{ steps.review.outputs.REVIEW_CONTENT }}
         with:
           script: |

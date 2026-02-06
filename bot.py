@@ -81,9 +81,6 @@ User Profile: {personal_name}
 User Profile: {personal_name}
 Current Time: {now}
 Fatos sobre o Usuário:
-Fatos sobre o Usuário:
-{facts}
-
 [Lembretes Ativos]
 {active_reminders_text}
 
@@ -283,10 +280,7 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if reminders:
             list_text = "\n📋 <b>Seus Lembretes:</b>\n"
             for r_id, msg, r_at in sorted(reminders, key=lambda x: x[0]): 
-                if isinstance(r_at, str):
-                    dt = datetime.fromisoformat(r_at)
-                else:
-                    dt = r_at
+                dt = datetime.fromisoformat(r_at) if isinstance(r_at, str) else r_at
                 # Polished format
                 list_text += f"▫️ <code>#{r_id}</code> - <b>{dt.strftime('%H:%M')}</b>: {msg}\n"
         else:

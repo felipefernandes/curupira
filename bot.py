@@ -59,7 +59,7 @@ def is_authorized(user_id):
 async def acesso_negado(update: Update):
     await update.message.reply_text("⛔ Acesso negado. Este bot é privado.")
 
-async def get_ai_response(user_msg, context_history="", facts=""):
+async def get_ai_response(user_msg, context_history="", facts="", active_reminders_text=""):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Extract personal names from facts if available
@@ -81,7 +81,11 @@ User Profile: {personal_name}
 User Profile: {personal_name}
 Current Time: {now}
 Fatos sobre o Usuário:
+Fatos sobre o Usuário:
 {facts}
+
+[Lembretes Ativos]
+{active_reminders_text}
 
 [Instruções de Estilo]
 1. Formatação: Use tags HTML para formatar a resposta (<b>negrito</b>, <i>itálico</i>, <pre>código</pre>). NÃO use Markdown (como **negrito**), pois o Telegram não renderiza corretamente neste modo.
@@ -226,8 +230,22 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context_history = await memory_manager.get_context(user_id)
     facts = await memory_manager.get_facts(user_id)
     
+    # 2.1 Get Active Reminders for Context (Smart Update)
+    active_reminders = await reminder_manager.get_active_reminders(user_id)
+    active_reminders_text = ""
+    if active_reminders:
+        active_reminders_text = "Lembretes atuais (ID - Tempo - Msg):\n"
+        for r_id, msg, r_at in active_reminders:
+             if isinstance(r_at, str):
+                dt = datetime.fromisoformat(r_at)
+             else:
+                dt = r_at
+             active_reminders_text += f"- ID {r_id}: {msg} (às {dt.strftime('%H:%M')})\n"
+    else:
+        active_reminders_text = "Nenhum lembrete pendente."
+
     # 3. Get AI Response
-    full_response = await get_ai_response(user_msg, context_history, facts)
+    full_response = await get_ai_response(user_msg, context_history, facts, active_reminders_text)
     
     # Process Commands (Reminders)
     reply_text = full_response

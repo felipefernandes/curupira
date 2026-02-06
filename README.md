@@ -93,18 +93,39 @@ Este é um projeto Open Source e adoramos colaborações!
 ### Roadmap
 Confira o arquivo [ROADMAP.md](ROADMAP.md) para ver as próximas fases planejadas (ex: Monitoramento de Hardware, Automação de Arquivos).
 
+### Fluxo de Contribuição
+
+O projeto conta com a **Iara** 🧜‍♀️, uma revisora de código automatizada que analisa todos os PRs.
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│  1. Branch  │───▶│   2. PR     │───▶│  3. Iara    │
+│   feature/  │    │   Aberto    │    │  Revisa IA  │
+└─────────────┘    └─────────────┘    └──────┬──────┘
+                                             │
+┌─────────────┐    ┌─────────────┐           │
+│  5. Merge   │◀───│  4. Ajustar │◀──────────┘
+│    main     │    │  (se necessário)        │
+└─────────────┘    └─────────────┘
+```
+
+1. **Crie uma branch**: `git checkout -b feature/minha-feature`
+2. **Desenvolva**: Siga as convenções do projeto (veja `openspec/project.md`).
+3. **Abra um PR**: A Iara irá revisar automaticamente buscando:
+   - 🐛 Bugs e erros lógicos
+   - 🔒 Problemas de segurança
+   - ⚡ Eficiência "Diet" (memória/CPU)
+   - 📚 Qualidade de código
+4. **Ajuste conforme feedback**: Atualize o PR até a aprovação.
+5. **Merge**: Após revisão aprovada, faça merge na `main`.
+
 ### Estrutura & Padrões (OpenSpec)
 Este projeto utiliza uma metodologia leve de especificações chamada **OpenSpec** para manter o código organizado.
 
 1.  **Mudanças Grandes?**
     *   Evite mudar código diretamente.
     *   Crie uma proposta em `openspec/changes/nova-feature/`.
-    *   Consulte `openspec/projec.md` e `openspec/AGENTS.md` para entender a arquitetura.
-
-2.  **Pull Requests**
-    *   Fork o projeto.
-    *   Crie sua branch (`feature/minha-feature`).
-    *   Garanta que a funcionalidade rode bem em hardware limitado (evite Docker pesado ou DBs complexos se possível).
+    *   Consulte `openspec/project.md` e `openspec/AGENTS.md` para entender a arquitetura.
 
 ## 📄 Licença
 

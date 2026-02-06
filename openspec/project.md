@@ -35,6 +35,20 @@ O Curupira nasce do **Manifesto Curupira**, buscando democratizar a Inteligênci
 - Commits descritivos.
 - Não versionar arquivos sensíveis (ex: `.env`).
 
+### Fluxo de Contribuição (Revisão Automatizada)
+O projeto utiliza a **Iara** 🧜‍♀️, uma revisora de código automatizada (DeepSeek V3) que analisa todos os PRs.
+
+1. **Criar Branch**: `git checkout -b feature/minha-feature`
+2. **Desenvolver**: Fazer as alterações seguindo as convenções do projeto.
+3. **Abrir PR**: Push e criar Pull Request para `main`.
+4. **Revisão Iara**: A Iara comenta automaticamente no PR com análise de:
+   - 🐛 Bugs potenciais
+   - 🔒 Problemas de segurança
+   - ⚡ Eficiência "Diet" (uso de memória/CPU)
+   - 📚 Qualidade de código
+5. **Iterar**: Corrigir conforme feedback e atualizar o PR.
+6. **Merge**: Após aprovação, fazer merge na `main`.
+
 ## Domain Context
 - **Persona:** O bot adota a persona do "Curupira", sendo amigável, perspicaz, e direto.
 - **Monitoramento automatizado:** Monitoramento de hardware (temperatura, uso de CPU/RAM).

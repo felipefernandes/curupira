@@ -88,4 +88,13 @@ curupira/
 * NÃO utilize bases de dados complexas (preferir JSON ou SQLite para persistência mínima).
 * SEMPRE priorize funções async para não travar o loop de eventos no Pi 3B.
 
+8. Fluxo de Contribuição (Revisão Automatizada)
+
+O projeto utiliza a **Iara** 🧜‍♀️, uma revisora de código automatizada (DeepSeek V3) integrada ao GitHub Actions.
+
+* **Criar Branch**: `git checkout -b feature/minha-feature`
+* **Abrir PR**: A Iara revisa automaticamente verificando bugs, segurança, eficiência "Diet" e qualidade.
+* **Iterar**: Corrigir conforme feedback da Iara e atualizar o PR.
+* **Merge**: Após aprovação, fazer merge na `main`.
+
 Gerado para Felipe Fernandes (@felipefernandesweb)

@@ -51,9 +51,18 @@ elif config.AI_PROVIDER == 'groq':
     else:
         logging.error("GROQ_API_KEY não configurada.")
 
+
 # Security Filter
 def is_authorized(user_id):
     return user_id == config.AUTHORIZED_USER_ID
+
+def format_reminder_time(r_at):
+    """Helper seguro para formatar hora do lembrete."""
+    try:
+        dt = datetime.fromisoformat(r_at) if isinstance(r_at, str) else r_at
+        return dt.strftime('%H:%M')
+    except Exception:
+        return "??"
 
 # Authorized Check Handler
 async def acesso_negado(update: Update):
@@ -233,11 +242,8 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if active_reminders:
         active_reminders_text = "Lembretes atuais (ID - Tempo - Msg):\n"
         for r_id, msg, r_at in active_reminders:
-             if isinstance(r_at, str):
-                dt = datetime.fromisoformat(r_at)
-             else:
-                dt = r_at
-             active_reminders_text += f"- ID {r_id}: {msg} (às {dt.strftime('%H:%M')})\n"
+             time_str = format_reminder_time(r_at)
+             active_reminders_text += f"- ID {r_id}: {msg} (às {time_str})\n"
     else:
         active_reminders_text = "Nenhum lembrete pendente."
 
@@ -280,9 +286,9 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if reminders:
             list_text = "\n📋 <b>Seus Lembretes:</b>\n"
             for r_id, msg, r_at in sorted(reminders, key=lambda x: x[0]): 
-                dt = datetime.fromisoformat(r_at) if isinstance(r_at, str) else r_at
+                time_str = format_reminder_time(r_at)
                 # Polished format
-                list_text += f"▫️ <code>#{r_id}</code> - <b>{dt.strftime('%H:%M')}</b>: {msg}\n"
+                list_text += f"▫️ <code>#{r_id}</code> - <b>{time_str}</b>: {msg}\n"
         else:
             list_text = "\n🚫 <i>Você não tem lembretes pendentes.</i>"
         

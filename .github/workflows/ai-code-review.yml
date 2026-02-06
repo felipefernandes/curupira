@@ -38,7 +38,7 @@ jobs:
         if: steps.diff.outputs.diff_size != '0'
         id: review
         env:
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           PR_DIFF: ${{ '' }}
         run: |
           # Lê o diff e envia para o script de revisão
@@ -62,7 +62,7 @@ jobs:
             ${{ steps.review.outputs.REVIEW_CONTENT }}
             
             ---
-            *Iara é a guardiã do código do Curupira · Powered by [DeepSeek V3](https://deepseek.com)*`;
+            *Iara é a guardiã do código do Curupira · Powered by OpenRouter (Free Models)*`;
             
             await github.rest.issues.createComment({
               owner: context.repo.owner,

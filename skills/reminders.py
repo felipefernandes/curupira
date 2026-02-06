@@ -41,6 +41,38 @@ class ReminderManager:
             await db.commit()
             self.logger.info(f"Reminder {reminder_id} cancelled.")
 
+    async def update_reminder(self, reminder_id, user_id, message=None, delay_seconds=None):
+        """Updates a reminder's message and/or trigger time."""
+        updates = []
+        params = []
+        new_remind_at = None
+        
+        if message is not None:
+            updates.append("message = ?")
+            params.append(message)
+            
+        if delay_seconds is not None:
+            new_remind_at = datetime.now() + timedelta(seconds=delay_seconds)
+            updates.append("remind_at = ?")
+            params.append(new_remind_at)
+            
+        if not updates:
+            return None
+
+        params.append(reminder_id)
+        params.append(user_id)
+        
+        query = f"UPDATE reminders SET {', '.join(updates)} WHERE id = ? AND user_id = ? AND status = 'PENDING'"
+        
+        async with aiosqlite.connect(self.db_path) as db:
+            cursor = await db.execute(query, tuple(params))
+            await db.commit()
+            
+            if cursor.rowcount > 0:
+                self.logger.info(f"Reminder {reminder_id} updated.")
+                return new_remind_at if delay_seconds is not None else True
+            return False
+
     async def mark_as_sent(self, reminder_id):
         """Marks a reminder as SENT."""
         async with aiosqlite.connect(self.db_path) as db:
@@ -53,6 +85,14 @@ class ReminderManager:
             async with db.execute("SELECT status FROM reminders WHERE id = ?", (reminder_id,)) as cursor:
                 row = await cursor.fetchone()
                 return row[0] if row else None
+
+    async def get_reminder_message(self, reminder_id):
+        """Fetches the current message for a reminder."""
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute("SELECT message FROM reminders WHERE id = ?", (reminder_id,)) as cursor:
+                row = await cursor.fetchone()
+                return row[0] if row else None
+
 
     async def recover_reminders(self, job_queue):
         """Recovers pending reminders on startup and reschedules them."""

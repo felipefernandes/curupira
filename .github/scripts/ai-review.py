@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-AI Code Reviewer - DeepSeek V3
-Script para revisão automatizada de código usando IA.
+Iara - Revisora de Código do Projeto Curupira
+Script para revisão automatizada de código usando IA (DeepSeek V3).
 Parte do projeto Curupira - Inteligência Agêntica para Todos.
 """
 

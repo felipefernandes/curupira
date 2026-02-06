@@ -1,7 +1,7 @@
 # AI Code Reviewer - DeepSeek V3
 # Revisão automatizada de PRs alinhada ao Manifesto Curupira
 
-name: AI Code Review
+name: "🧜‍♀️ Iara - Revisora de Código"
 
 on:
   pull_request:
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   review:
-    name: "🤖 Revisor IA Curupira"
+    name: "Executar revisão"
     runs-on: ubuntu-latest
     
     steps:
@@ -57,12 +57,12 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const review = `## 🌳 Revisão Curupira (IA)
+            const review = `## 🧜‍♀️ Revisão da Iara
             
             ${{ steps.review.outputs.REVIEW_CONTENT }}
             
             ---
-            *Revisão automatizada por [DeepSeek V3](https://deepseek.com) · Alinhada ao [Manifesto Curupira](./MANIFESTO.md)*`;
+            *Iara é a guardiã do código do Curupira · Powered by [DeepSeek V3](https://deepseek.com)*`;
             
             await github.rest.issues.createComment({
               owner: context.repo.owner,

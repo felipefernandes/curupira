@@ -17,54 +17,13 @@ OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # Lista simplificada de modelos gratuitos e meta-modelos
 FREE_MODELS = [
-    "openrouter/free",              # Meta-modelo: O OpenRouter escolhe o melhor grátis disponível
+    "openrouter/free",              # Meta-modelo: O OpenRouter escolhe o melhor grátis disponível (ordem varia)
     "google/gemini-2.0-flash-lite-preview-02-05:free", # Muito rápido e estável
     "deepseek/deepseek-r1:free",    # DeepSeek R1 (pode estar congestionado)
     "meta-llama/llama-3-8b-instruct:free" # Leve e confiável
 ]
 
-SYSTEM_PROMPT = """Você é um revisor de código especializado do **projeto Curupira** - um assistente de IA agêntica projetado para rodar em hardware limitado (Raspberry Pi 3, 1GB RAM).
-
-## FILOSOFIA DO PROJETO (Manifesto Curupira):
-- **Democratização**: Funciona em hardware modesto
-- **Eficiência "Diet"**: Processamento inteligente, lógica leve
-- **Acessibilidade**: Código como tutorial (didático)
-- **Segurança**: Validação estrita de usuários, proteção de dados
-
-## CHECKLIST DE REVISÃO:
-
-### 🐛 BUGS POTENCIAIS
-- Erros lógicos, condições de corrida
-- Null/None sem tratamento
-- Loops infinitos, recursão sem saída
-- Async/await mal utilizados (deadlocks)
-
-### 🔒 SEGURANÇA
-- Secrets/tokens hardcoded
-- SQL injection, command injection
-- Validação de input de usuário
-- Permissões excessivas (AUTHORIZED_USER_ID)
-
-### ⚡ EFICIÊNCIA "DIET" (CRÍTICO)
-- Importações pesadas: Pandas, Numpy, TensorFlow
-- Carregamento de arquivos grandes na memória
-- Loops bloqueantes (usar async quando possível)
-- Context managers não usados (with open...)
-- SQLite sem índices em queries frequentes
-
-### 📚 QUALIDADE DE CÓDIGO
-- Docstrings ausentes em funções públicas
-- Variáveis com nomes obscuros
-- Código duplicado (DRY)
-- Try-except muito genéricos
-
-## FORMATO DA RESPOSTA:
-- Seja construtivo e específico
-- Aponte linha/função do problema
-- Sugira correção quando possível
-- Se não houver problemas: "✅ Código alinhado ao Manifesto Curupira"
-"""
-
+# ...
 
 def review_code_with_model(diff: str, api_key: str, model: str) -> str:
     """Tenta revisar com um modelo específico."""
@@ -80,6 +39,7 @@ def review_code_with_model(diff: str, api_key: str, model: str) -> str:
             {"role": "user", "content": f"Revise o seguinte diff de código:\n\n```diff\n{diff}\n```"}
         ],
         "temperature": 0.3, # Baixa temperatura é seguro
+        "max_tokens": 2000, # Limite de tokens para evitar respostas cortadas ou custo excessivo
         # Headers HTTP Referer e X-Title são passados nos headers da request, não no payload json
     }
     

@@ -61,7 +61,7 @@ def format_reminder_time(r_at):
     try:
         dt = datetime.fromisoformat(r_at) if isinstance(r_at, str) else r_at
         return dt.strftime('%H:%M')
-    except Exception:
+    except (ValueError, TypeError, AttributeError):
         return "??"
 
 # Authorized Check Handler
@@ -240,10 +240,9 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     active_reminders = await reminder_manager.get_active_reminders(user_id)
     active_reminders_text = ""
     if active_reminders:
-        active_reminders_text = "Lembretes atuais (ID - Tempo - Msg):\n"
-        for r_id, msg, r_at in active_reminders:
-             time_str = format_reminder_time(r_at)
-             active_reminders_text += f"- ID {r_id}: {msg} (às {time_str})\n"
+        # Optimized with list comprehension and join
+        lines = [f"- ID {r_id}: {msg} (às {format_reminder_time(r_at)})" for r_id, msg, r_at in active_reminders]
+        active_reminders_text = "Lembretes atuais (ID - Tempo - Msg):\n" + "\n".join(lines)
     else:
         active_reminders_text = "Nenhum lembrete pendente."
 

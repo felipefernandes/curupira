@@ -1,7 +1,7 @@
 # Project Context
 
 ## Purpose
-O Curupira é uma alternativa "Lite" ao OpenClaw, projetado para alta performance em hardware limitado (por exemplo o Raspberry Pi 3 Model B com 1GB RAM). Ele atua como um assistente pessoal, pode fazer monitoramento do sistema e automação de tarefas definidas pelo usuário. O sistema opera de forma "headless" (sem interface gráfica), utilizando o Telegram como interface principal.
+O Curupira nasce do **Manifesto Curupira**, buscando democratizar a Inteligência Agêntica. É uma alternativa "Diet" e eficiente, projetada para alta performance em hardware limitado (como o Raspberry Pi 3 Model B). Ele atua como um parceiro proativo, monitorando e assistindo o usuário através de uma interface acessível (Telegram), priorizando a simplicidade e o baixo custo operacional.
 
 ## Tech Stack
 - **Linguagem:** Python 3 (foco em `asyncio`)

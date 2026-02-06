@@ -4,7 +4,9 @@
 > 
 > *"Eu sou o Curupira, guardião do sistema e seu assistente pessoal."*
 
-O **CurupiraBot** é um assistente virtual projetado para rodar em hardware modesto (como um **Raspberry Pi 3**), mas com capacidades avançadas de **Memória**, **Personalidade** e **Proatividade**. Diferente de bots passivos, o Curupira "vive" no seu servidor, monitora sua saúde e pode te mandar lembretes e insights por conta própria.
+O **CurupiraBot** é um assistente virtual projetado para rodar em hardware modesto (como um **Raspberry Pi 3**), democratizando o acesso à Inteligência Artificial Agêntica. Baseado na **Arquitetura da Restrição** e no **Conceito Diet**, ele transforma limitações de hardware em eficiência, "vivendo" no seu servidor para monitorar, alertar e assistir, sem exigir supercomputadores.
+
+> 📜 **Leia nosso [Manifesto Curupira](MANIFESTO.md) para entender a filosofia por trás do código.**
 
 ## 🚀 Funcionalidades Atuais
 
@@ -21,6 +23,15 @@ O **CurupiraBot** é um assistente virtual projetado para rodar em hardware mode
 *   **python-telegram-bot** (Async + JobQueue)
 *   **SQLite + JSON** (Sistema de Memória Lite)
 *   **Groq API / Google GenAI**
+
+## ⚖️ Filosofia (Resumo)
+
+*   **Democratização**: Funciona em hardware de baixo custo (1GB RAM).
+*   **Eficiência "Diet"**: Processamento offboard, lógica local leve.
+*   **Acessibilidade**: Interface via Telegram, sem complexidade.
+*   **Privacidade**: Você controla quem fala com seu agente.
+
+_Veja mais em [MANIFESTO.md](MANIFESTO.md)_
 
 ---
 

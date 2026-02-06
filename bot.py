@@ -102,13 +102,21 @@ NÃO liste lembretes se o usuário apenas agradecer ou confirmar.
 Se o usuário pedir para cancelar/remover um lembrete (geralmente pelo ID), use:
 [[REMINDER_DELETE|ID]]
 
+4. Atualizar Lembrete:
+Se o usuário pedir para mudar o texto ou o tempo de um lembrete (pelo ID), use:
+[[REMINDER_UPDATE|ID|MINUTES|MESSAGE]]
+- Use '0' ou '-' nos MINUTOS para manter o tempo atual.
+- Use '-' na MENSSAGEM para manter o texto atual.
+
 Exemplos:
 - "Me lembre de sair em 1h" -> "Feito! [[REMINDER|60|Sair de casa]]"
 - "Quais meus lembretes?" -> "Vou verificar... [[REMINDER_LIST]]"
+- "Mude o lembrete 5 para 'Comprar Pão'" -> "Alterado! [[REMINDER_UPDATE|5|-|Comprar Pão]]"
+- "Adie o lembrete 5 em 10 min" -> "Adiado! [[REMINDER_UPDATE|5|10|-]]"
 - "Cancele o lembrete 3" -> "Cancelando... [[REMINDER_DELETE|3]]"
 - "Obrigado" -> "De nada!" (SEM COMANDOS)
 
-4. Previsão do Tempo:
+5. Previsão do Tempo:
 Se o usuário perguntar sobre o clima/tempo:
 [[WEATHER|NOME_DA_CIDADE]]
 Se o usuário NÃO disser a cidade, verifique se você já sabe onde ele mora (fato 'user_city'). Se souber, use a cidade do fato. Se não souber, PERGUNTE a cidade primeiro.
@@ -285,7 +293,56 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logging.error(f"Erro ao deletar lembrete: {e}")
             reply_text = reply_text.replace(delete_match.group(0), "❌ Erro ao cancelar o lembrete.").strip()
 
-    # 4. WEATHER
+    # 4. UPDATE REMINDER
+    update_match = re.search(r"\[\[REMINDER_UPDATE\|(\d+)\|(.*?)\|(.*?)\]\]", reply_text)
+    if update_match:
+        try:
+            r_id = int(update_match.group(1))
+            minutes_str = update_match.group(2).strip()
+            new_msg = update_match.group(3).strip()
+            
+            # Parse arguments
+            delay_seconds = None
+            if minutes_str not in ['-', '0']:
+                delay_seconds = int(minutes_str) * 60
+            
+            final_msg = None if new_msg == '-' else new_msg
+            
+            # Update DB
+            result = await reminder_manager.update_reminder(r_id, user_id, final_msg, delay_seconds)
+            
+            if result:
+                # If time changed, reschedule job
+                if delay_seconds is not None:
+                    # Cancel old job
+                    current_jobs = context.job_queue.get_jobs_by_name(f"reminder_{r_id}")
+                    for job in current_jobs:
+                        job.schedule_removal()
+                    
+                    # Schedule new job
+                    # Note: We pass None as msg if not updated, but execute_reminder fetches from DB anyway!
+                    # However, for consistency let's pass a placeholder or strict fetch.
+                    # Since we refactored execute_reminder to ALWAYS fetch from DB, the data payload message is less critical.
+                    context.job_queue.run_once(
+                        execute_reminder, 
+                        when=delay_seconds, 
+                        chat_id=user_id, 
+                        data={"id": r_id, "msg": "FETCH_FROM_DB"}, # Validation in worker handles this
+                        name=f"reminder_{r_id}"
+                    )
+                    feedback = f"✏️ Lembrete <b>#{r_id}</b> atualizado e reagendado par {minutes_str} min."
+                else:
+                    feedback = f"✏️ Texto do lembrete <b>#{r_id}</b> atualizado."
+                
+                reply_text = reply_text.replace(update_match.group(0), feedback).strip()
+            else:
+                reply_text = reply_text.replace(update_match.group(0), f"❌ Não encontrei o lembrete #{r_id} ativo.").strip()
+                
+        except Exception as e:
+            logging.error(f"Erro ao atualizar lembrete: {e}")
+            reply_text = reply_text.replace(update_match.group(0), "❌ Erro ao atualizar.").strip()
+
+    # 5. WEATHER
     weather_match = re.search(r"\[\[WEATHER\|(.*?)\]\]", reply_text)
     if weather_match:
         city = weather_match.group(1)
@@ -317,7 +374,9 @@ async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
         return
 
     reminder_id = reminder_data["id"]
-    message = reminder_data["msg"]
+    # Single Source of Truth: Fetch latest message from DB
+    db_message = await reminder_manager.get_reminder_message(reminder_id)
+    message = db_message if db_message else reminder_data.get("msg", "Lembrete sem texto")
 
     # Check status in DB
     status = await reminder_manager.get_reminder_status(reminder_id)

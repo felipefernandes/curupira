@@ -14,13 +14,14 @@ import time
 
 # Configuração da API OpenRouter
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-# Lista de modelos gratuitos com fallback (IDs atualizados)
+# Lista de modelos gratuitos com fallback (IDs revisados e estáveis)
 FREE_MODELS = [
-    "google/gemini-2.0-flash-lite-preview-02-05:free",
+    "google/gemini-2.0-flash-lite-preview-02-05:free", # Tentativa 1 (se voltar)
+    "google/gemini-2.0-flash-exp:free", # Mais estável
     "google/gemini-2.0-pro-exp-02-05:free",
-    "google/gemini-exp-1206:free", # Versão anterior muito estável
-    "meta-llama/llama-3.3-70b-instruct:free",
-    "microsoft/phi-3-medium-128k-instruct:free" # Fallback bem leve
+    "deepseek/deepseek-r1-distill-llama-70b:free", # R1 Distill (costuma funcionar)
+    "meta-llama/llama-3-8b-instruct:free", # Modelo menor, menos congestionado
+    "qwen/qwen-2.5-vl-72b-instruct:free" # Qwen costuma ser robusto
 ]
 
 SYSTEM_PROMPT = """Você é um revisor de código especializado do **projeto Curupira** - um assistente de IA agêntica projetado para rodar em hardware limitado (Raspberry Pi 3, 1GB RAM).

@@ -44,23 +44,14 @@ jobs:
           # Lê o diff e envia para o script de revisão
           export PR_DIFF=$(cat pr_diff.txt)
           python .github/scripts/ai-review.py > review_output.txt
-          
-          # Salva output para próximo step (multiline)
-          {
-            echo 'REVIEW_CONTENT<<EOF'
-            cat review_output.txt
-            echo 'EOF'
-          } >> $GITHUB_OUTPUT
       
       - name: Comentar no PR
         if: steps.diff.outputs.diff_size != '0'
         uses: actions/github-script@v7
-        env:
-          # Previne injection e problemas de escaping ao passar conteúdo para o script JS
-          REVIEW_CONTENT: ${{ steps.review.outputs.REVIEW_CONTENT }}
         with:
           script: |
-            const reviewContent = process.env.REVIEW_CONTENT;
+            const fs = require('fs');
+            const reviewContent = fs.readFileSync('review_output.txt', 'utf8');
             const review = `## 🧜‍♀️ Revisão da Iara
             
             ${reviewContent}

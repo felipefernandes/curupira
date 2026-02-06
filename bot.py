@@ -51,15 +51,24 @@ elif config.AI_PROVIDER == 'groq':
     else:
         logging.error("GROQ_API_KEY não configurada.")
 
+
 # Security Filter
 def is_authorized(user_id):
     return user_id == config.AUTHORIZED_USER_ID
+
+def format_reminder_time(r_at):
+    """Helper seguro para formatar hora do lembrete."""
+    try:
+        dt = datetime.fromisoformat(r_at) if isinstance(r_at, str) else r_at
+        return dt.strftime('%H:%M')
+    except (ValueError, TypeError, AttributeError):
+        return "??"
 
 # Authorized Check Handler
 async def acesso_negado(update: Update):
     await update.message.reply_text("⛔ Acesso negado. Este bot é privado.")
 
-async def get_ai_response(user_msg, context_history="", facts=""):
+async def get_ai_response(user_msg, context_history="", facts="", active_reminders_text=""):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     # Extract personal names from facts if available
@@ -81,7 +90,8 @@ User Profile: {personal_name}
 User Profile: {personal_name}
 Current Time: {now}
 Fatos sobre o Usuário:
-{facts}
+[Lembretes Ativos]
+{active_reminders_text}
 
 [Instruções de Estilo]
 1. Formatação: Use tags HTML para formatar a resposta (<b>negrito</b>, <i>itálico</i>, <pre>código</pre>). NÃO use Markdown (como **negrito**), pois o Telegram não renderiza corretamente neste modo.
@@ -226,8 +236,18 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context_history = await memory_manager.get_context(user_id)
     facts = await memory_manager.get_facts(user_id)
     
+    # 2.1 Get Active Reminders for Context (Smart Update)
+    active_reminders = await reminder_manager.get_active_reminders(user_id)
+    active_reminders_text = ""
+    if active_reminders:
+        # Optimized with list comprehension and join
+        lines = [f"- ID {r_id}: {msg} (às {format_reminder_time(r_at)})" for r_id, msg, r_at in active_reminders]
+        active_reminders_text = "Lembretes atuais (ID - Tempo - Msg):\n" + "\n".join(lines)
+    else:
+        active_reminders_text = "Nenhum lembrete pendente."
+
     # 3. Get AI Response
-    full_response = await get_ai_response(user_msg, context_history, facts)
+    full_response = await get_ai_response(user_msg, context_history, facts, active_reminders_text)
     
     # Process Commands (Reminders)
     reply_text = full_response
@@ -265,12 +285,9 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if reminders:
             list_text = "\n📋 <b>Seus Lembretes:</b>\n"
             for r_id, msg, r_at in sorted(reminders, key=lambda x: x[0]): 
-                if isinstance(r_at, str):
-                    dt = datetime.fromisoformat(r_at)
-                else:
-                    dt = r_at
+                time_str = format_reminder_time(r_at)
                 # Polished format
-                list_text += f"▫️ <code>#{r_id}</code> - <b>{dt.strftime('%H:%M')}</b>: {msg}\n"
+                list_text += f"▫️ <code>#{r_id}</code> - <b>{time_str}</b>: {msg}\n"
         else:
             list_text = "\n🚫 <i>Você não tem lembretes pendentes.</i>"
         

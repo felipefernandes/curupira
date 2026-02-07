@@ -22,7 +22,7 @@
     [x] Se o usuário perguntar algo do tipo "o que tem que fazer hoje?" ou "Quais são os meus lembretes de hoje | amanhã | semana | mes?", o Curupira deve responder com os lembretes que o usuário definiu.
     [x] O usuário pode definir lembretes com prazo definido, como "lembrete para amanhã" ou "lembrete para semana que vem".
     [x] O usuário pode pedir para remover lembretes existentes, como "remova lembrete de amanhã" ou "remova lembrete de semana que vem" ou "remova o lembrete sobre {assunto}" ou "remova todos os lembretes".
-    [ ] O usuário pode pedir para alterar alguma propriedade de algum lembrete existe: data, descrição e etc.
+    [x] O usuário pode pedir para alterar alguma propriedade de algum lembrete existe: data, descrição e etc.
 
 # [Skill: Previsão do Tempo / "Vai chover?"]
     [x] O usuário pode perguntar algo do tipo "Vai chover hoje?" ou "Qual é a previsão do tempo para amanhã?".

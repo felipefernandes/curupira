@@ -81,7 +81,7 @@ def review_code_with_model(diff: str, api_key: str, model: str) -> str:
             {"role": "user", "content": f"Revise o seguinte diff de código:\n\n```diff\n{diff}\n```"}
         ],
         "temperature": 0.3, # Baixa temperatura é seguro
-        "max_tokens": 2000, # Limite de tokens para evitar respostas cortadas ou custo excessivo
+        "max_tokens": 6000, # Limite aumentado para evitar cortes (suporta DeepSeek R1 e Llama 3)
         # Headers HTTP Referer e X-Title são passados nos headers da request, não no payload json
     }
     
@@ -102,7 +102,13 @@ def review_code_with_model(diff: str, api_key: str, model: str) -> str:
                  raise Exception(f"API Error: {result['error']}")
             
             if "choices" in result and len(result["choices"]) > 0:
-                return result["choices"][0]["message"]["content"]
+                content = result["choices"][0]["message"]["content"]
+                
+                # Strip <think> blocks (Common in DeepSeek R1)
+                import re
+                content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+                
+                return content
             else:
                 return "⚠️ Modelo retornou resposta vazia."
 

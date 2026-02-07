@@ -88,7 +88,10 @@ class AgentBrain:
         return [types.Tool(function_declarations=declarations)]
 
     async def _execute_tool_call(self, tool_name: str, tool_args: Dict[str, Any], context: Dict[str, Any]) -> str:
-        """Executes a single tool call and returns the JSON string result."""
+        """
+        Executes a tool (skill) by name with provided arguments.
+        Catches exceptions to prevent agent crash.
+        """
         self.logger.info(f"Invoking tool: {tool_name} with {tool_args}")
         
         skill = self.skills.get(tool_name)
@@ -146,7 +149,7 @@ class AgentBrain:
                         messages=messages,
                         tools=tools if tools else None,
                         tool_choice="auto" if tools else None,
-                        max_tokens=1024
+                        max_tokens=2048 # Increased to prevent cut-off responses
                     )
                     
                     msg = response.choices[0].message

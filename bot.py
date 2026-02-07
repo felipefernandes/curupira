@@ -5,11 +5,12 @@ from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, Application
 import config
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
 from skills.memory import MemoryManager
-from skills.reminders import ReminderManager
-from skills.weather_manager import WeatherManager
+from skills.reminders import ReminderManager, AddReminderSkill, ListRemindersSkill, DeleteReminderSkill, UpdateReminderSkill
+from skills.weather_manager import WeatherSkill
+from agent import AgentBrain
 
 # Configure Logging
 logging.basicConfig(
@@ -18,11 +19,19 @@ logging.basicConfig(
 )
 
 # AI Setup
-gemini_client = None
-groq_client = None
 memory_manager = MemoryManager()
 reminder_manager = ReminderManager()
-weather_manager = WeatherManager()
+weather_skill = WeatherSkill()
+
+# Agent Brain Setup
+brain = AgentBrain(config.AI_PROVIDER, config.GEMINI_API_KEY if config.AI_PROVIDER == 'gemini' else config.GROQ_API_KEY, config.GEMINI_MODEL if config.AI_PROVIDER == 'gemini' else config.GROQ_MODEL)
+
+# Register Skills
+brain.register_skill(weather_skill)
+brain.register_skill(AddReminderSkill(reminder_manager))
+brain.register_skill(ListRemindersSkill(reminder_manager))
+brain.register_skill(DeleteReminderSkill(reminder_manager))
+brain.register_skill(UpdateReminderSkill(reminder_manager))
 
 # Onboarding States
 WAITING_NAME = 1
@@ -31,149 +40,13 @@ onboarding_states = {}
 
 logging.info(f"Iniciando bot com provedor: {config.AI_PROVIDER}")
 
-if config.AI_PROVIDER == 'gemini':
-    if config.GEMINI_API_KEY:
-        try:
-            gemini_client = genai.Client(api_key=config.GEMINI_API_KEY)
-            logging.info("Cliente Gemini inicializado.")
-        except Exception as e:
-            logging.error(f"Erro ao inicializar Gemini: {e}")
-    else:
-        logging.error("GEMINI_API_KEY não configurada.")
-
-elif config.AI_PROVIDER == 'groq':
-    if config.GROQ_API_KEY:
-        try:
-            groq_client = Groq(api_key=config.GROQ_API_KEY)
-            logging.info("Cliente Groq inicializado.")
-        except Exception as e:
-            logging.error(f"Erro ao inicializar Groq: {e}")
-    else:
-        logging.error("GROQ_API_KEY não configurada.")
-
-
 # Security Filter
 def is_authorized(user_id):
     return user_id == config.AUTHORIZED_USER_ID
 
-def format_reminder_time(r_at):
-    """Helper seguro para formatar hora do lembrete."""
-    try:
-        dt = datetime.fromisoformat(r_at) if isinstance(r_at, str) else r_at
-        return dt.strftime('%H:%M')
-    except (ValueError, TypeError, AttributeError):
-        return "??"
-
 # Authorized Check Handler
 async def acesso_negado(update: Update):
     await update.message.reply_text("⛔ Acesso negado. Este bot é privado.")
-
-async def get_ai_response(user_msg, context_history="", facts="", active_reminders_text=""):
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    # Extract personal names from facts if available
-    personal_name = "Usuário"
-    assistant_surname = ""
-    
-    # Parse facts text to find names (simple parsing since get_facts returns "- key: value")
-    if facts:
-        for line in facts.split("\n"):
-            if "personal_name" in line:
-                personal_name = line.split(": ")[1].strip()
-            elif "assistant_surname" in line:
-                assistant_surname = line.split(": ")[1].strip()
-
-    full_prompt = f"""
-[System Context]
-Persona: Curupira {assistant_surname} (Assistente Pessoal / Guardião do Sistema)
-User Profile: {personal_name}
-User Profile: {personal_name}
-Current Time: {now}
-Fatos sobre o Usuário:
-[Lembretes Ativos]
-{active_reminders_text}
-
-[Instruções de Estilo]
-1. Formatação: Use tags HTML para formatar a resposta (<b>negrito</b>, <i>itálico</i>, <pre>código</pre>). NÃO use Markdown (como **negrito**), pois o Telegram não renderiza corretamente neste modo.
-2. Naturalidade: Seja natural e direto. Evite repetir o nome do usuário em toda frase. Aja como um amigo próximo que já conhece a pessoa, sem formalidades excessivas.
-
-[Ferramentas / Comandos]
-1. Criar Lembrete:
-Se o usuário pedir para ser lembrado, calcule o tempo relativo em minutos e use:
-[[REMINDER|MINUTES|MESSAGE]]
-Nota: 'MESSAGE' deve ser curto, claro e com a grafia correta em português (corrija typos se necessário).
-
-2. Listar Lembretes:
-SOMENTE se o usuário perguntar explicitamente "quais são meus lembretes?" ou "o que tenho pendente?", use:
-[[REMINDER_LIST]]
-NÃO liste lembretes se o usuário apenas agradecer ou confirmar.
-
-3. Deletar Lembrete:
-Se o usuário pedir para cancelar/remover um lembrete (geralmente pelo ID), use:
-[[REMINDER_DELETE|ID]]
-
-4. Atualizar Lembrete:
-Se o usuário pedir para mudar o texto ou o tempo de um lembrete (pelo ID), use:
-[[REMINDER_UPDATE|ID|MINUTES|MESSAGE]]
-- Use '0' ou '-' nos MINUTOS para manter o tempo atual.
-- Use '-' na MENSSAGEM para manter o texto atual.
-
-Exemplos:
-- "Me lembre de sair em 1h" -> "Feito! [[REMINDER|60|Sair de casa]]"
-- "Quais meus lembretes?" -> "Vou verificar... [[REMINDER_LIST]]"
-- "Mude o lembrete 5 para 'Comprar Pão'" -> "Alterado! [[REMINDER_UPDATE|5|-|Comprar Pão]]"
-- "Adie o lembrete 5 em 10 min" -> "Adiado! [[REMINDER_UPDATE|5|10|-]]"
-- "Cancele o lembrete 3" -> "Cancelando... [[REMINDER_DELETE|3]]"
-- "Obrigado" -> "De nada!" (SEM COMANDOS)
-
-5. Previsão do Tempo:
-Se o usuário perguntar sobre o clima/tempo:
-[[WEATHER|NOME_DA_CIDADE]]
-Se o usuário NÃO disser a cidade, verifique se você já sabe onde ele mora (fato 'user_city'). Se souber, use a cidade do fato. Se não souber, PERGUNTE a cidade primeiro.
-
-Exemplos:
-- "Vai chover em Sorocaba?" -> "Vou verificar! [[WEATHER|Sorocaba]]"
-- Usuário: "Vai chover?" (Você Sabe que ele é de SP) -> "Vendo para SP... [[WEATHER|São Paulo]]"
-- Usuário: "Vai chover?" (Você NÃO sabe a cidade) -> "De qual cidade você é?"
-
-[Histórico da Conversa]
-{context_history}
-
-[Mensagem Atual]
-User: {user_msg}
-"""
-    try:
-        if config.AI_PROVIDER == 'groq':
-            if not groq_client:
-                return "Erro: Cliente Groq não inicializado. Verifique a chave de API."
-            
-            chat_completion = groq_client.chat.completions.create(
-                messages=[
-                    {
-                        "role": "user",
-                        "content": full_prompt,
-                    }
-                ],
-                model="llama-3.3-70b-versatile",
-            )
-            return chat_completion.choices[0].message.content
-
-        elif config.AI_PROVIDER == 'gemini':
-            if not gemini_client:
-                return "Erro: Cliente Gemini não inicializado. Verifique a chave de API."
-
-            response = gemini_client.models.generate_content(
-                model="gemini-2.0-flash", 
-                contents=full_prompt
-            )
-            return response.text
-        
-        else:
-            return f"Erro: Provedor '{config.AI_PROVIDER}' desconhecido."
-
-    except Exception as e:
-        logging.error(f"Erro na geração de IA: {e}")
-        return f"Ocorreu um erro ao processar sua solicitação ({config.AI_PROVIDER}): {str(e)}"
 
 # Message Handler (AI)
 async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -234,148 +107,29 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # 2. Retrieve Context
     context_history = await memory_manager.get_context(user_id)
-    facts = await memory_manager.get_facts(user_id)
+    # active_reminders = await reminder_manager.get_active_reminders(user_id) # Agent can fetch if needed via Skill
     
-    # 2.1 Get Active Reminders for Context (Smart Update)
-    active_reminders = await reminder_manager.get_active_reminders(user_id)
-    active_reminders_text = ""
-    if active_reminders:
-        # Optimized with list comprehension and join
-        lines = [f"- ID {r_id}: {msg} (às {format_reminder_time(r_at)})" for r_id, msg, r_at in active_reminders]
-        active_reminders_text = "Lembretes atuais (ID - Tempo - Msg):\n" + "\n".join(lines)
-    else:
-        active_reminders_text = "Nenhum lembrete pendente."
-
-    # 3. Get AI Response
-    full_response = await get_ai_response(user_msg, context_history, facts, active_reminders_text)
-    
-    # Process Commands (Reminders)
-    reply_text = full_response
-    
-    # 1. CREATE REMINDER
-    reminder_match = re.search(r"\[\[REMINDER\|(\d+)\|(.*?)\]\]", reply_text)
-    if reminder_match:
-        try:
-            minutes = int(reminder_match.group(1))
-            reminder_msg = reminder_match.group(2)
-            
-            # Save to DB
-            seconds_delay = minutes * 60
-            reminder_id = await reminder_manager.add_reminder(user_id, reminder_msg, seconds_delay)
-            
-            # Schedule Job
-            if context.job_queue:
-                context.job_queue.run_once(
-                    execute_reminder, 
-                    when=seconds_delay, 
-                    chat_id=user_id, 
-                    data={"id": reminder_id, "msg": reminder_msg},
-                    name=f"reminder_{reminder_id}"
-                )
-                logging.info(f"Lembrete agendado: {reminder_msg} em {minutes} min (ID: {reminder_id})")
-            
-            # Remove tag from reply_text (chaining)
-            reply_text = reply_text.replace(reminder_match.group(0), "").strip()
-        except Exception as e:
-            logging.error(f"Erro ao processar lembrete: {e}")
-
-    # 2. LIST REMINDERS
-    if "[[REMINDER_LIST]]" in reply_text:
-        reminders = await reminder_manager.get_active_reminders(user_id)
-        if reminders:
-            list_text = "\n📋 <b>Seus Lembretes:</b>\n"
-            for r_id, msg, r_at in sorted(reminders, key=lambda x: x[0]): 
-                time_str = format_reminder_time(r_at)
-                # Polished format
-                list_text += f"▫️ <code>#{r_id}</code> - <b>{time_str}</b>: {msg}\n"
-        else:
-            list_text = "\n🚫 <i>Você não tem lembretes pendentes.</i>"
-        
-        reply_text = reply_text.replace("[[REMINDER_LIST]]", list_text).strip()
-
-    # 3. DELETE REMINDER
-    delete_match = re.search(r"\[\[REMINDER_DELETE\|(\d+)\]\]", reply_text)
-    if delete_match:
-        try:
-            r_id = int(delete_match.group(1))
-            await reminder_manager.delete_reminder(r_id, user_id)
-            
-            # Try to cancel job if in memory
-            current_jobs = context.job_queue.get_jobs_by_name(f"reminder_{r_id}")
-            for job in current_jobs:
-                job.schedule_removal()
-            
-            reply_text = reply_text.replace(delete_match.group(0), f"🗑️ Lembrete <b>#{r_id}</b> removido.").strip()
-        except Exception as e:
-            logging.error(f"Erro ao deletar lembrete: {e}")
-            reply_text = reply_text.replace(delete_match.group(0), "❌ Erro ao cancelar o lembrete.").strip()
-
-    # 4. UPDATE REMINDER
-    update_match = re.search(r"\[\[REMINDER_UPDATE\|(\d+)\|(.*?)\|(.*?)\]\]", reply_text)
-    if update_match:
-        try:
-            r_id = int(update_match.group(1))
-            minutes_str = update_match.group(2).strip()
-            new_msg = update_match.group(3).strip()
-            
-            # Parse arguments
-            delay_seconds = None
-            if minutes_str not in ['-', '0']:
-                delay_seconds = int(minutes_str) * 60
-            
-            final_msg = None if new_msg == '-' else new_msg
-            
-            # Update DB
-            result = await reminder_manager.update_reminder(r_id, user_id, final_msg, delay_seconds)
-            
-            if result:
-                # If time changed, reschedule job
-                if delay_seconds is not None:
-                    # Cancel old job
-                    current_jobs = context.job_queue.get_jobs_by_name(f"reminder_{r_id}")
-                    for job in current_jobs:
-                        job.schedule_removal()
-                    
-                    # Schedule new job
-                    # Note: We pass None as msg if not updated, but execute_reminder fetches from DB anyway!
-                    # However, for consistency let's pass a placeholder or strict fetch.
-                    # Since we refactored execute_reminder to ALWAYS fetch from DB, the data payload message is less critical.
-                    context.job_queue.run_once(
-                        execute_reminder, 
-                        when=delay_seconds, 
-                        chat_id=user_id, 
-                        data={"id": r_id, "msg": "FETCH_FROM_DB"}, # Validation in worker handles this
-                        name=f"reminder_{r_id}"
-                    )
-                    feedback = f"✏️ Lembrete <b>#{r_id}</b> atualizado e reagendado par {minutes_str} min."
-                else:
-                    feedback = f"✏️ Texto do lembrete <b>#{r_id}</b> atualizado."
-                
-                reply_text = reply_text.replace(update_match.group(0), feedback).strip()
-            else:
-                reply_text = reply_text.replace(update_match.group(0), f"❌ Não encontrei o lembrete #{r_id} ativo.").strip()
-                
-        except Exception as e:
-            logging.error(f"Erro ao atualizar lembrete: {e}")
-            reply_text = reply_text.replace(update_match.group(0), "❌ Erro ao atualizar.").strip()
-
-    # 5. WEATHER
-    weather_match = re.search(r"\[\[WEATHER\|(.*?)\]\]", reply_text)
-    if weather_match:
-        city = weather_match.group(1)
-        weather_info = await weather_manager.get_weather_card(city)
-        # Append card to the reply
-        reply_text = reply_text.replace(weather_match.group(0), weather_info).strip()
-
-    # 5. Log Response
-    
-    # 4. Log Response
-    await memory_manager.log_message(user_id, "model", reply_text)
+    # 3. Agent Brain Execution
+    agent_context = {
+        "user_id": user_id,
+        "user_name": full_name,
+        "job_queue": context.job_queue
+    }
     
     try:
-        await update.message.reply_text(reply_text, parse_mode=ParseMode.HTML)
+        response_text = await brain.process(user_msg, agent_context, chat_history=context_history)
+    except Exception as e:
+        logging.error(f"Brain Error: {e}")
+        response_text = "Ocorreu um erro interno no meu cérebro. Tente novamente."
+
+    # 4. Log Response
+    await memory_manager.log_message(user_id, "model", response_text)
+    
+    try:
+        await update.message.reply_text(response_text, parse_mode=ParseMode.HTML)
     except Exception as e:
         logging.error(f"Erro de parsing HTML: {e}")
+        # Fallback to plain text if HTML fails
         await update.message.reply_text(response_text)
 
 # --- JOB QUEUE CALLBACKS ---
@@ -408,37 +162,9 @@ async def system_heartbeat(context: ContextTypes.DEFAULT_TYPE):
     """Logs a heartbeat message to ensure system is alive."""
     logging.info("💓 Status Heartbeat: Online. System is healthy.")
 
-async def proactive_ping(context: ContextTypes.DEFAULT_TYPE):
-    """Sends a proactive message to the user."""
-    job = context.job
-    chat_id = job.chat_id
-    if chat_id:
-        await context.bot.send_message(chat_id=chat_id, text="🔋 Sistema Proativo Iniciado. Estou monitorando.")
-        logging.info("Proactive ping sent.")
-
 async def post_init(application: Application):
     await memory_manager.init_db()
     
-    # Recover Reminders
-    if application.job_queue:
-        # Use a proxy for the internal callback, setting execute_reminder as target
-        # Actually, ReminderManager needs to know which function to call. 
-        # Easier: we implement recovery logic here calling ReminderManager just to get data, 
-        # or we update ReminderManager to accept the callback function.
-        # Let's simple query ReminderManager and schedule here.
-        
-        # We need a quick way to reuse the ReminderManager.recover_reminders logic BUT pointing to OUR execute_reminder
-        # Let's monkey-patch or just pass the function if we modified ReminderManager?
-        # Simpler: Let's do the logic here for clarity or rely on ReminderManager if updated.
-        # I defined recover_reminders to take job_queue but it hardcoded _execute_reminder_callback.
-        # Let's use it but we need to ensure _execute_reminder_callback maps to execute_reminder logic.
-        
-        # Override the internal callback of the instance? No, that's messy.
-        # Let's just call the recovery method and update `skills/reminders.py` to accept the callback, 
-        # or simply rewrite the recovery loop here since we have the manager.
-        pass # Placeholder, see below replacement
-        
-    # Re-implementing recovery here for explicit callback control
     if application.job_queue:
         # System Heartbeat
         application.job_queue.run_repeating(system_heartbeat, interval=config.HEARTBEAT_INTERVAL, first=10, name="system_heartbeat")
@@ -446,9 +172,7 @@ async def post_init(application: Application):
         # Recover Persisted Reminders
         try:
             logging.info("Recuperando lembretes persistentes...")
-            # We need to access the logic from ReminderManager. Let's assume we can query pending.
-            # I added logic to `recover_reminders` in previous step but it uses `self._execute_reminder_callback`.
-            # Let's assign `execute_reminder` to that slot or just fix it.
+            # Assign callback for recovery
             reminder_manager._execute_reminder_callback = execute_reminder 
             await reminder_manager.recover_reminders(application.job_queue)
         except Exception as e:
@@ -465,7 +189,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     provider_status = f"IA: {config.AI_PROVIDER.upper()}"
-    await update.message.reply_text(f"✅ Sistema Online e você está autenticado!\n{provider_status}")
+    await update.message.reply_text(f"✅ Sistema Online e você está autenticado! (Agentic Mode)\n{provider_status}")
 
 def main():
     if not config.TELEGRAM_TOKEN:

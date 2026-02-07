@@ -17,8 +17,6 @@ The system SHALL allow updating the message text and/or the trigger time of an e
 - **WHEN** a request to update both message and time is received
 - **THEN** both attributes are updated and the job is rescheduled
 
-## MODIFIED Requirements
-
 ### Requirement: Execute Reminder
 The system SHALL execute the reminder by verifying its PENDING status and fetching the latest message content from the database.
 

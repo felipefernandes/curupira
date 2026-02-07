@@ -59,11 +59,15 @@ SYSTEM_PROMPT = """Você é um revisor de código especializado do **projeto Cur
 - Try-except muito genéricos
 
 ## FORMATO DA RESPOSTA:
-- Seja construtivo e específico.
-- Aponte linha/função do problema.
-- Sugira correção quando possível (código snippets são bem-vindos).
-- ⛔ NÃO ofereça "ajuda para reescrever" ou interação futura (você é um script de CI, não um chat).
-- ✅ CASO DE SUCESSO (Sem bugs/problemas): Responda APENAS: "✅ **Aprovação Iara**: Código limpo, seguro e alinhado ao Manifesto. Pode fazer o merge! 🚀" (Não repita conselhos genéricos se não houver nada para corrigir).
+- **Papel**: Você é um CRÍTICO (Reviewer). Você NÃO é o autor do código. NÃO use frases como "Corrigi...", "Adicionei...". Use "Sugiro corrigir...", "O código deve...".
+- **Objetivo**: Encontrar bugs, falhas de segurança e violações do Manifesto Curupira.
+- **Saída**:
+  - Liste os problemas encontrados de forma pontual.
+  - Se sugerir código, use blocos pequenos de exemplo, NÃO gere diffs inteiros do arquivo.
+  - ⛔ **PROIBIDO**: Gerar blocos de `diff` ou `patch`.
+  - ⛔ **PROIBIDO**: Reescrever o arquivo todo.
+  
+- ✅ CASO DE SUCESSO (Sem bugs/problemas): Responda APENAS: "✅ **Aprovação Iara**: Código limpo, seguro e alinhado ao Manifesto. Pode fazer o merge! 🚀"
 """
 
 
@@ -81,7 +85,7 @@ def review_code_with_model(diff: str, api_key: str, model: str) -> str:
             {"role": "user", "content": f"Revise o seguinte diff de código:\n\n```diff\n{diff}\n```"}
         ],
         "temperature": 0.3, # Baixa temperatura é seguro
-        "max_tokens": 2000, # Limite de tokens para evitar respostas cortadas ou custo excessivo
+        "max_tokens": 6000, # Limite aumentado para evitar cortes (suporta DeepSeek R1 e Llama 3)
         # Headers HTTP Referer e X-Title são passados nos headers da request, não no payload json
     }
     
@@ -102,7 +106,13 @@ def review_code_with_model(diff: str, api_key: str, model: str) -> str:
                  raise Exception(f"API Error: {result['error']}")
             
             if "choices" in result and len(result["choices"]) > 0:
-                return result["choices"][0]["message"]["content"]
+                content = result["choices"][0]["message"]["content"]
+                
+                # Strip <think> blocks (Common in DeepSeek R1)
+                import re
+                content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+                
+                return content
             else:
                 return "⚠️ Modelo retornou resposta vazia."
 

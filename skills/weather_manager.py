@@ -1,11 +1,53 @@
+from .base import BaseSkill
 import httpx
 import logging
+from typing import Any, Dict
 
-class WeatherManager:
+class WeatherSkill(BaseSkill):
     def __init__(self):
-        self.logger = logging.getLogger("WeatherManager")
+        self.logger = logging.getLogger("WeatherSkill")
         self.geo_url = "https://geocoding-api.open-meteo.com/v1/search"
         self.weather_url = "https://api.open-meteo.com/v1/forecast"
+
+    @property
+    def name(self) -> str:
+        return "get_weather"
+
+    @property
+    def description(self) -> str:
+        return "Obtém a previsão do tempo atual para uma cidade específica."
+
+    @property
+    def parameters(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "city": {
+                    "type": "string",
+                    "description": "O nome da cidade (ex: 'São Paulo', 'Rio de Janeiro')."
+                }
+            },
+            "required": ["city"]
+        }
+
+    async def execute(self, context: Dict[str, Any], city: str) -> Dict[str, Any]:
+        lat, lon, name = await self.get_coordinates(city)
+        
+        if not lat:
+            return {"error": f"Cidade '{city}' não encontrada."}
+
+        current = await self.get_forecast(lat, lon)
+        if not current:
+            return {"error": f"Erro ao obter dados meteorológicos para '{name}'."}
+
+        # Return structured data for the LLM to process
+        return {
+            "location": name,
+            "temperature": current.get("temperature_2m"),
+            "humidity": current.get("relative_humidity_2m"),
+            "rain_probability": current.get("precipitation_probability", 0),
+            "condition_code": current.get("weather_code")
+        }
 
     async def get_coordinates(self, city_name):
         """Fetches lat/lon for a city name."""
@@ -38,37 +80,3 @@ class WeatherManager:
         except Exception as e:
             self.logger.error(f"Error fetching forecast: {e}")
             return None
-
-    def _get_wmo_emoji(self, code):
-        """Maps WMO weather codes to emojis."""
-        if code is None: return "❓"
-        if code == 0: return "☀️" # Clear sky
-        if code in [1, 2, 3]: return "⛅" # Partly cloudy
-        if code in [45, 48]: return "🌫️" # Fog
-        if code in [51, 53, 55, 61, 63, 65]: return "🌧️" # Rain
-        if code in [71, 73, 75]: return "❄️" # Snow
-        if code in [95, 96, 99]: return "⛈️" # Thunderstorm
-        return "🌡️" # Default
-
-    async def get_weather_card(self, city_name):
-        """Orchestrates the fetch and returns a formatted string."""
-        lat, lon, name = await self.get_coordinates(city_name)
-        
-        if not lat:
-            return f"\n⚠️ Não consegui encontrar a cidade **{city_name}**. Tente verificar o nome."
-
-        current = await self.get_forecast(lat, lon)
-        if not current:
-            return f"\n⚠️ Erro ao obter dados do clima para **{name}**."
-
-        temp = current.get("temperature_2m")
-        prob_rain = current.get("precipitation_probability", 0)
-        code = current.get("weather_code")
-        emoji = self._get_wmo_emoji(code)
-
-        card = (
-            f"\n🌍 <b>Previsão para {name}:</b>\n"
-            f"🌡️ <b>Agora</b>: {temp}°C {emoji}\n"
-            f"☔ <b>Chuva</b>: {prob_rain}%\n"
-        )
-        return card

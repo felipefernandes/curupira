@@ -3,13 +3,33 @@ import logging
 from datetime import datetime
 import os
 
+import shutil
+import pathlib
+
 # Define path for SQLite DB
-DB_FILE = "curupira.db"
+# Use a dedicated data directory to avoid git conflicts
+DATA_DIR = pathlib.Path(__file__).parent.parent / "data"
+DB_FILE = DATA_DIR / "curupira.db"
 
 class MemoryManager:
-    def __init__(self, db_path=DB_FILE):
-        self.db_path = db_path
+    def __init__(self, db_path=None):
         self.logger = logging.getLogger("MemoryManager")
+        
+        # Ensure data directory exists
+        if not DATA_DIR.exists():
+            DATA_DIR.mkdir(parents=True, exist_ok=True)
+            
+        # Check for legacy DB at root and migrate if needed
+        legacy_db = pathlib.Path(__file__).parent.parent / "curupira.db"
+        if legacy_db.exists() and not (db_path or DB_FILE).exists():
+            self.logger.warning(f"Migrating legacy database from {legacy_db} to {DB_FILE}")
+            try:
+                shutil.move(str(legacy_db), str(DB_FILE))
+                self.logger.info("Database migration successful.")
+            except Exception as e:
+                self.logger.error(f"Failed to migrate database: {e}")
+
+        self.db_path = db_path or str(DB_FILE)
 
     async def init_db(self):
         """Initializes the database tables if they don't exist."""

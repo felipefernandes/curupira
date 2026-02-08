@@ -96,7 +96,7 @@ class AgentBrain:
              )
         return [types.Tool(function_declarations=declarations)]
 
-    async def _execute_tool_call(self, tool_name: str, tool_args: Dict[str, Any], context: Dict[str, Any]) -> str:
+    async def _execute_tool_call(self, tool_name: str, tool_args: Optional[Dict[str, Any]], context: Dict[str, Any]) -> str:
         """
         Executes a tool (skill) by name with provided arguments.
         Catches exceptions to prevent agent crash.
@@ -108,7 +108,10 @@ class AgentBrain:
             return json.dumps({"error": f"Tool {tool_name} not found"})
             
         try:
-            result = await skill.execute(context, **tool_args)
+            # SAFETY: Ensure tool_args is a dictionary
+            safe_args = tool_args if isinstance(tool_args, dict) else {}
+            
+            result = await skill.execute(context, **safe_args)
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
             self.logger.error(f"Error executing {tool_name}: {e}")

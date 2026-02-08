@@ -30,8 +30,9 @@
     [x] O Curupira deve usar uma API de previsão do tempo para obter a previsão do tempo (exemplo: Open-Meteo ou wttr.in).
     [x] O curupira precisa perguntar ao usuário qual é a sua localização, caso ele não tenha informado anteriormente, e salvar essa informação em uma variável de ambiente persistente. Alternativamente, o curupira pode usar a localização do usuário obtida através do Telegram ou configurar o IP-API para descobrir a localização do usuário baseado no IP do dispositivo.
 
-# [Skill: Monitoramento de Hardware]
-    [ ] Adicionar monitoramento de hardware (temperatura, uso de CPU/RAM).
+# [Skill: Monitoramento de Hardware] - Concluído
+    [x] Adicionar monitoramento de hardware (temperatura, uso de CPU/RAM).
+    [x] A resposta do BOT deve ser objetiva e com emojis para facilitar a leitura.
 
 # [Skill: Gerenciamento de Arquivos]
     [ ] Adicionar gerenciamento de arquivos (criar, ler, escrever, deletar, mover, copiar, renomear, listar, etc.).

@@ -1,0 +1,9 @@
+- [x] Add `psutil` to `requirements.txt` <!-- id: 1 -->
+- [x] Create `skills/hardware.py` with `HardwareMonitoringSkill` <!-- id: 2 -->
+- [x] Implement `execute` method with `psutil` logic (async via `to_thread`) <!-- id: 3 -->
+- [x] Implement robust cross-platform temperature check (Linux/Windows fallback) <!-- id: 4 -->
+- [x] Format output with emojis as per requirement <!-- id: 5 -->
+- [x] Register skill in `bot.py` <!-- id: 6 -->
+- [x] Update `AgentBrain` registration in `bot.py` <!-- id: 7 -->
+- [x] Manual test on Windows (mock temp) <!-- id: 8 -->
+- [x] Verify `ListSkills` output (if exists) or just generic "help" <!-- id: 9 -->

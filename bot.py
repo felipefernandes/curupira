@@ -33,6 +33,10 @@ brain.register_skill(ListRemindersSkill(reminder_manager))
 brain.register_skill(DeleteReminderSkill(reminder_manager))
 brain.register_skill(UpdateReminderSkill(reminder_manager))
 
+# Skill: Hardware Monitoring
+from skills.hardware import HardwareMonitoringSkill
+brain.register_skill(HardwareMonitoringSkill())
+
 # Onboarding States
 WAITING_NAME = 1
 WAITING_SURNAME = 2

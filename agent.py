@@ -112,8 +112,13 @@ class AgentBrain:
             safe_args = tool_args if isinstance(tool_args, dict) else {}
             
             result = await skill.execute(context, **safe_args)
-            self.logger.info(f"Tool {tool_name} returned: {json.dumps(result, ensure_ascii=False)}")
-            return json.dumps(result, ensure_ascii=False)
+            result_str = json.dumps(result, ensure_ascii=False)
+            
+            # Log truncated result for debugging (avoid huge logs)
+            log_preview = (result_str[:200] + '...') if len(result_str) > 200 else result_str
+            self.logger.info(f"Tool {tool_name} returned: {log_preview}")
+            
+            return result_str
         except Exception as e:
             self.logger.error(f"Error executing {tool_name}: {e}")
             return json.dumps({"error": str(e)})

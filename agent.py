@@ -112,6 +112,7 @@ class AgentBrain:
             safe_args = tool_args if isinstance(tool_args, dict) else {}
             
             result = await skill.execute(context, **safe_args)
+            self.logger.info(f"Tool {tool_name} returned: {json.dumps(result, ensure_ascii=False)}")
             return json.dumps(result, ensure_ascii=False)
         except Exception as e:
             self.logger.error(f"Error executing {tool_name}: {e}")

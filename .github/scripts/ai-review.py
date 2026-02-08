@@ -11,6 +11,7 @@ import json
 import urllib.request
 import urllib.error
 import time
+import re
 
 # Configuração da API OpenRouter
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -109,12 +110,14 @@ def review_code_with_model(diff: str, api_key: str, model: str) -> str:
                 content = result["choices"][0]["message"]["content"]
                 
                 # Strip <think> blocks (Common in DeepSeek R1)
-                import re
                 content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
                 
+                if not content:
+                    raise ValueError("Modelo retornou conteúdo vazio (ou apenas tags <think>).")
+
                 return content
             else:
-                return "⚠️ Modelo retornou resposta vazia."
+                raise ValueError("API retornou sucesso mas sem 'choices'.")
 
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8")

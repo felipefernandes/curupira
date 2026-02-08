@@ -138,7 +138,7 @@ class AgentBrain:
         Instruções:
         1. Responda de forma natural e amigável.
         2. Use as ferramentas disponíveis quando necessário.
-        3. Se usar uma ferramenta, use o resultado para formular a resposta final.
+        3. Se usar uma ferramenta para consultar dados (ex: listar lembretes), BASEIE-SE APENAS NO RETORNO DA FERRAMENTA. Ignora itens mencionados no histórico que não estejam no retorno da ferramenta, pois podem já ter sido concluídos.
         4. NÃO invente informações se a ferramenta retornar erro.
         
         Contexto Atual:

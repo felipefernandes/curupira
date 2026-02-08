@@ -145,7 +145,7 @@ class ReminderManager:
 
 # --- Skills Adapters ---
 from .base import BaseSkill
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 class AddReminderSkill(BaseSkill):
     def __init__(self, manager: ReminderManager):
@@ -177,12 +177,25 @@ class AddReminderSkill(BaseSkill):
         }
     
     async def execute(self, context: Dict[str, Any], message: str, delay_minutes: int) -> Dict[str, Any]:
+        """Executes the add_reminder skill.
+
+        Args:
+            context: The execution context containing 'user_id' and 'job_queue'.
+            message: The reminder message.
+            delay_minutes: The delay in minutes.
+
+        Returns:
+            Dict containing the status and info of the created reminder.
+        """
         user_id = context.get('user_id')
         if not user_id:
              return {"error": "User ID not found in context."}
              
         try:
-            delay_seconds = delay_minutes * 60
+            # Ensure delay_minutes is an integer to avoid calculation errors
+            minutes = int(delay_minutes)
+            delay_seconds = minutes * 60
+            
             r_id = await self.manager.add_reminder(user_id, message, delay_seconds)
             
             # Schedule Job
@@ -206,9 +219,12 @@ class AddReminderSkill(BaseSkill):
                 "status": "success", 
                 "reminder_id": r_id, 
                 "message": message, 
-                "delay_minutes": delay_minutes,
-                "info": f"Lembrete criado: '{message}' em {delay_minutes} minutos."
+                "delay_minutes": minutes,
+                "info": f"Lembrete criado: '{message}' em {minutes} minutos."
             }
+        except ValueError as ve:
+            self.manager.logger.error(f"Value error in add_reminder: {ve}")
+            return {"error": f"Invalid input: {ve}"}
         except Exception as e:
             self.manager.logger.error(f"Error adding reminder: {e}")
             return {"error": str(e)}
@@ -230,29 +246,45 @@ class ListRemindersSkill(BaseSkill):
         return {"type": "object", "properties": {}}
     
     async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        """Executes the list_reminders skill.
+
+        Args:
+            context: The execution context.
+
+        Returns:
+            Dict containing the list of reminders and count.
+        """
         user_id = context.get('user_id')
         if not user_id: return {"error": "User ID missing"}
         
         try:
             reminders = await self.manager.get_active_reminders(user_id)
             if not reminders:
-                return {"reminders": [], "info": "Você não tem lembretes pendentes."}
+                return {"reminders": [], "info": "Você não tem lembretes pendentes.", "count": 0}
                 
-            # Format for LLM consumption
+            # Filter valid rows and format
             formatted_reminders = []
             for r in reminders:
-                r_id, msg, at_dt = r
-                formatted_reminders.append({
-                    "id": r_id, 
-                    "message": msg, 
-                    "at": at_dt.isoformat() if hasattr(at_dt, 'isoformat') else str(at_dt)
-                })
+                if len(r) >= 3:
+                     r_id, msg, at_dt = r
+                     
+                     # Safe ISO format conversion
+                     at_str = str(at_dt)
+                     if hasattr(at_dt, 'isoformat'):
+                         at_str = at_dt.isoformat()
+                         
+                     formatted_reminders.append({
+                        "id": r_id, 
+                        "message": msg, 
+                        "at": at_str
+                     })
                 
             return {
                 "reminders": formatted_reminders,
                 "count": len(formatted_reminders)
             }
         except Exception as e:
+             self.manager.logger.error(f"Error listing reminders: {e}")
              return {"error": str(e)}
 
 class DeleteReminderSkill(BaseSkill):
@@ -278,24 +310,39 @@ class DeleteReminderSkill(BaseSkill):
         }
 
     async def execute(self, context: Dict[str, Any], reminder_id: int) -> Dict[str, Any]:
+        """Executes the delete_reminder skill.
+
+        Args:
+            context: The execution context.
+            reminder_id: The ID of the reminder to delete.
+
+        Returns:
+            Dict indicating success or failure.
+        """
         user_id = context.get('user_id')
         if not user_id: return {"error": "User ID missing"}
         
         try:
-            # Check if exists first? Or just try delete
-            # delete_reminder is void, doesn't return info.
-            # We can check via get_reminder_status but simpler is just run.
+            # Type safety
+            rid = int(reminder_id)
             
-            await self.manager.delete_reminder(reminder_id, user_id)
+            await self.manager.delete_reminder(rid, user_id)
             
-            # Cancel Job
+            # Cancel Job gracefully
             job_queue = context.get('job_queue')
             if job_queue:
-                jobs = job_queue.get_jobs_by_name(f"reminder_{reminder_id}")
-                for job in jobs:
-                    job.schedule_removal()
+                try:
+                    job_name = f"reminder_{rid}"
+                    jobs = job_queue.get_jobs_by_name(job_name)
+                    if jobs:
+                        for job in jobs:
+                            job.schedule_removal()
+                except Exception as je:
+                    self.manager.logger.warning(f"Could not remove job from queue: {je}")
                     
-            return {"status": "success", "deleted_id": reminder_id, "info": f"Lembrete {reminder_id} cancelado."}
+            return {"status": "success", "deleted_id": rid, "info": f"Lembrete {rid} cancelado."}
+        except ValueError:
+            return {"error": "Invalid reminder_id format"}
         except Exception as e:
             return {"error": str(e)}
 
@@ -324,13 +371,27 @@ class UpdateReminderSkill(BaseSkill):
         }
 
     async def execute(self, context: Dict[str, Any], reminder_id: int, new_message: Optional[str] = None, new_delay_minutes: Optional[int] = None) -> Dict[str, Any]:
+         """Executes the update_reminder skill.
+
+         Args:
+             context: The execution context.
+             reminder_id: ID of the reminder.
+             new_message: Optional new message.
+             new_delay_minutes: Optional new delay in minutes.
+
+         Returns:
+             Dict with update status.
+         """
          user_id = context.get('user_id')
          if not user_id: return {"error": "User ID missing"}
          
          try:
-             delay_seconds = new_delay_minutes * 60 if new_delay_minutes is not None else None
+             rid = int(reminder_id)
+             delay_seconds = None
+             if new_delay_minutes is not None:
+                 delay_seconds = int(new_delay_minutes) * 60
              
-             result = await self.manager.update_reminder(reminder_id, user_id, new_message, delay_seconds)
+             result = await self.manager.update_reminder(rid, user_id, new_message, delay_seconds)
              
              if not result:
                  return {"error": "Reminder not found or update failed (maybe it's not pending?)"}
@@ -339,29 +400,32 @@ class UpdateReminderSkill(BaseSkill):
              if delay_seconds is not None:
                  job_queue = context.get('job_queue')
                  if job_queue:
-                     # Cancel old
-                     jobs = job_queue.get_jobs_by_name(f"reminder_{reminder_id}")
-                     for job in jobs: job.schedule_removal()
-                     
-                     # Schedule new
-                     callback = self.manager._execute_reminder_callback
-                     if callback:
-                         msg_to_use = new_message or "FETCH_FROM_DB"
-                         if msg_to_use == "FETCH_FROM_DB":
-                             # Fetch to be safe or just pass placeholder, as callback can fetch.
-                             # But our callback uses data['msg'].
-                             # manager.get_reminder_message(reminder_id)
-                             saved_msg = await self.manager.get_reminder_message(reminder_id)
-                             msg_to_use = saved_msg or "Lembrete"
-
-                         job_queue.run_once(
-                             callback, 
-                             when=delay_seconds, 
-                             chat_id=user_id, 
-                             data={"id": reminder_id, "msg": msg_to_use}, 
-                             name=f"reminder_{reminder_id}"
-                         )
+                     try:
+                         # Cancel old
+                         job_name = f"reminder_{rid}"
+                         jobs = job_queue.get_jobs_by_name(job_name)
+                         for job in jobs: job.schedule_removal()
                          
-             return {"status": "success", "updated_id": reminder_id, "info": "Lembrete atualizado."}
+                         # Schedule new
+                         callback = self.manager._execute_reminder_callback
+                         if callback:
+                             msg_to_use = new_message or "FETCH_FROM_DB"
+                             if msg_to_use == "FETCH_FROM_DB":
+                                 saved_msg = await self.manager.get_reminder_message(rid)
+                                 msg_to_use = saved_msg or "Lembrete"
+
+                             job_queue.run_once(
+                                 callback, 
+                                 when=delay_seconds, 
+                                 chat_id=user_id, 
+                                 data={"id": rid, "msg": msg_to_use}, 
+                                 name=job_name
+                             )
+                     except Exception as je:
+                         self.manager.logger.warning(f"Error rescheduling job: {je}")
+                         
+             return {"status": "success", "updated_id": rid, "info": "Lembrete atualizado."}
+         except ValueError:
+             return {"error": "Invalid input format (integers required for ID/minutes)"}
          except Exception as e:
              return {"error": str(e)}

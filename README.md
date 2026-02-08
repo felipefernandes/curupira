@@ -18,6 +18,7 @@ O **CurupiraBot** é um assistente virtual projetado para rodar em hardware mode
 *   **⏰ Lembretes Naturais**: Peça *"Me lembre de tirar o bolo em 20 min"* e o Curupira entende, agenda e te avisa.
 *   **🌦️ Previsão do Tempo**: Pergunte *"Vai chover?"* e ele verifica a previsão local (Open-Meteo) para você.
 *   **🔌 Multi-Provedor de IA**: Suporte nativo para **Groq** (LLaMA 3 - *default para velocidade*) e **Google Gemini** (Flash - *para janelas de contexto maiores*).
+*   **🌡️ Monitoramento de Hardware**: Pergunte *"Como está o sistema?"* para ver uso de CPU, RAM, Disco e Temperatura do Raspberry Pi em tempo real.
 
 ## 🛠️ Tecnologias
 

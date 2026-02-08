@@ -167,10 +167,24 @@ class AgentBrain:
                     if msg.tool_calls:
                         for tool_call in msg.tool_calls:
                             fn_name = tool_call.function.name
+                            fn_args = {}
+                            
+                            # FIX for Groq/Llama3 hallucination: sometimes it puts args in the name
+                            # e.g. 'get_weather {"city": "São Paulo"}'
+                            if " {" in fn_name:
+                                try:
+                                    parts = fn_name.split(" {", 1)
+                                    fn_name = parts[0]
+                                    fn_args = json.loads("{" + parts[1])
+                                    self.logger.warning(f"Fixed malformed tool call. Name: {fn_name}, Args: {fn_args}")
+                                except Exception as e:
+                                    self.logger.error(f"Failed to fix malformed tool name: {fn_name} - {e}")
+
                             try:
-                                fn_args = json.loads(tool_call.function.arguments)
+                                if not fn_args: # Only parse if not already extracted from name
+                                    fn_args = json.loads(tool_call.function.arguments)
                             except json.JSONDecodeError:
-                                fn_args = {}
+                                pass
                                 
                             result_str = await self._execute_tool_call(fn_name, fn_args, context)
                             

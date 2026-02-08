@@ -11,16 +11,18 @@ import json
 import urllib.request
 import urllib.error
 import time
+import re
 
 # Configuração da API OpenRouter
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 # Lista simplificada de modelos gratuitos e meta-modelos
 FREE_MODELS = [
-    "openrouter/free",              # Meta-modelo: O OpenRouter escolhe o melhor grátis disponível (ordem varia)
-    "google/gemini-2.0-flash-lite-preview-02-05:free", # Muito rápido e estável
-    "deepseek/deepseek-r1:free",    # DeepSeek R1 (pode estar congestionado)
-    "meta-llama/llama-3-8b-instruct:free" # Leve e confiável
+    "google/gemini-2.0-flash-exp:free", # Modelo experimental rápido e gratuito
+    "google/gemini-2.0-pro-exp-02-05:free", # Modelo Pro experimental
+    "meta-llama/llama-3.2-3b-instruct:free", # Llama 3.2 (leve e rápido)
+    "microsoft/phi-3-mini-128k-instruct:free", # Phi-3 (backup)
+    "openrouter/free" # Meta-modelo como última opção
 ]
 
 SYSTEM_PROMPT = """Você é um revisor de código especializado do **projeto Curupira** - um assistente de IA agêntica projetado para rodar em hardware limitado (Raspberry Pi 3, 1GB RAM).
@@ -109,12 +111,14 @@ def review_code_with_model(diff: str, api_key: str, model: str) -> str:
                 content = result["choices"][0]["message"]["content"]
                 
                 # Strip <think> blocks (Common in DeepSeek R1)
-                import re
                 content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
                 
+                if not content:
+                    raise ValueError("Modelo retornou conteúdo vazio (ou apenas tags <think>).")
+
                 return content
             else:
-                return "⚠️ Modelo retornou resposta vazia."
+                raise ValueError("API retornou sucesso mas sem 'choices'.")
 
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8")

@@ -15,8 +15,8 @@ class AgentBrain:
         self.model_name = model_name
         self.api_key = api_key or os.getenv(f"{provider.upper()}_API_KEY")
         
-        if not self.api_key:
-            self.logger.warning(f"No API key provided for {self.provider}. Agent may fail.")
+        if not self.api_key or not self.api_key.strip():
+             raise ValueError(f"API key inválida ou ausente para {self.provider}")
 
         self.skills: Dict[str, BaseSkill] = {}
         self.client = None

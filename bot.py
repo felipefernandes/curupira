@@ -168,6 +168,8 @@ async def system_heartbeat(context: ContextTypes.DEFAULT_TYPE):
 
 async def post_init(application: Application):
     await memory_manager.init_db()
+    # Start MCP Clients
+    await brain.start_mcp_clients()
     
     if application.job_queue:
         # System Heartbeat

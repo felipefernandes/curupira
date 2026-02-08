@@ -5,6 +5,8 @@ import asyncio
 from typing import Dict, Any, List, Optional
 import config
 from skills.base import BaseSkill
+from mcp_client import MCPClient
+from mcp_skill import MCPSkill
 
 # NOTE: Providers are lazy-loaded to save memory on Raspberry Pi
 
@@ -28,6 +30,7 @@ class AgentBrain:
              raise ValueError(f"API key inválida ou ausente para {self.provider}")
 
         self.skills: Dict[str, BaseSkill] = {}
+        self.mcp_clients: List[MCPClient] = []
         self.client = None
 
     def register_skill(self, skill: BaseSkill):
@@ -35,7 +38,44 @@ class AgentBrain:
         if skill.name in self.skills:
              self.logger.warning(f"Overwriting existing skill: {skill.name}")
         self.skills[skill.name] = skill
+        self.skills[skill.name] = skill
         self.logger.info(f"Registered skill: {skill.name}")
+
+    async def start_mcp_clients(self):
+        """Starts configured MCP clients and registers their tools."""
+        if not config.MCP_SERVERS:
+            self.logger.info("No MCP servers configured.")
+            return
+
+        for server_name, server_config in config.MCP_SERVERS.items():
+            command = server_config.get("command")
+            args = server_config.get("args", [])
+            env = server_config.get("env")
+            
+            if not command:
+                self.logger.warning(f"Skipping invalid MCP server config: {server_name}")
+                continue
+                
+            try:
+                client = MCPClient(command, args, env)
+                await client.connect()
+                self.mcp_clients.append(client)
+                
+                tools = await client.list_tools()
+                for tool_def in tools:
+                    skill = MCPSkill(client, tool_def)
+                    self.register_skill(skill)
+                    
+                self.logger.info(f"Connected to MCP Server '{server_name}' and registered {len(tools)} tools.")
+                
+            except Exception as e:
+                self.logger.error(f"Failed to start MCP Server '{server_name}': {e}")
+
+    async def shutdown(self):
+        """Closes all MCP clients and resources."""
+        for client in self.mcp_clients:
+            await client.close()
+        self.mcp_clients.clear()
 
     def _get_groq_client(self):
         """Lazy load and return AsyncGroq client."""

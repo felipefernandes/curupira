@@ -21,8 +21,10 @@ O Curupira nasce do **Manifesto Curupira**, buscando democratizar a Inteligênci
 - **Comentários:** Docstrings claras para funções e classes.
 
 ### Architecture Patterns
-- **Modular:** Núcleo (`bot.py`) separado de habilidades/ferramentas (`skills/`).
-- **Segurança por Design:** Whitelist estrita de `USER_ID` para execução de comandos.
+- **Agêntica (AgentBrain):** Núcleo de decisão (`AgentBrain`) que gerencia a execução de habilidades (`skills/`) via Function Calling.
+- **Modular:** Herança de `BaseSkill` para padronização e fácil extensão de novas capacidades.
+- **Multi-Provider:** Suporte nativo e transparente a múltiplos provedores de LLM (Groq, Google GenAI).
+- **Segurança por Design:** Whitelist estrita de `USER_ID` para execução de comandos e sanitização de inputs/outputs.
 - **Configuração:** Segredos e variáveis de ambiente gerenciados via `.env` e validados em `config.py`.
 
 ### Testing Strategy

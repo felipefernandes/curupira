@@ -204,8 +204,41 @@ class AgentBrain:
                                 "content": result_str
                             })
                         continue # Re-prompt Agent with tool outputs
-                    else:
-                        return msg.content or ""
+
+                    # Fallback: Check for Llama-3 style <function> XML in content if no tool_calls
+                    content = msg.content or ""
+                    if "<function=" in content:
+                        try:
+                            # Regex to capture name and args: <function=name>(args)</function>
+                            import re
+                            match = re.search(r"<function=(\w+)>(.*?)</function>", content, re.DOTALL)
+                            if match:
+                                fn_name = match.group(1)
+                                args_str = match.group(2)
+                                self.logger.warning(f"Detected Llama-3 XML tool call in content: {fn_name}")
+                                
+                                try:
+                                    # Try to parse strict JSON first
+                                    fn_args = json.loads(args_str)
+                                except json.JSONDecodeError:
+                                    # Sometimes args are not quoted keys? Just pass empty for safety if complex
+                                    self.logger.warning(f"Could not parse args from XML: {args_str}")
+                                    fn_args = {}
+                                
+                                result_str = await self._execute_tool_call(fn_name, fn_args, context)
+                                
+                                # Add the "fake" tool call to history so model knows what happened
+                                messages.append({
+                                    "role": "tool",
+                                    "tool_call_id": f"fake_{fn_name}", # improving robustness
+                                    "name": fn_name,
+                                    "content": result_str
+                                })
+                                continue # Loop back to get final response
+                        except Exception as e:
+                            self.logger.error(f"Error parsing XML tool call: {e}")
+                    
+                    return content
                         
                 except Exception as e:
                     self.logger.error(f"Groq API Error: {e}")

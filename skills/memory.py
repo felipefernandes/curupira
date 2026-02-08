@@ -12,7 +12,14 @@ DATA_DIR = pathlib.Path(__file__).parent.parent / "data"
 DB_FILE = DATA_DIR / "curupira.db"
 
 class MemoryManager:
+    """Gerenciador de banco de dados SQLite para habilidades de memória."""
+
     def __init__(self, db_path=None):
+        """Inicializa o gerenciador com caminho do banco de dados.
+        
+        Args:
+            db_path: Caminho customizado para o DB. Caso None, usa DATA_DIR.
+        """
         self.logger = logging.getLogger("MemoryManager")
         
         # Ensure data directory exists

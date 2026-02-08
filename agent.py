@@ -9,7 +9,16 @@ from skills.base import BaseSkill
 # NOTE: Providers are lazy-loaded to save memory on Raspberry Pi
 
 class AgentBrain:
+    """Agente responsável por gerenciar habilidades e integrações com APIs."""
+    
     def __init__(self, provider: str, api_key: Optional[str] = None, model_name: str = "default"):
+        """Inicializa o agente com provider e API key.
+        
+        Args:
+            provider: Nome do provider (ex: "groq", "gemini").
+            api_key: Chave de API ou None para buscar via ambiente.
+            model_name: Nome do modelo a ser utilizado.
+        """
         self.logger = logging.getLogger("AgentBrain")
         self.provider = provider.lower()
         self.model_name = model_name

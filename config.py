@@ -40,3 +40,12 @@ if AI_PROVIDER == 'gemini' and not GEMINI_API_KEY:
 
 if AI_PROVIDER == 'groq' and not GROQ_API_KEY:
     print("WARNING: GROQ_API_KEY is missing but provider is set to 'groq'!")
+
+# MCP Configuration
+import json
+MCP_SERVERS_CONFIG = os.getenv('MCP_SERVERS_CONFIG', '{}')
+try:
+    MCP_SERVERS = json.loads(MCP_SERVERS_CONFIG)
+except json.JSONDecodeError:
+    print("WARNING: MCP_SERVERS_CONFIG is not valid JSON!")
+    MCP_SERVERS = {}

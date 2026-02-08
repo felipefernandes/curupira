@@ -1,0 +1,22 @@
+# Tasks: Implement MCP Client
+
+- [ ] Create `mcp_client.py` <!-- id: 0 -->
+    - [ ] Implement `MCPClient` class with `connect`, `list_tools`, `call_tool`, `close`.
+    - [ ] Handle Stdio process management (subprocess).
+    - [ ] Implement JSON-RPC 2.0 message handling.
+- [ ] Create `mcp_skill.py` <!-- id: 1 -->
+    - [ ] Implement `MCPSkill` class inheriting from `BaseSkill`.
+    - [ ] Map MCP tool schema to Gemini/Groq tool schema.
+- [ ] Update `config.py` <!-- id: 2 -->
+    - [ ] Add `MCP_SERVERS` configuration logic (load from `.env` JSON string or file).
+- [ ] Update `agent.py` <!-- id: 3 -->
+    - [ ] Initialize `MCPClient` instances on startup based on config.
+    - [ ] Fetch tools from connected clients.
+    - [ ] Register fetched tools as `MCPSkill` instances.
+    - [ ] Ensure `_execute_tool_call` handles `MCPSkill` execution correctly.
+- [ ] Create Dummy MCP Server for Testing <!-- id: 4 -->
+    - [ ] Simple Python script implementing a basic MCP server (echo or calculator).
+- [ ] Verification <!-- id: 5 -->
+    - [ ] Test startup with dummy server.
+    - [ ] Verify tools are listed in `AgentBrain.skills`.
+    - [ ] Test end-to-end execution of a dummy tool via `AgentBrain.process`.

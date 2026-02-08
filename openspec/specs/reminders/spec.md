@@ -60,3 +60,19 @@ The system SHALL execute the reminder by verifying its PENDING status and fetchi
 - **THEN** the system retrieves the current message from the database (not the scheduled payload)
 - **AND** sends the message to the user if status is PENDING
 
+
+### Requirement: Agentic Natural Language Reminders
+
+#### Scenario: Agentic Invocation
+- **Given** the user says "Me lembre de comprar leite em 10 minutos"
+- **When** the Agent analyzes the intent
+- **Then** it MUST invoke the tool `add_reminder` with arguments `{"message": "comprar leite", "delay_minutes": 10}`
+- **And** the System MUST return a confirmation message to the user: "Lembrete criado: comprar leite em 10 minutos."
+
+### Requirement: Agentic Reminder Management
+
+#### Scenario: List Reminders Agentic
+- **Given** the user asks "quais meus lembretes?"
+- **When** the Agent invokes `list_reminders`
+- **Then** the tool MUST return a JSON list of active reminders
+- **And** the Agent MUST format this list into a natural language response for the user

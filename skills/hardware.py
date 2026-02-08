@@ -1,5 +1,8 @@
 import asyncio
-import psutil
+try:
+    import psutil
+except ImportError:
+    psutil = None
 import logging
 from typing import Dict, Any
 from .base import BaseSkill
@@ -25,6 +28,12 @@ class HardwareMonitoringSkill(BaseSkill):
         Retrieves hardware metrics.
         Runs blocking psutil calls in a separate thread to avoid freezing the bot.
         """
+        if psutil is None:
+            return {
+                "summary": "❌ Erro: Biblioteca `psutil` não instalada no servidor.",
+                "error": "psutil module not found"
+            }
+
         try:
             # Run blocking I/O in thread
             metrics = await asyncio.to_thread(self._get_metrics)

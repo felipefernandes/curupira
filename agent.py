@@ -227,10 +227,29 @@ class AgentBrain:
                                 
                                 result_str = await self._execute_tool_call(fn_name, fn_args, context)
                                 
-                                # Add the "fake" tool call to history so model knows what happened
+                                # CRITICAL FIX: Rewrite history to look like a VALID tool call
+                                # Groq API rejects <function> tags in content on next turn
+                                import uuid
+                                fake_tool_id = f"call_{uuid.uuid4().hex[:8]}"
+                                
+                                # Create a synthetic assistant message with proper tool_calls
+                                synthetic_msg = {
+                                    "role": "assistant",
+                                    "content": None, # Hide the ugly XML from history
+                                    "tool_calls": [{
+                                        "id": fake_tool_id,
+                                        "type": "function",
+                                        "function": {
+                                            "name": fn_name,
+                                            "arguments": json.dumps(fn_args)
+                                        }
+                                    }]
+                                }
+                                messages.append(synthetic_msg)
+                                
                                 messages.append({
                                     "role": "tool",
-                                    "tool_call_id": f"fake_{fn_name}", # improving robustness
+                                    "tool_call_id": fake_tool_id,
                                     "name": fn_name,
                                     "content": result_str
                                 })

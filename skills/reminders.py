@@ -260,7 +260,11 @@ class ListRemindersSkill(BaseSkill):
         try:
             reminders = await self.manager.get_active_reminders(user_id)
             if not reminders:
-                return {"reminders": [], "info": "Você não tem lembretes pendentes.", "count": 0}
+                return {
+                    "reminders": [], 
+                    "count": 0, 
+                    "info": "Nenhum lembrete pendente encontrado. A lista está vazia."
+                }
                 
             # Filter valid rows and format
             formatted_reminders = []

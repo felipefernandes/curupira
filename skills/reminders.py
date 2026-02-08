@@ -283,9 +283,12 @@ class ListRemindersSkill(BaseSkill):
                         "at": at_str
                      })
                 
+            summary = f"Encontrados {len(formatted_reminders)} lembretes: " + ", ".join([f"{r['id']}: {r['message']} ({r['at']})" for r in formatted_reminders])
+            
             return {
                 "reminders": formatted_reminders,
-                "count": len(formatted_reminders)
+                "count": len(formatted_reminders),
+                "summary": summary
             }
         except Exception as e:
              self.manager.logger.error(f"Error listing reminders: {e}")

@@ -245,11 +245,13 @@ class ListRemindersSkill(BaseSkill):
     def parameters(self) -> Dict[str, Any]:
         return {"type": "object", "properties": {}}
     
-    async def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
-        """Executes the list_reminders skill.
-
+    async def execute(self, context: Dict[str, Any], **kwargs) -> Dict[str, Any]:
+        """
+        Lists pending reminders for the user.
+        
         Args:
             context: The execution context.
+            **kwargs: Ignored extra arguments (prevents crashes from hallucinations).
 
         Returns:
             Dict containing the list of reminders and count.

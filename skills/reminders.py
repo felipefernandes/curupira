@@ -279,6 +279,21 @@ class ListRemindersSkill(BaseSkill):
     def parameters(self) -> Dict[str, Any]:
         return {"type": "object", "properties": {}}
     
+    def _format_friendly_date(self, dt: datetime) -> str:
+        """Helper to format datetime into a friendly string."""
+        now = datetime.now()
+        diff = dt.date() - now.date()
+        time_str = dt.strftime('%H:%M')
+        
+        if diff.days == 0:
+            day_str = "hoje"
+        elif diff.days == 1:
+            day_str = "amanhã"
+        else:
+            day_str = f"dia {dt.strftime('%d/%m')}"
+            
+        return f"{day_str} às {time_str}"
+
     async def execute(self, context: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         """
         Lists pending reminders for the user.
@@ -304,39 +319,32 @@ class ListRemindersSkill(BaseSkill):
                 
             # Filter valid rows and format
             formatted_reminders = []
-            now = datetime.now()
             
             for r in reminders:
-                if len(r) >= 3:
-                     r_id, msg, at_dt = r
+                if len(r) != 3:
+                     self.manager.logger.warning(f"Skipping invalid reminder row: {r}")
+                     continue
                      
-                     # Normalize to datetime
-                     if isinstance(at_dt, str):
-                         try:
-                             at_dt = datetime.fromisoformat(at_dt)
-                         except ValueError:
-                             pass # Keep raw if fail
-                     
-                     friendly_date = str(at_dt)
-                     if isinstance(at_dt, datetime):
-                        diff = at_dt.date() - now.date()
-                        time_str = at_dt.strftime('%H:%M')
-                        date_str = at_dt.strftime('%d/%b') # 12/Feb
-                        
-                        if diff.days == 0:
-                            day_str = "hoje"
-                        elif diff.days == 1:
-                            day_str = "amanhã"
-                        else:
-                            day_str = f"dia {at_dt.strftime('%d/%m')}"
-                            
-                        friendly_date = f"{day_str} às {time_str}"
-                         
-                     formatted_reminders.append({
-                        "id": r_id, 
-                        "message": msg, 
-                        "at": friendly_date
-                     })
+                r_id, msg, at_dt = r
+                
+                # Normalize to datetime
+                if isinstance(at_dt, str):
+                    try:
+                        at_dt = datetime.fromisoformat(at_dt)
+                    except ValueError:
+                        self.manager.logger.warning(f"Invalid date format for reminder {r_id}: {at_dt}")
+                        continue
+                
+                if not isinstance(at_dt, datetime):
+                    continue
+
+                friendly_date = self._format_friendly_date(at_dt)
+                    
+                formatted_reminders.append({
+                "id": r_id, 
+                "message": msg, 
+                "at": friendly_date
+                })
                 
             # Create a bullet list for the LLM to use directly
             if not formatted_reminders:

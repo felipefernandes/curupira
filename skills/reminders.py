@@ -254,7 +254,6 @@ class AddReminderSkill(BaseSkill):
             # Store in DB
             reminder_id = await self.manager.add_reminder(user_id, message, target_time)
 
-
             # Calculate delay in seconds
             delay_seconds = (target_time - now).total_seconds()
             

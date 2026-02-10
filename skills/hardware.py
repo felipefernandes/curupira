@@ -39,10 +39,13 @@ class HardwareMonitoringSkill(BaseSkill):
             # Run blocking I/O in thread
             metrics = await asyncio.to_thread(self._get_metrics)
             
+            # Add time to metrics so LLM doesn't miss it if it ignores summary
+            metrics["system_time"] = datetime.now().strftime('%H:%M:%S')
+            
             # Format output with emojis
             summary = (
                 f"🌡️ **Status do Sistema**\n"
-                f"🕒 **Hora:** {datetime.now().strftime('%H:%M:%S')}\n\n"
+                f"🕒 **Hora:** {metrics['system_time']}\n\n"
                 f"🧠 **RAM:** {metrics['ram_used']}/{metrics['ram_total']} ({metrics['ram_percent']}%)\n"
                 f"⚙️ **CPU:** {metrics['cpu_percent']}%\n"
                 f"💾 **Disco:** {metrics['disk_free']} livres\n"

@@ -5,3 +5,4 @@ python-dotenv
 aiosqlite
 httpx
 psutil
+dateparser

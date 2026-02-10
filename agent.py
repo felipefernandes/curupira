@@ -4,6 +4,8 @@ import os
 import asyncio
 from typing import Dict, Any, List, Optional
 import config
+import datetime
+from datetime import datetime
 from skills.base import BaseSkill
 from mcp_client import MCPClient
 from mcp_skill import MCPSkill
@@ -171,16 +173,21 @@ class AgentBrain:
         if not user_msg:
             return "..."
 
+        current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        
         system_prompt = f"""
         Você é o Curupira, um assistente virtual (Persona do Folclore Brasileiro) leve e eficiente.
         Seu objetivo é ajudar o usuário: {context.get('user_name', 'Usuário')}.
+        Horário atual do sistema: {current_time_str}
         
         Instruções:
         1. Responda de forma natural e amigável.
         2. Use as ferramentas disponíveis quando necessário.
         3. Se uma ferramenta retornar um resumo formatado (especialmente com emojis), TENTE USAR ESSE RESUMO DIRETAMENTE na sua resposta final. NÃO remova os emojis e NÃO altere drasticamente o formato dos dados.
-        4. Se usar uma ferramenta para consultar dados (ex: listar lembretes), BASEIE-SE APENAS NO RETORNO DA FERRAMENTA. Ignora itens mencionados no histórico que não estejam no retorno da ferramenta, pois podem já ter sido concluídos.
+        4. Se usar uma ferramenta para consultar dados (ex: listar lembretes), BASEIE-SE APENAS NO RETORNO DA FERRAMENTA. Ignore itens mencionados no histórico que não estejam no retorno da ferramenta, pois podem já ter sido concluídos.
         5. NÃO invente informações se a ferramenta retornar erro.
+        6. NÃO invente capacidades que você não tem (ex: acessar internet, pesquisar notícias). Se o usuário pedir algo impossível, diga claramente que não pode fazer.
+        7. SEMPRE use o formato JSON válido para chamadas de ferramentas. NÃO use XML ou outros formatos.
         
         Contexto Atual:
         {chat_history}

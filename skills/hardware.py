@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 try:
     import psutil
 except ImportError:
@@ -40,7 +41,8 @@ class HardwareMonitoringSkill(BaseSkill):
             
             # Format output with emojis
             summary = (
-                f"🌡️ **Status do Sistema**\n\n"
+                f"🌡️ **Status do Sistema**\n"
+                f"🕒 **Hora:** {datetime.now().strftime('%H:%M:%S')}\n\n"
                 f"🧠 **RAM:** {metrics['ram_used']}/{metrics['ram_total']} ({metrics['ram_percent']}%)\n"
                 f"⚙️ **CPU:** {metrics['cpu_percent']}%\n"
                 f"💾 **Disco:** {metrics['disk_free']} livres\n"

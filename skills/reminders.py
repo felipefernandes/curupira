@@ -180,11 +180,27 @@ class AddReminderSkill(BaseSkill):
     def _preprocess_time_string(self, text: str) -> str:
         """
         Pre-processes natural language time strings to fix common parser ambiguities.
-        Example: "amanhã as 10h" -> "amanhã às 10:00" (forces absolute time instead of duration)
+        
+        Examples:
+        - "amanhã as 10h" -> "amanhã às 10:00" (forces absolute time)
+        - "as 10" -> "às 10:00"
+        - "as 10h30" -> Unchanged (handled by dateparser)
         """
         import re
-        # Convert "as 10h", "às 10h", "at 10h" to "às 10:00"
-        text = re.sub(r'(?i)\b(?:as|às|at)\s+(\d{1,2})[hH]\b', r'às \1:00', text)
+        # Convert "as 10h", "às 10", "at 10H" to "às 10:00"
+        # Uses logical grouping to match '10', '10h', '10 h' but avoid '10h30'
+        text = re.sub(r'(?i)\b(?:as|às|at)\s+(\d{1,2})(?:\s*[hH])?\b', r'às \1:00', text)
+
+        # Cleanup for better dateparser compatibility in PT-BR
+        # Remove "na ", "no ", "em " at start or after space
+        text = re.sub(r'(?i)\b(?:na|no|em)\s+', '', text)
+        
+        # Remove " feira" (optional)
+        text = re.sub(r'(?i)\s+feira\b', '', text)
+        
+        # Remove "próxima " (let dateparser handle future preference)
+        text = re.sub(r'(?i)\bpróxima\s+', '', text)
+        
         return text
 
     async def execute(self, context: Dict[str, Any], message: str, when: str) -> Dict[str, Any]:
@@ -225,6 +241,19 @@ class AddReminderSkill(BaseSkill):
             
             if not target_time:
                 return {"error": f"Não entendi a data/hora: '{when}'. Tente algo como '10 minutos' ou '14:00'."}
+            
+            # Validation: Block past dates (allow 1 min grace period for processing)
+            if target_time < now - timedelta(minutes=1):
+                friendly = target_time.strftime('%d/%m %H:%M')
+                return {"error": f"O horário {friendly} já passou. Por favor, escolha um horário futuro."}
+                
+            # Calculate delay
+            wait_seconds = (target_time - now).total_seconds()
+            delay_minutes = wait_seconds // 60
+            
+            # Store in DB
+            reminder_id = await self.manager.add_reminder(user_id, message, target_time)
+
 
             # Calculate delay in seconds
             delay_seconds = (target_time - now).total_seconds()

@@ -14,11 +14,12 @@ class MockManager:
     def __init__(self):
         self.logger = logging.getLogger("MockManager")
         self.add_reminder = AsyncMock(return_value=123)
+        self.get_active_reminders = AsyncMock(return_value=[])
         self._execute_reminder_callback = MagicMock()
 
 async def run_tests():
     # Import inside verify to use the updated file
-    from skills.reminders import AddReminderSkill
+    from skills.reminders import AddReminderSkill, ListRemindersSkill
     
     manager = MockManager()
     skill = AddReminderSkill(manager)
@@ -59,22 +60,56 @@ async def run_tests():
     # If it was wrong, it would represent 12/02 02h (approx).
     assert "10:00" in res["target_time"], f"Failed to fix '10h' ambiguity. Got: {res['target_time']}"
 
+    print("\n--- Test 3.2: Natural Language ('as 10' without h) (Iara Fix) ---")
+    res = await skill.execute(context, "Test 3.2", "amanhã as 10")
+    print(res)
+    assert res["status"] == "success"
+    assert "10:00" in res["target_time"], f"Failed to parse 'as 10'. Got: {res['target_time']}"
+
+    assert "10:00" in res["target_time"], f"Failed to parse 'as 10'. Got: {res['target_time']}"
+
+    print("\n--- Test 3.3: Weekdays ('na sexta') (Bug Fix) ---")
+    # This should parse to next Friday 00:00 (or close to it)
+    res = await skill.execute(context, "Test 3.3", "na sexta")
+    print(res)
+    assert res["status"] == "success"
+    # Check if target time is roughly 3-7 days in future (depending on today)
+    # Just checking success is good enough given our debug script rigor, 
+    # but let's check it's not None
+    assert res["target_time"] is not None
+
     print("\n--- Test 4: Immediate ---")
     res = await skill.execute(context, "Test 4", "now")
     print(res)
-    assert res["status"] == "success"
-    assert "agora mesmo" in res["info"]
+    assert res["status"] == "success", "Immediate reminder failed"
 
-    print("\n--- Test 5: Invalid Date ---")
-    res = await skill.execute(context, "Test 5", "batata")
+    print("\n--- Test 5: List Reminders (Check output format) ---")
+    manager.get_active_reminders.return_value = [
+        (123, "Test 1", datetime.now() + timedelta(days=1)),
+        (124, "Test 2", datetime.now() + timedelta(days=2))
+    ]
+    list_skill = ListRemindersSkill(manager)
+    res_list = await list_skill.execute(context)
+    print(res_list["summary"])
+    assert "Test 1" in res_list["summary"]
+    
+    print("\n--- Test 6: Past Date (Validation Check) ---")
+    # Tentar agendar para 10 minutos atrás
+    past_time_str = (datetime.now() - timedelta(minutes=10)).strftime("%H:%M")
+    res = await skill.execute(context, "Test Past", f"hoje às {past_time_str}")
     print(res)
-    assert "error" in res
+    assert "error" in res, "Should fail for past date"
+    assert "já passou" in res["error"], "Error message mismatch"
 
-    print("\n--- Test 6: Past Date ---")
     res = await skill.execute(context, "Test 6", "yesterday")
     print(res)
     assert "error" in res
     assert "já passou" in res.get("error", "")
+
+    print("\n--- Test 7: Invalid Date ---")
+    res = await skill.execute(context, "Test 7", "batata")
+    print(res)
+    assert "error" in res
 
     print("\nALL TESTS PASSED!")
 

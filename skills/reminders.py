@@ -304,22 +304,48 @@ class ListRemindersSkill(BaseSkill):
                 
             # Filter valid rows and format
             formatted_reminders = []
+            now = datetime.now()
+            
             for r in reminders:
                 if len(r) >= 3:
                      r_id, msg, at_dt = r
                      
-                     # Safe ISO format conversion
-                     at_str = str(at_dt)
-                     if hasattr(at_dt, 'isoformat'):
-                         at_str = at_dt.isoformat()
+                     # Normalize to datetime
+                     if isinstance(at_dt, str):
+                         try:
+                             at_dt = datetime.fromisoformat(at_dt)
+                         except ValueError:
+                             pass # Keep raw if fail
+                     
+                     friendly_date = str(at_dt)
+                     if isinstance(at_dt, datetime):
+                        diff = at_dt.date() - now.date()
+                        time_str = at_dt.strftime('%H:%M')
+                        date_str = at_dt.strftime('%d/%b') # 12/Feb
+                        
+                        if diff.days == 0:
+                            day_str = "hoje"
+                        elif diff.days == 1:
+                            day_str = "amanhã"
+                        else:
+                            day_str = f"dia {at_dt.strftime('%d/%m')}"
+                            
+                        friendly_date = f"{day_str} às {time_str}"
                          
                      formatted_reminders.append({
                         "id": r_id, 
                         "message": msg, 
-                        "at": at_str
+                        "at": friendly_date
                      })
                 
-            summary = f"Encontrados {len(formatted_reminders)} lembretes: " + ", ".join([f"{r['id']}: {r['message']} ({r['at']})" for r in formatted_reminders])
+            # Create a bullet list for the LLM to use directly
+            if not formatted_reminders:
+                 summary = "Você não tem lembretes pendentes."
+            else:
+                 lines = [f"Você tem {len(formatted_reminders)} lembrete(s) pendente(s):"]
+                 for r in formatted_reminders:
+                     lines.append(f"* [ID {r['id']}] {r['message']} (para {r['at']})")
+                 summary = "\n".join(lines)
             
             return {
                 "reminders": formatted_reminders,

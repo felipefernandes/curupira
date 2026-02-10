@@ -228,9 +228,15 @@ class AgentBrain:
                             
                             # FIX for Groq/Llama3 hallucination: sometimes it puts args in the name
                             # e.g. 'get_weather {"city": "São Paulo"}'
-                            if " {" in fn_name:
+                            # FIX for Groq/Llama3 hallucination: sometimes it puts args in the name
+                            # e.g. 'get_weather {"city": "São Paulo"}' or 'add_reminder={"..."}'
+                            if " {" in fn_name or "={" in fn_name:
                                 try:
-                                    parts = fn_name.split(" {", 1)
+                                    if "={" in fn_name:
+                                        parts = fn_name.split("={", 1)
+                                    else:
+                                        parts = fn_name.split(" {", 1)
+                                        
                                     fn_name = parts[0]
                                     fn_args = json.loads("{" + parts[1])
                                     self.logger.warning(f"Fixed malformed tool call. Name: {fn_name}, Args: {fn_args}")

@@ -1,6 +1,7 @@
 import aiosqlite
 import logging
 from datetime import datetime, timedelta
+import dateparser
 from skills.memory import DB_FILE
 
 class ReminderManager:
@@ -168,21 +169,21 @@ class AddReminderSkill(BaseSkill):
                     "type": "string",
                     "description": "O conteúdo do lembrete. O que deve ser lembrado."
                 },
-                "delay_minutes": {
-                    "type": "integer",
-                    "description": "Tempo de espera até o lembrete disparar, em minutos."
+                "when": {
+                    "type": "string",
+                    "description": "Quando lembrar? Ex: '10m', 'amanhã 9h', '14:00', '2026-02-10 10:00'. Se for apenas número, será considerado minutos."
                 }
             },
-            "required": ["message", "delay_minutes"]
+            "required": ["message", "when"]
         }
     
-    async def execute(self, context: Dict[str, Any], message: str, delay_minutes: int) -> Dict[str, Any]:
+    async def execute(self, context: Dict[str, Any], message: str, when: str) -> Dict[str, Any]:
         """Executes the add_reminder skill.
 
         Args:
             context: The execution context containing 'user_id' and 'job_queue'.
             message: The reminder message.
-            delay_minutes: The delay in minutes.
+            when: Time string (relative or absolute).
 
         Returns:
             Dict containing the status and info of the created reminder.
@@ -192,13 +193,40 @@ class AddReminderSkill(BaseSkill):
              return {"error": "User ID not found in context."}
              
         try:
-            # Ensure delay_minutes is an integer to avoid calculation errors
-            minutes = int(delay_minutes)
-            delay_seconds = minutes * 60
+            # Parse 'when'
+            now = datetime.now()
+            target_time = None
+            delay_minutes_display = 0
             
+            # 1. Try simple integer (legacy/minutes)
+            if when.isdigit():
+                minutes = int(when)
+                target_time = now + timedelta(minutes=minutes)
+                delay_minutes_display = minutes
+            else:
+                # 2. Use dateparser for natural language
+                # settings={'PREFER_DATES_FROM': 'future', 'DATE_ORDER': 'DMY'}
+                target_time = dateparser.parse(when, settings={'PREFER_DATES_FROM': 'future', 'DATE_ORDER': 'DMY'})
+            
+            if not target_time:
+                return {"error": f"Não entendi a data/hora: '{when}'. Tente algo como '10 minutos' ou '14:00'."}
+
+            # Calculate delay in seconds
+            delay_seconds = (target_time - now).total_seconds()
+            
+            if delay_seconds < 0:
+                 # Check if it was a small slip (e.g. "now" parsed as slightly past)
+                 if delay_seconds > -60:
+                     delay_seconds = 0
+                 else:
+                     return {"error": f"O horário {target_time.strftime('%d/%m %H:%M')} já passou."}
+
+            delay_minutes_display = int(delay_seconds / 60)
+            
+            # --- Persist to DB ---
             r_id = await self.manager.add_reminder(user_id, message, delay_seconds)
             
-            # Schedule Job
+            # --- Schedule Job ---
             job_queue = context.get('job_queue')
             if job_queue:
                 callback = self.manager._execute_reminder_callback
@@ -215,16 +243,22 @@ class AddReminderSkill(BaseSkill):
             else:
                 self.manager.logger.warning("JobQueue not found in context, reminder saved but not scheduled in memory.")
             
+            # Feedback Message
+            target_str = target_time.strftime('%H:%M')
+            if target_time.date() != now.date():
+                target_str = target_time.strftime('%d/%m às %H:%M')
+                
+            info_msg = f"Lembrete criado para {target_str}: '{message}'."
+            if delay_seconds < 5:
+                info_msg = f"Disparando lembrete agora mesmo: '{message}'!"
+            
             return {
                 "status": "success", 
                 "reminder_id": r_id, 
                 "message": message, 
-                "delay_minutes": minutes,
-                "info": f"Lembrete criado: '{message}' em {minutes} minutos."
+                "target_time": target_str,
+                "info": info_msg
             }
-        except ValueError as ve:
-            self.manager.logger.error(f"Value error in add_reminder: {ve}")
-            return {"error": f"Invalid input: {ve}"}
         except Exception as e:
             self.manager.logger.error(f"Error adding reminder: {e}")
             return {"error": str(e)}

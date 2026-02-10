@@ -177,6 +177,16 @@ class AddReminderSkill(BaseSkill):
             "required": ["message", "when"]
         }
     
+    def _preprocess_time_string(self, text: str) -> str:
+        """
+        Pre-processes natural language time strings to fix common parser ambiguities.
+        Example: "amanhã as 10h" -> "amanhã às 10:00" (forces absolute time instead of duration)
+        """
+        import re
+        # Convert "as 10h", "às 10h", "at 10h" to "às 10:00"
+        text = re.sub(r'(?i)\b(?:as|às|at)\s+(\d{1,2})[hH]\b', r'às \1:00', text)
+        return text
+
     async def execute(self, context: Dict[str, Any], message: str, when: str) -> Dict[str, Any]:
         """Executes the add_reminder skill.
 
@@ -205,8 +215,13 @@ class AddReminderSkill(BaseSkill):
                 delay_minutes_display = minutes
             else:
                 # 2. Use dateparser for natural language
+                # Pre-process to fix ambiguities
+                when_fixed = self._preprocess_time_string(when)
+                if when_fixed != when:
+                    self.manager.logger.info(f"Fixed time string: '{when}' -> '{when_fixed}'")
+                
                 # settings={'PREFER_DATES_FROM': 'future', 'DATE_ORDER': 'DMY'}
-                target_time = dateparser.parse(when, settings={'PREFER_DATES_FROM': 'future', 'DATE_ORDER': 'DMY'})
+                target_time = dateparser.parse(when_fixed, settings={'PREFER_DATES_FROM': 'future', 'DATE_ORDER': 'DMY'})
             
             if not target_time:
                 return {"error": f"Não entendi a data/hora: '{when}'. Tente algo como '10 minutos' ou '14:00'."}

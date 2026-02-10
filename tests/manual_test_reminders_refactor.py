@@ -49,6 +49,16 @@ async def run_tests():
     assert res["status"] == "success"
     assert f"01/01 às 10:00" in res["info"] or f"01/01" in res["target_time"], "Falha no teste de data absoluta"
 
+    print("\n--- Test 3.1: Natural Language (Ambiguous '10h') ---")
+    res = await skill.execute(context, "Test 3.1", "amanhã as 10h")
+    print(res)
+    assert res["status"] == "success"
+    # Ensure it didn't add 24h+10h (next day + 10h)
+    # Correct parsing should be "tomorrow 10:00"
+    # Logic: if now is 10/02 16h, tomorrow 10h is 11/02 10h.
+    # If it was wrong, it would represent 12/02 02h (approx).
+    assert "10:00" in res["target_time"], f"Failed to fix '10h' ambiguity. Got: {res['target_time']}"
+
     print("\n--- Test 4: Immediate ---")
     res = await skill.execute(context, "Test 4", "now")
     print(res)

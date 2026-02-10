@@ -130,6 +130,19 @@ Este projeto utiliza uma metodologia leve de especificações chamada **OpenSpec
     *   Crie uma proposta em `openspec/changes/nova-feature/`.
     *   Consulte `openspec/project.md` e `openspec/AGENTS.md` para entender a arquitetura.
 
+### Configurar a Iara (Localmente)
+Para rodar a Iara localmente ou verificar sua instalação:
+
+1.  **Inicialize a configuração**:
+    ```bash
+    iara init
+    ```
+    Isso pedirá sua chave OpenRouter e criará o arquivo de configuração `.iara.json`.
+2.  **Teste uma revisão**:
+    ```bash
+    git diff HEAD~1 | iara
+    ```
+
 ## 📄 Licença
 
 Distribuído sob a licença MIT. Veja `LICENSE` para mais informações.

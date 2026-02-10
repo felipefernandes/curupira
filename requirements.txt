@@ -6,3 +6,4 @@ aiosqlite
 httpx
 psutil
 dateparser
+iara-reviewer

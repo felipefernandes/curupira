@@ -279,6 +279,21 @@ class ListRemindersSkill(BaseSkill):
     def parameters(self) -> Dict[str, Any]:
         return {"type": "object", "properties": {}}
     
+    def _format_friendly_date(self, dt: datetime) -> str:
+        """Helper to format datetime into a friendly string."""
+        now = datetime.now()
+        diff = dt.date() - now.date()
+        time_str = dt.strftime('%H:%M')
+        
+        if diff.days == 0:
+            day_str = "hoje"
+        elif diff.days == 1:
+            day_str = "amanhã"
+        else:
+            day_str = f"dia {dt.strftime('%d/%m')}"
+            
+        return f"{day_str} às {time_str}"
+
     async def execute(self, context: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         """
         Lists pending reminders for the user.
@@ -304,22 +319,41 @@ class ListRemindersSkill(BaseSkill):
                 
             # Filter valid rows and format
             formatted_reminders = []
+            
             for r in reminders:
-                if len(r) >= 3:
-                     r_id, msg, at_dt = r
+                if len(r) != 3:
+                     self.manager.logger.warning(f"Skipping invalid reminder row: {r}")
+                     continue
                      
-                     # Safe ISO format conversion
-                     at_str = str(at_dt)
-                     if hasattr(at_dt, 'isoformat'):
-                         at_str = at_dt.isoformat()
-                         
-                     formatted_reminders.append({
-                        "id": r_id, 
-                        "message": msg, 
-                        "at": at_str
-                     })
+                r_id, msg, at_dt = r
                 
-            summary = f"Encontrados {len(formatted_reminders)} lembretes: " + ", ".join([f"{r['id']}: {r['message']} ({r['at']})" for r in formatted_reminders])
+                # Normalize to datetime
+                if isinstance(at_dt, str):
+                    try:
+                        at_dt = datetime.fromisoformat(at_dt)
+                    except ValueError:
+                        self.manager.logger.warning(f"Invalid date format for reminder {r_id}: {at_dt}")
+                        continue
+                
+                if not isinstance(at_dt, datetime):
+                    continue
+
+                friendly_date = self._format_friendly_date(at_dt)
+                    
+                formatted_reminders.append({
+                "id": r_id, 
+                "message": msg, 
+                "at": friendly_date
+                })
+                
+            # Create a bullet list for the LLM to use directly
+            if not formatted_reminders:
+                 summary = "Você não tem lembretes pendentes."
+            else:
+                 lines = [f"Você tem {len(formatted_reminders)} lembrete(s) pendente(s):"]
+                 for r in formatted_reminders:
+                     lines.append(f"* [ID {r['id']}] {r['message']} (para {r['at']})")
+                 summary = "\n".join(lines)
             
             return {
                 "reminders": formatted_reminders,

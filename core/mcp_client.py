@@ -33,15 +33,20 @@ class MCPClient:
     async def connect(self):
         """Starts the MCP server subprocess and the reader loop."""
         self.logger.info(f"Connecting to MCP Server: {self.command} {self.args}")
+        # Resolve command path (vital for npx/npm on Linux/Systemd)
+        import shutil
+        resolved_command = shutil.which(self.command) or self.command
+        
         try:
             self.process = await asyncio.create_subprocess_exec(
-                self.command,
+                resolved_command,
                 *self.args,
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE, # Capture stderr for debugging
                 env=self.env
             )
+
             
             # Start reader task
             self._reader_task = asyncio.create_task(self._read_loop())

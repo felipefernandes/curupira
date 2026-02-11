@@ -63,6 +63,11 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 *Certifique-se de que instalou o `python-telegram-bot[job-queue]` para as features de tempo funcionarem.*
+ 
+ Para desenvolvimento e testes:
+ ```bash
+ pip install -r requirements-dev.txt
+ ```
 
 ### 4. Configuração (.env)
 Crie um arquivo `.env` na raiz do projeto:

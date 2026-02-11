@@ -8,7 +8,5 @@ psutil
 dateparser
 iara-reviewer
 mcp[cli]
-pytest
-pytest-cov
-pytest-asyncio
+
 

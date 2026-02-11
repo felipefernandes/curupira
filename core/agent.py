@@ -176,8 +176,14 @@ class AgentBrain:
         Main Agent Loop (Async).
         Handles multi-turn reasoning and tool execution.
         """
+        # Improve robustness: Ensure context is a dictionary
+        if not isinstance(context, dict):
+            self.logger.warning(f"Invalid context received: {type(context)}. Defaulting to empty dict.")
+            context = {}
+
         if not user_msg:
             return "..."
+
 
         # Dynamic Tool Injection
         available_tools_desc = []

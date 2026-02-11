@@ -31,7 +31,8 @@ async def main():
     print(f"Provider: {config.AI_PROVIDER}")
     
     # Use explicit groq for consistency in manual test
-    agent = AgentBrain(provider="groq", model_name="llama3-8b-8192")
+    agent = AgentBrain(provider="groq", model_name="llama-3.3-70b-versatile")
+
     
     # Initialize MCP Clients (CRITICAL for verifying MCP Server)
     await agent.start_mcp_clients()

@@ -48,8 +48,10 @@ class MCPClient:
             )
 
             
-            # Start reader task
+            # Start reader tasks
             self._reader_task = asyncio.create_task(self._read_loop())
+            self._stderr_task = asyncio.create_task(self._read_stderr_loop())
+
             
             # Initialize handshake (if needed by specific server implementation, 
             # but standard MCP usually starts ready or expects an 'initialize' request)
@@ -98,7 +100,20 @@ class MCPClient:
         finally:
             self.logger.info("MCP Client connection closed.")
 
+    async def _read_stderr_loop(self):
+        """Background task to read stderr from the server."""
+        try:
+            while True:
+                line = await self.process.stderr.readline()
+                if not line:
+                    break
+                self.logger.error(f"MCP Server STDERR: {line.decode(errors='replace').strip()}")
+        except Exception as e:
+
+            self.logger.error(f"Error in stderr loop: {e}")
+
     async def _handle_message(self, message: Dict[str, Any]):
+
         """Handles incoming JSON-RPC messages."""
         if "id" in message:
             # Response to a request

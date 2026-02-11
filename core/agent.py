@@ -59,8 +59,14 @@ class AgentBrain:
                 continue
                 
             try:
+                # Use current python executable if command is 'python' to ensure venv usage
+                import sys
+                if command == "python":
+                    command = sys.executable
+                
                 client = MCPClient(command, args, env)
                 await client.connect()
+
                 self.mcp_clients.append(client)
                 
                 tools = await client.list_tools()

@@ -7,3 +7,5 @@ httpx
 psutil
 dateparser
 iara-reviewer
+mcp[cli]
+

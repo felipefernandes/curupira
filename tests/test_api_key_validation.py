@@ -5,7 +5,7 @@ import sys
 # Add parent directory to path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent import AgentBrain
+from core.agent import AgentBrain
 
 
 def test_api_key_validation_empty_string(monkeypatch):

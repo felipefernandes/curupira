@@ -1,5 +1,6 @@
 
 import asyncio
+import pytest
 import sys
 import os
 import logging
@@ -22,6 +23,7 @@ config.MCP_SERVERS = {
 config.AI_PROVIDER = "groq" # Mock provider
 config.GROQ_API_KEY = "mock_key"
 
+@pytest.mark.asyncio
 async def test_mcp_integration():
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger("TestMCP")

@@ -17,3 +17,13 @@ data/
 # Local Config
 mcp.json
 
+
+# Testing & Coverage
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+test-results/
+
+# Logs
+dummy_server.log

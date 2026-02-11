@@ -1,4 +1,5 @@
 [![🧜‍♀️ Iara - Revisora de Código](https://github.com/felipefernandes/curupira/actions/workflows/ai-code-review.yml/badge.svg)](https://github.com/felipefernandes/curupira/actions/workflows/ai-code-review.yml)
+[![Coverage](./coverage.svg)](./coverage.svg)
 
 # 🍃 CurupiraBot
 

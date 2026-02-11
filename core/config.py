@@ -43,13 +43,18 @@ if AI_PROVIDER == 'groq' and not GROQ_API_KEY:
 
 # MCP Configuration
 import json
+import logging
 from pathlib import Path
+from typing import Dict, Any
+
+# Configure logger for this module
+logger = logging.getLogger(__name__)
 
 # Define path for mcp.json in the project root (one level up from core/)
 BASE_DIR = Path(__file__).resolve().parent.parent
 MCP_CONFIG_FILE = BASE_DIR / "mcp.json"
 
-MCP_SERVERS = {}
+MCP_SERVERS: Dict[str, Any] = {}
 
 if MCP_CONFIG_FILE.is_file():
     try:
@@ -57,21 +62,23 @@ if MCP_CONFIG_FILE.is_file():
             data = json.load(f)
             if isinstance(data, dict):
                 MCP_SERVERS = data
-                print(f"Loaded MCP configuration from {MCP_CONFIG_FILE}")
+                logger.info(f"Loaded MCP configuration from {MCP_CONFIG_FILE}")
             else:
-                print(f"ERROR: {MCP_CONFIG_FILE} content must be a dictionary, got {type(data).__name__}")
+                logger.error(f"{MCP_CONFIG_FILE} content must be a dictionary, got {type(data).__name__}")
     except json.JSONDecodeError:
-        print(f"ERROR: {MCP_CONFIG_FILE} is not valid JSON!")
+        logger.error(f"{MCP_CONFIG_FILE} is not valid JSON!")
     except Exception as e:
-        print(f"ERROR loading {MCP_CONFIG_FILE}: {e}")
+        logger.error(f"Error loading {MCP_CONFIG_FILE}: {e}")
 else:
     # Fallback to current Env Var method
     MCP_SERVERS_CONFIG = os.getenv('MCP_SERVERS_CONFIG', '{}')
     try:
-        MCP_SERVERS = json.loads(MCP_SERVERS_CONFIG)
-        if not isinstance(MCP_SERVERS, dict):
-            print("WARNING: MCP_SERVERS_CONFIG must be a dictionary! Defaulting to empty.")
-            MCP_SERVERS = {}
+        data = json.loads(MCP_SERVERS_CONFIG)
+        if isinstance(data, dict):
+            MCP_SERVERS = data
+        else:
+             logger.warning("MCP_SERVERS_CONFIG must be a dictionary! Defaulting to empty.")
     except json.JSONDecodeError:
-        print("WARNING: MCP_SERVERS_CONFIG is not valid JSON!")
+        logger.warning("MCP_SERVERS_CONFIG is not valid JSON!")
+
 

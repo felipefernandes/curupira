@@ -105,6 +105,11 @@ async def github_list_issues(repo_name: str, state: str = "open", limit: int = 1
     except Exception as e:
         return f"Error listing issues: {str(e)}"
 
+def sanitize_text(text: str) -> str:
+    """Sanitizes text to prevent injection (removes HTML tags)."""
+    # Simple regex to remove HTML tags
+    return re.sub(r'<[^>]*>', '', text)
+
 @mcp.tool()
 async def github_create_issue(repo_name: str, title: str, body: str = "") -> str:
     """
@@ -120,8 +125,12 @@ async def github_create_issue(repo_name: str, title: str, body: str = "") -> str
     except ValueError as e:
         return str(e)
 
+    # Sanitize inputs
+    clean_title = sanitize_text(title)
+    clean_body = sanitize_text(body)
+
     url = f"https://api.github.com/repos/{repo_name}/issues"
-    data = {"title": title, "body": body}
+    data = {"title": clean_title, "body": clean_body}
     
     try:
         resp = await http_client.post(url, json=data)

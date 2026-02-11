@@ -102,15 +102,17 @@ class MCPClient:
 
     async def _read_stderr_loop(self):
         """Background task to read stderr from the server."""
-        try:
-            while True:
+        while True:
+            try:
                 line = await self.process.stderr.readline()
                 if not line:
                     break
                 self.logger.error(f"MCP Server STDERR: {line.decode(errors='replace').strip()}")
-        except Exception as e:
+            except Exception as e:
+                self.logger.error(f"Error in stderr loop: {e}")
+                # Avoid busy loop if persistent error occurs
+                await asyncio.sleep(0.1)
 
-            self.logger.error(f"Error in stderr loop: {e}")
 
     async def _handle_message(self, message: Dict[str, Any]):
 

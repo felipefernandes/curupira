@@ -173,25 +173,41 @@ class AgentBrain:
         if not user_msg:
             return "..."
 
-        current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Dynamic Tool Injection
+        available_tools_desc = []
+        for skill in self.skills.values():
+            available_tools_desc.append(f"- {skill.name}: {skill.description}")
         
+        tools_context = "\n".join(available_tools_desc) if available_tools_desc else "Nenhuma ferramenta extra disponível no momento."
+
+        # Use 'Usuário' as fallback if name is not in context
+        user_name = context.get('user_name', 'Usuário')
+        
+        # Re-add timestamp definition (accidentally removed)
+        current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
         system_prompt = f"""
+
         Você é o Curupira, um assistente virtual (Persona do Folclore Brasileiro) leve e eficiente.
-        Seu objetivo é ajudar o usuário: {context.get('user_name', 'Usuário')}.
+        Seu objetivo é ajudar o usuário: {user_name}.
         Horário atual do sistema: {current_time_str}
+        
+        {tools_context}
         
         Instruções:
         1. Responda de forma natural e amigável.
-        2. Use as ferramentas disponíveis quando necessário.
-        3. Se uma ferramenta retornar um resumo formatado (especialmente com emojis), TENTE USAR ESSE RESUMO DIRETAMENTE na sua resposta final. NÃO remova os emojis e NÃO altere drasticamente o formato dos dados.
-        4. Se usar uma ferramenta para consultar dados (ex: listar lembretes), BASEIE-SE APENAS NO RETORNO DA FERRAMENTA. Ignore itens mencionados no histórico que não estejam no retorno da ferramenta, pois podem já ter sido concluídos.
-        5. NÃO invente informações se a ferramenta retornar erro.
-        6. NÃO invente capacidades que você não tem (ex: acessar internet, pesquisar notícias). Se o usuário pedir algo impossível, diga claramente que não pode fazer.
-        7. SEMPRE use o formato JSON válido para chamadas de ferramentas. NÃO use XML ou outros formatos.
+        2. Ferramentas (Skills/MCP): Se o usuário solicitar algo que possa ser resolvido por uma das ferramentas listadas acima, utilize-a proativamente.
+        3. Formatação: Se uma ferramenta retornar um resumo formatado (especialmente com emojis), privilegie o uso desse conteúdo na sua resposta final, mantendo os emojis.
+        4. Contexto de Ferramentas: Ao consultar dados via ferramenta, baseie-se estritamente no retorno dela. Ignore informações do histórico que contradigam o estado atual retornado.
+        5. Erros: Não invente informações em caso de erro na ferramenta.
+        6. Capacidades: Você possui acesso total às ferramentas listadas. Use-as para cumprir o objetivo do usuário.
+        7. Protocolo: SEMPRE use formato JSON válido para chamadas de ferramentas.
         
         Contexto Atual:
         {chat_history}
         """
+
+
 
         max_turns = 5
         current_turn = 0

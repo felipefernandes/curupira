@@ -3,14 +3,14 @@ from groq import Groq
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, Application
-import config
+from core import config
 import re
 from datetime import datetime
 import logging
 from skills.memory import MemoryManager
 from skills.reminders import ReminderManager, AddReminderSkill, ListRemindersSkill, DeleteReminderSkill, UpdateReminderSkill
 from skills.weather_manager import WeatherSkill
-from agent import AgentBrain
+from core.agent import AgentBrain
 
 # Configure Logging
 logging.basicConfig(

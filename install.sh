@@ -85,10 +85,15 @@ if [ "$SETUP_ENV" = true ]; then
     read -p "TELEGRAM_TOKEN: " tk_token
     read -p "GEMINI_API_KEY: " gm_key
     read -p "AUTHORIZED_USER_ID (Seu ID Telegram): " user_id
+    read -p "GITHUB_PERSONAL_ACCESS_TOKEN (Opcional, para MCP): " gh_token
 
     echo "TELEGRAM_TOKEN=$tk_token" > .env
     echo "GEMINI_API_KEY=$gm_key" >> .env
     echo "AUTHORIZED_USER_ID=$user_id" >> .env
+    
+    if [ ! -z "$gh_token" ]; then
+        echo "GITHUB_PERSONAL_ACCESS_TOKEN=$gh_token" >> .env
+    fi
     
     echo -e "${GREEN}[OK] Arquivo .env criado/atualizado.${NC}"
 fi

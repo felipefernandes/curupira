@@ -43,18 +43,23 @@ if AI_PROVIDER == 'groq' and not GROQ_API_KEY:
 
 # MCP Configuration
 import json
+from pathlib import Path
 
 # Define path for mcp.json in the project root (one level up from core/)
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MCP_CONFIG_FILE = os.path.join(BASE_DIR, 'mcp.json')
+BASE_DIR = Path(__file__).resolve().parent.parent
+MCP_CONFIG_FILE = BASE_DIR / "mcp.json"
 
 MCP_SERVERS = {}
 
-if os.path.exists(MCP_CONFIG_FILE):
+if MCP_CONFIG_FILE.is_file():
     try:
         with open(MCP_CONFIG_FILE, 'r', encoding='utf-8') as f:
-            MCP_SERVERS = json.load(f)
-        print(f"Loaded MCP configuration from {MCP_CONFIG_FILE}")
+            data = json.load(f)
+            if isinstance(data, dict):
+                MCP_SERVERS = data
+                print(f"Loaded MCP configuration from {MCP_CONFIG_FILE}")
+            else:
+                print(f"ERROR: {MCP_CONFIG_FILE} content must be a dictionary, got {type(data).__name__}")
     except json.JSONDecodeError:
         print(f"ERROR: {MCP_CONFIG_FILE} is not valid JSON!")
     except Exception as e:
@@ -64,6 +69,9 @@ else:
     MCP_SERVERS_CONFIG = os.getenv('MCP_SERVERS_CONFIG', '{}')
     try:
         MCP_SERVERS = json.loads(MCP_SERVERS_CONFIG)
+        if not isinstance(MCP_SERVERS, dict):
+            print("WARNING: MCP_SERVERS_CONFIG must be a dictionary! Defaulting to empty.")
+            MCP_SERVERS = {}
     except json.JSONDecodeError:
         print("WARNING: MCP_SERVERS_CONFIG is not valid JSON!")
 

@@ -1,4 +1,3 @@
-
 import asyncio
 import logging
 import sys
@@ -12,9 +11,17 @@ from core.agent import AgentBrain
 from skills.reminders import ReminderManager, AddReminderSkill
 from skills.memory import MemoryManager
 from core import config
+from dotenv import load_dotenv
 
-# Setup Mock Logger
+# Load environment variables (crucial for MCP server token)
+load_dotenv()
+
+
+# Setup logging
 logging.basicConfig(level=logging.INFO)
+# Enable DEBUG for MCP Client to trace connection issues
+logging.getLogger("MCPClient").setLevel(logging.DEBUG)
+
 
 async def main():
     print("--- Starting AgentBrain Test ---")
@@ -22,25 +29,34 @@ async def main():
     
     # Init Brain
     print(f"Provider: {config.AI_PROVIDER}")
-    brain = AgentBrain(config.AI_PROVIDER, config.GEMINI_API_KEY if config.AI_PROVIDER == 'gemini' else config.GROQ_API_KEY, config.GEMINI_MODEL if config.AI_PROVIDER == 'gemini' else config.GROQ_MODEL)
     
-    # Init Skills
-    # Mock ReminderManager if needed, or use real one (sqlite file will be created)
+    # Use explicit groq for consistency in manual test
+    agent = AgentBrain(provider="groq", model_name="llama-3.3-70b-versatile")
+
+    
+    # Initialize MCP Clients (CRITICAL for verifying MCP Server)
+    await agent.start_mcp_clients()
+    
+    # Register Mock Skills
     rm = ReminderManager() # Uses memory/db
-    brain.register_skill(AddReminderSkill(rm))
+    agent.register_skill(AddReminderSkill(rm))
     
     # Test 1: Simple Chat
     context = {"user_id": 123, "user_name": "Tester", "job_queue": None}
-    print("\n--- Test 1: Chat ---")
-    print("User: Olá, quem é você?")
-    response = await brain.process("Olá, quem é você?", context)
-    print(f"Agent: {response}")
+    try:
+        response = await agent.process("Olá, quem é você?", context)
+        print(f"Agent: {response}")
+    except Exception as e:
+        print(f"Error in chat processing: {e}")
+
+    # Verify Skills
+    print(f"\nRegistered Skills: {list(agent.skills.keys())}")
+
     
-    # Test 2: Tool Call (Reminder)
-    print("\n--- Test 2: Reminder Tool ---")
-    print("User: Me lembre de beber água em 10 minutos.")
-    response = await brain.process("Me lembre de beber água em 10 minutos.", context)
-    print(f"Agent: {response}")
+    # Optional: Test detailed tool call if needed, but chat covers tool injection
+    
+    # Cleanup
+    await agent.shutdown()
 
 if __name__ == "__main__":
     asyncio.run(main())

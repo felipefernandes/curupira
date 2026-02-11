@@ -29,10 +29,12 @@ class MCPClient:
         self._request_id = 0
         self._pending_requests: Dict[int, asyncio.Future] = {}
         self._reader_task = None
+        self.connected = False
 
     async def connect(self):
         """Starts the MCP server subprocess and the reader loop."""
         self.logger.info(f"Connecting to MCP Server: {self.command} {self.args}")
+        self.connected = True
         # Resolve command path (vital for npx/npm on Linux/Systemd)
         import shutil
         resolved_command = shutil.which(self.command) or self.command
@@ -48,8 +50,10 @@ class MCPClient:
             )
 
             
-            # Start reader task
+            # Start reader tasks
             self._reader_task = asyncio.create_task(self._read_loop())
+            self._stderr_task = asyncio.create_task(self._read_stderr_loop())
+
             
             # Initialize handshake (if needed by specific server implementation, 
             # but standard MCP usually starts ready or expects an 'initialize' request)
@@ -98,7 +102,22 @@ class MCPClient:
         finally:
             self.logger.info("MCP Client connection closed.")
 
+    async def _read_stderr_loop(self):
+        """Background task to read stderr from the server."""
+        while self.connected:
+            try:
+                line = await self.process.stderr.readline()
+                if not line:
+                    break
+                self.logger.error(f"MCP Server STDERR: {line.decode(errors='replace').strip()}")
+            except Exception as e:
+                self.logger.error(f"Error in stderr loop: {e}")
+                # Avoid busy loop if persistent error occurs
+                await asyncio.sleep(0.1)
+
+
     async def _handle_message(self, message: Dict[str, Any]):
+
         """Handles incoming JSON-RPC messages."""
         if "id" in message:
             # Response to a request
@@ -166,6 +185,7 @@ class MCPClient:
 
     async def close(self):
         """Terminates the server process."""
+        self.connected = False
         if self._reader_task:
             self._reader_task.cancel()
             

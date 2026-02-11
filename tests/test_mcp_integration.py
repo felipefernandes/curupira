@@ -8,8 +8,8 @@ from unittest.mock import MagicMock
 # Adjust path to import from parent directory
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import config
-from agent import AgentBrain
+from core import config
+from core.agent import AgentBrain
 
 # Mock configuration
 config.MCP_SERVERS = {

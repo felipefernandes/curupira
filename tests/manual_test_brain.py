@@ -8,10 +8,10 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import directly since we are running from project root context in sys.path
-from agent import AgentBrain
+from core.agent import AgentBrain
 from skills.reminders import ReminderManager, AddReminderSkill
 from skills.memory import MemoryManager
-import config
+from core import config
 
 # Setup Mock Logger
 logging.basicConfig(level=logging.INFO)

@@ -1,7 +1,7 @@
 
 from typing import Any, Dict
 from skills.base import BaseSkill
-from mcp_client import MCPClient
+from core.mcp_client import MCPClient
 
 class MCPSkill(BaseSkill):
     """

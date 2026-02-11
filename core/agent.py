@@ -3,12 +3,12 @@ import json
 import os
 import asyncio
 from typing import Dict, Any, List, Optional
-import config
+from . import config
 import datetime
 from datetime import datetime
 from skills.base import BaseSkill
-from mcp_client import MCPClient
-from mcp_skill import MCPSkill
+from .mcp_client import MCPClient
+from skills.mcp import MCPSkill
 
 # NOTE: Providers are lazy-loaded to save memory on Raspberry Pi
 

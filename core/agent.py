@@ -182,8 +182,12 @@ class AgentBrain:
 
         # Use 'Usuário' as fallback if name is not in context
         user_name = context.get('user_name', 'Usuário')
+        
+        # Re-add timestamp definition (accidentally removed)
+        current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         system_prompt = f"""
+
         Você é o Curupira, um assistente virtual (Persona do Folclore Brasileiro) leve e eficiente.
         Seu objetivo é ajudar o usuário: {user_name}.
         Horário atual do sistema: {current_time_str}

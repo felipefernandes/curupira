@@ -82,7 +82,18 @@ GROQ_API_KEY=gsk_...
 GEMINI_API_KEY=...
 ```
 
-### 5. Executar
+### 5. Configurando MCP (Opcional - Ex: GitHub)
+
+Para usar ferramentas extras via MCP (Model Context Protocol), como integração com GitHub:
+
+1. Renomeie o arquivo de exemplo:
+   ```bash
+   cp mcp.json.example mcp.json
+   # ou no Windows: copy mcp.json.example mcp.json
+   ```
+2. Edite o `mcp.json` e coloque seus tokens (ex: `GITHUB_PERSONAL_ACCESS_TOKEN`).
+
+### 6. Executar
 ```bash
 python bot.py
 ```

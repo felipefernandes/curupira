@@ -43,9 +43,27 @@ if AI_PROVIDER == 'groq' and not GROQ_API_KEY:
 
 # MCP Configuration
 import json
-MCP_SERVERS_CONFIG = os.getenv('MCP_SERVERS_CONFIG', '{}')
-try:
-    MCP_SERVERS = json.loads(MCP_SERVERS_CONFIG)
-except json.JSONDecodeError:
-    print("WARNING: MCP_SERVERS_CONFIG is not valid JSON!")
-    MCP_SERVERS = {}
+
+# Define path for mcp.json in the project root (one level up from core/)
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+MCP_CONFIG_FILE = os.path.join(BASE_DIR, 'mcp.json')
+
+MCP_SERVERS = {}
+
+if os.path.exists(MCP_CONFIG_FILE):
+    try:
+        with open(MCP_CONFIG_FILE, 'r', encoding='utf-8') as f:
+            MCP_SERVERS = json.load(f)
+        print(f"Loaded MCP configuration from {MCP_CONFIG_FILE}")
+    except json.JSONDecodeError:
+        print(f"ERROR: {MCP_CONFIG_FILE} is not valid JSON!")
+    except Exception as e:
+        print(f"ERROR loading {MCP_CONFIG_FILE}: {e}")
+else:
+    # Fallback to current Env Var method
+    MCP_SERVERS_CONFIG = os.getenv('MCP_SERVERS_CONFIG', '{}')
+    try:
+        MCP_SERVERS = json.loads(MCP_SERVERS_CONFIG)
+    except json.JSONDecodeError:
+        print("WARNING: MCP_SERVERS_CONFIG is not valid JSON!")
+

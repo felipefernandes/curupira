@@ -1,5 +1,5 @@
 [![🧜‍♀️ Iara - Revisora de Código](https://github.com/felipefernandes/curupira/actions/workflows/ai-code-review.yml/badge.svg)](https://github.com/felipefernandes/curupira/actions/workflows/ai-code-review.yml)
-[![Coverage](./coverage.svg)](./coverage.svg)
+[![codecov](https://codecov.io/gh/felipefernandes/curupira/graph/badge.svg?token=CODECOV_TOKEN)](https://codecov.io/gh/felipefernandes/curupira)
 
 # 🍃 CurupiraBot
 

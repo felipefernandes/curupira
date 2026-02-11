@@ -34,25 +34,8 @@ jobs:
         run: |
           pytest --cov=. --cov-report=xml --cov-report=term
 
-      - name: Generate Coverage Badge
-        uses: tj-actions/coverage-badge-py@v2
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' # Only generate/update badge on main push
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
         with:
-          output: coverage.svg
-          overwrite: true
-          
-      - name: Verify Changed files
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: tj-actions/verify-changed-files@v16
-        id: verify-changed-files
-        with:
-          files: coverage.svg
-
-      - name: Commit files
-        if: steps.verify-changed-files.outputs.files_changed == 'true'
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add coverage.svg
-          git commit -m "chore: updated coverage badge"
-          git push
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: felipefernandes/curupira

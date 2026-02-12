@@ -5,9 +5,9 @@
 
 > **Seu assistente pessoal leve, proativo e brasileiro.**
 > 
-> *"Eu sou o Curupira, guardião do sistema e seu assistente pessoal."*
+> *"Um assistente virtual projetado para rodar em hardware modesto (como um Raspberry Pi 3), democratizando o acesso à Inteligência Artificial Agêntica."*
 
-O **CurupiraBot** é um assistente virtual projetado para rodar em hardware modesto (como um **Raspberry Pi 3**), democratizando o acesso à Inteligência Artificial Agêntica. Baseado na **Arquitetura da Restrição** e no **Conceito Diet**, ele transforma limitações de hardware em eficiência, "vivendo" no seu servidor para monitorar, alertar e assistir, sem exigir supercomputadores.
+Baseado na **Arquitetura da Restrição** e no **Conceito Diet**, ele transforma limitações de hardware em eficiência, "vivendo" no seu servidor para monitorar, alertar e assistir, sem exigir supercomputadores.
 
 > 📜 **Leia nosso [Manifesto Curupira](MANIFESTO.md) para entender a filosofia por trás do código.**
 

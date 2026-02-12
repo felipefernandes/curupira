@@ -1,6 +1,12 @@
 import pytest
 import asyncio
 from unittest.mock import MagicMock, AsyncMock, patch
+import sys
+import os
+
+# Add parent directory to path to import core
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from core.mcp_client import MCPClient
 
 @pytest.fixture

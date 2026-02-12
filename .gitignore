@@ -15,7 +15,8 @@ __pycache__/
 data/
 
 # Local Config
-mcp.json
+# mcp.json removed from ignore to track default python config
+
 
 
 # Testing & Coverage

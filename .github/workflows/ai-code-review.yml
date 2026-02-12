@@ -5,7 +5,8 @@ name: "🧜‍♀️ Iara - Revisora de Código"
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, reopened]
+
 
 permissions:
   contents: read

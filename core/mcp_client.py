@@ -62,6 +62,7 @@ class MCPClient:
             await self._initialize()
 
         except Exception as e:
+            self.connected = False
             self.logger.error(f"Failed to connect to MCP Server: {e}")
             raise
 

@@ -25,7 +25,7 @@ def main():
             response = handle_request(request)
             if response:
                 logging.debug(f"Sending: {json.dumps(response)}")
-                print(json.dumps(response))
+                sys.stdout.write(json.dumps(response) + "\n")
                 sys.stdout.flush()
                 
         except Exception as e:

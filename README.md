@@ -1,5 +1,5 @@
 [![🧜‍♀️ Iara - Revisora de Código](https://github.com/felipefernandes/curupira/actions/workflows/ai-code-review.yml/badge.svg)](https://github.com/felipefernandes/curupira/actions/workflows/ai-code-review.yml)
-[![codecov](https://codecov.io/gh/felipefernandes/curupira/graph/badge.svg?token=CODECOV_TOKEN)](https://codecov.io/gh/felipefernandes/curupira)
+[![codecov](https://codecov.io/gh/felipefernandes/curupira/graph/badge.svg?token=CODECOV_TOKEN)](https://codecov.io/gh/felipefernandes/curupira) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 # 🍃 CurupiraBot
 
@@ -110,55 +110,7 @@ python bot.py
 
 Este é um projeto Open Source e adoramos colaborações!
 
-### Roadmap
-Confira o arquivo [ROADMAP.md](ROADMAP.md) para ver as próximas fases planejadas (ex: Monitoramento de Hardware, Automação de Arquivos).
-
-### Fluxo de Contribuição
-
-O projeto conta com a **Iara** 🧜‍♀️, uma revisora de código automatizada que analisa todos os PRs.
-
-```
-┌─────────────┐    ┌─────────────┐    ┌─────────────┐
-│  1. Branch  │───▶│   2. PR     │───▶│  3. Iara    │
-│   feature/  │    │   Aberto    │    │  Revisa IA  │
-└─────────────┘    └─────────────┘    └──────┬──────┘
-                                             │
-┌─────────────┐    ┌─────────────┐           │
-│  5. Merge   │◀───│  4. Ajustar │◀──────────┘
-│    main     │    │  (se necessário)        │
-└─────────────┘    └─────────────┘
-```
-
-1. **Crie uma branch**: `git checkout -b feature/minha-feature`
-2. **Desenvolva**: Siga as convenções do projeto (veja `openspec/project.md`).
-3. **Abra um PR**: A Iara irá revisar automaticamente buscando:
-   - 🐛 Bugs e erros lógicos
-   - 🔒 Problemas de segurança
-   - ⚡ Eficiência "Diet" (memória/CPU)
-   - 📚 Qualidade de código
-4. **Ajuste conforme feedback**: Atualize o PR até a aprovação.
-5. **Merge**: Após revisão aprovada, faça merge na `main`.
-
-### Estrutura & Padrões (OpenSpec)
-Este projeto utiliza uma metodologia leve de especificações chamada **OpenSpec** para manter o código organizado.
-
-1.  **Mudanças Grandes?**
-    *   Evite mudar código diretamente.
-    *   Crie uma proposta em `openspec/changes/nova-feature/`.
-    *   Consulte `openspec/project.md` e `openspec/AGENTS.md` para entender a arquitetura.
-
-### Configurar a Iara (Localmente)
-Para rodar a Iara localmente ou verificar sua instalação:
-
-1.  **Inicialize a configuração**:
-    ```bash
-    iara init
-    ```
-    Isso pedirá sua chave OpenRouter e criará o arquivo de configuração `.iara.json`.
-2.  **Teste uma revisão**:
-    ```bash
-    git diff HEAD~1 | iara
-    ```
+Para detalhes sobre o fluxo de trabalho, padrões de código e uso da Iara (nossa agente de revisão), por favor consulte o arquivo [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## 📄 Licença
 

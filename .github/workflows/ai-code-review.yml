@@ -5,7 +5,8 @@ name: "🧜‍♀️ Iara - Revisora de Código"
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, reopened]
+
 
 permissions:
   contents: read
@@ -40,8 +41,12 @@ jobs:
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
-          # Lê o diff e envia para o script de revisão via stdin (mais seguro para textos logos/multilinha)
-          python .github/scripts/ai-review.py < pr_diff.txt > review_output.txt
+          # Instala a versão mais recente da Iara (pacote oficial)
+          pip install --upgrade iara-reviewer
+          
+          # Executa a revisão usando o CLI oficial via módulo python
+          # O pacote iara lê de stdin por padrão quando chamado via pipe ou redirecionamento
+          python -m iara < pr_diff.txt > review_output.txt
       
       - name: Comentar no PR
         if: steps.diff.outputs.diff_size != '0'

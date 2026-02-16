@@ -6,7 +6,7 @@ aiosqlite
 httpx
 psutil
 dateparser
-iara-reviewer
+iara-reviewer>=1.5.1
 mcp[cli]
 
 

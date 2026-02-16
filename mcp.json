@@ -1,8 +1,0 @@
-{
-    "github": {
-        "command": "python",
-        "args": [
-            "mcp_server.py"
-        ]
-    }
-}

@@ -214,6 +214,7 @@ class AgentBrain:
         5. Erros: Não invente informações em caso de erro na ferramenta.
         6. Capacidades: Você possui acesso total às ferramentas listadas. Use-as para cumprir o objetivo do usuário.
         7. Protocolo: SEMPRE use formato JSON válido para chamadas de ferramentas.
+        8. ATENÇÃO CRÍTICA: O nome da função ('name') deve ser EXATAMENTE o identificador da ferramenta (ex: 'get_weather'). JAMAIS coloque argumentos JSON ou chaves no campo 'name'. Os argumentos devem ir APENAS no campo 'arguments'.
         
         Contexto Atual:
         {chat_history}

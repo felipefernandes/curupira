@@ -5,8 +5,8 @@ Configura o servidor MCP do GitHub para integração com o AgentBrain.
 O servidor expõe ferramentas como: github_list_repos, github_list_issues, github_create_issue.
 
 Uso:
-    import skills.github
-    skills.github.configure()  # Antes de brain.start_mcp_clients()
+    from skills.github import configure
+    configure()  # Antes de brain.start_mcp_clients()
 """
 
 import os
@@ -33,6 +33,10 @@ def configure():
     """
     if "github" in MCP_SERVERS:
         logger.debug("GitHub MCP server already configured, skipping.")
+        return
+
+    if not os.path.exists(_SERVER_SCRIPT):
+        logger.error(f"GitHub server script not found: {_SERVER_SCRIPT}")
         return
 
     token = os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN")

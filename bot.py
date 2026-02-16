@@ -11,7 +11,7 @@ from skills.memory import MemoryManager
 from skills.reminders import ReminderManager, AddReminderSkill, ListRemindersSkill, DeleteReminderSkill, UpdateReminderSkill
 from skills.weather_manager import WeatherSkill
 from core.agent import AgentBrain
-import skills.github
+from skills.github import configure as configure_github
 
 # Configure Logging
 logging.basicConfig(
@@ -28,7 +28,7 @@ weather_skill = WeatherSkill()
 brain = AgentBrain(config.AI_PROVIDER, config.GEMINI_API_KEY if config.AI_PROVIDER == 'gemini' else config.GROQ_API_KEY, config.GEMINI_MODEL if config.AI_PROVIDER == 'gemini' else config.GROQ_MODEL)
 
 # Configure MCP Skills (before start_mcp_clients)
-skills.github.configure()
+configure_github()
 
 # Register Skills
 brain.register_skill(weather_skill)

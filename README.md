@@ -97,7 +97,9 @@ Para usar a integração com o GitHub via MCP (Model Context Protocol), adicione
 GITHUB_PERSONAL_ACCESS_TOKEN=ghp_...
 ```
 
-A skill é carregada automaticamente pelo `bot.py` via `skills/github.py`.
+> **Migração:** Se você usava `mcp.json` para configurar o GitHub, basta mover o token para o `.env` e remover o `mcp.json`. A skill agora é carregada automaticamente via `skills/github.py`.
+
+> **Segurança:** Use um token com permissões mínimas (ex: `repo` read-only). O `.env` já está no `.gitignore`.
 
 ### 6. Executar
 ```bash

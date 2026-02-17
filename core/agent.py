@@ -9,6 +9,7 @@ from datetime import datetime
 from skills.base import BaseSkill
 from .mcp_client import MCPClient
 from skills.mcp_skill import MCPSkill
+from skills.introspection import IntrospectionSkill
 
 # NOTE: Providers are lazy-loaded to save memory on Raspberry Pi
 
@@ -34,6 +35,9 @@ class AgentBrain:
         self.skills: Dict[str, BaseSkill] = {}
         self.mcp_clients: List[MCPClient] = []
         self.client = None
+
+        # Built-in skills (always available)
+        self.register_skill(IntrospectionSkill(self))
 
     def register_skill(self, skill: BaseSkill):
         """Registers a skill to be used by the agent."""

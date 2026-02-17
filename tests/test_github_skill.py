@@ -1,32 +1,35 @@
-"""Tests for skills/github.py configure() function."""
+"""Tests for skills/github.py configure() function.
+
+IMPORTANT: We use `github_module.MCP_SERVERS` (the module's own reference)
+rather than `config.MCP_SERVERS` because other test files (e.g. test_config.py)
+call importlib.reload(config), which rebinds config.MCP_SERVERS to a NEW dict.
+skills.github keeps a reference to the ORIGINAL dict via:
+    from core.config import MCP_SERVERS
+so that's what configure() actually reads/writes.
+"""
 
 import os
 import sys
-import importlib
 import pytest
 from unittest.mock import patch
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# We must import the module, then reload it to ensure clean state.
-# The key insight: skills.github uses `from core.config import MCP_SERVERS`
-# so we must access MCP_SERVERS via the SAME reference (skills.github module's copy).
 import skills.github as github_module
-from core import config
 
 
 class TestGithubConfigure:
     """Tests for the GitHub skill configuration."""
 
     def setup_method(self):
-        """Clear any existing github config and reload module for clean state."""
+        """Clear any existing github config before each test."""
         self._original_token = os.environ.get("GITHUB_PERSONAL_ACCESS_TOKEN")
-        # Clear from the actual config dict that skills.github references
-        config.MCP_SERVERS.pop("github", None)
+        # Use the MODULE's own MCP_SERVERS reference (not config.MCP_SERVERS)
+        github_module.MCP_SERVERS.pop("github", None)
 
     def teardown_method(self):
         """Restore original state after each test."""
-        config.MCP_SERVERS.pop("github", None)
+        github_module.MCP_SERVERS.pop("github", None)
         if self._original_token is not None:
             os.environ["GITHUB_PERSONAL_ACCESS_TOKEN"] = self._original_token
         else:
@@ -41,17 +44,17 @@ class TestGithubConfigure:
                 result = github_module.configure()
 
         assert result is True
-        assert "github" in config.MCP_SERVERS
-        assert "args" in config.MCP_SERVERS["github"]
+        assert "github" in github_module.MCP_SERVERS
+        assert "args" in github_module.MCP_SERVERS["github"]
 
     def test_configure_skips_if_already_configured(self):
         """configure() should be a no-op if 'github' is already in MCP_SERVERS."""
-        config.MCP_SERVERS["github"] = {"command": "existing"}
+        github_module.MCP_SERVERS["github"] = {"command": "existing"}
 
         result = github_module.configure()
 
         assert result is True
-        assert config.MCP_SERVERS["github"]["command"] == "existing"
+        assert github_module.MCP_SERVERS["github"]["command"] == "existing"
 
     def test_configure_skips_without_token(self):
         """configure() should skip and return False when token is missing."""
@@ -61,7 +64,7 @@ class TestGithubConfigure:
             with patch("os.path.exists", return_value=True):
                 result = github_module.configure()
 
-        assert "github" not in config.MCP_SERVERS
+        assert "github" not in github_module.MCP_SERVERS
         assert result is False
 
     def test_configure_skips_if_script_missing(self):
@@ -72,7 +75,7 @@ class TestGithubConfigure:
             with patch("os.path.exists", return_value=False):
                 result = github_module.configure()
 
-        assert "github" not in config.MCP_SERVERS
+        assert "github" not in github_module.MCP_SERVERS
         assert result is False
 
     def test_configure_warns_on_suspicious_token(self):
@@ -85,5 +88,5 @@ class TestGithubConfigure:
                     result = github_module.configure()
 
         assert result is True
-        assert "github" in config.MCP_SERVERS
+        assert "github" in github_module.MCP_SERVERS
         mock_logger.warning.assert_called()

@@ -65,8 +65,9 @@ class TestIntrospectionSkill:
         }
 
     def test_skill_properties(self):
-        """Test skill name, description, and parameters."""
+        """Test skill name, description, display_name, and parameters."""
         assert self.skill.name == "describe_capabilities"
+        assert self.skill.display_name == "🔍 Minhas Capacidades"
         assert "capabilities" in self.skill.description.lower()
         assert self.skill.parameters["type"] == "object"
         assert "skill_name" in self.skill.parameters["properties"]

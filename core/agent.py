@@ -8,7 +8,7 @@ import datetime
 from datetime import datetime
 from skills.base import BaseSkill
 from .mcp_client import MCPClient
-from skills.mcp import MCPSkill
+from skills.mcp_skill import MCPSkill
 
 # NOTE: Providers are lazy-loaded to save memory on Raspberry Pi
 

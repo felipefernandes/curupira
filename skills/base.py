@@ -20,6 +20,12 @@ class BaseSkill(ABC):
         pass
     
     @property
+    def display_name(self) -> str:
+        """Human-friendly name for display to users (e.g., '🌦️ Previsão do Tempo').
+        Defaults to the technical name. Override in subclasses for friendlier labels."""
+        return self.name
+    
+    @property
     @abstractmethod
     def parameters(self) -> Dict[str, Any]:
         """

@@ -29,6 +29,15 @@ class MCPSkill(BaseSkill):
         return self._tool_def.get("name", "unknown_mcp_tool")
 
     @property
+    def display_name(self) -> str:
+        """Auto-generates a friendly name from the MCP tool name.
+        e.g., 'github_list_repos' -> '🔗 Github List Repos'
+        """
+        raw = self._tool_def.get("name", "unknown_mcp_tool")
+        friendly = raw.replace("_", " ").title()
+        return f"🔗 {friendly}"
+
+    @property
     def description(self) -> str:
         return self._tool_def.get("description", "No description provided.")
 

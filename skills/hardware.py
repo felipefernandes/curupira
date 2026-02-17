@@ -17,6 +17,10 @@ class HardwareMonitoringSkill(BaseSkill):
         return "hardware_monitoring"
 
     @property
+    def display_name(self) -> str:
+        return "🌡️ Monitoramento de Hardware"
+
+    @property
     def description(self) -> str:
         return "Returns current system hardware status (CPU, RAM, Disk, Temperature)."
 

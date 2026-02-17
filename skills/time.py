@@ -8,6 +8,10 @@ class GetTimeSkill(BaseSkill):
         return "get_current_time"
 
     @property
+    def display_name(self) -> str:
+        return "⏰ Data e Hora"
+
+    @property
     def description(self) -> str:
         return "Retorna a data e hora atual do sistema. Use quando o usuário perguntar 'que horas são?' ou 'que dia é hoje?'."
 

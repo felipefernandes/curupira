@@ -27,6 +27,10 @@ class IntrospectionSkill(BaseSkill):
         return "describe_capabilities"
 
     @property
+    def display_name(self) -> str:
+        return "🔍 Minhas Capacidades"
+
+    @property
     def description(self) -> str:
         return (
             "Lists available skills and their capabilities. "
@@ -73,6 +77,7 @@ class IntrospectionSkill(BaseSkill):
                 continue
             skills_list.append({
                 "name": sk.name,
+                "display_name": sk.display_name,
                 "description": sk.description
             })
 
@@ -110,6 +115,7 @@ class IntrospectionSkill(BaseSkill):
 
         return {
             "name": skill.name,
+            "display_name": skill.display_name,
             "description": skill.description,
             "parameters": param_details
         }

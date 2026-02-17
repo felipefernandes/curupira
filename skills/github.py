@@ -7,6 +7,10 @@ O servidor expõe ferramentas como: github_list_repos, github_list_issues, githu
 Uso:
     from skills.github import configure
     configure()  # Antes de brain.start_mcp_clients()
+
+Nota: O token é lido de GITHUB_PERSONAL_ACCESS_TOKEN no ambiente (.env).
+Se a variável estiver definida tanto no .env quanto no sistema, o valor
+explícito do ambiente do sistema tem prioridade.
 """
 
 import os
@@ -21,23 +25,24 @@ logger = logging.getLogger(__name__)
 _SERVER_SCRIPT = str(Path(__file__).parent / "github_server.py")
 
 
-def configure():
+def configure() -> bool:
     """
     Registers the GitHub MCP server configuration programmatically.
-    
+
     This injects the server definition into MCP_SERVERS so that
     AgentBrain.start_mcp_clients() can discover and connect to it.
-    
-    If the server is already configured (e.g., via mcp.json), this is a no-op.
-    Requires GITHUB_PERSONAL_ACCESS_TOKEN in the environment.
+
+    Returns:
+        True if the server is configured (or was already configured).
+        False if configuration was skipped due to missing token or script.
     """
     if "github" in MCP_SERVERS:
         logger.debug("GitHub MCP server already configured, skipping.")
-        return
+        return True
 
     if not os.path.exists(_SERVER_SCRIPT):
         logger.error(f"GitHub server script not found: {_SERVER_SCRIPT}")
-        return
+        return False
 
     token = os.getenv("GITHUB_PERSONAL_ACCESS_TOKEN")
     if not token:
@@ -45,10 +50,18 @@ def configure():
             "GITHUB_PERSONAL_ACCESS_TOKEN not set. "
             "GitHub skill will not be available."
         )
-        return
+        return False
+
+    # Sanity check on token format
+    if not token.startswith("ghp_") and not token.startswith("github_pat_"):
+        logger.warning(
+            "GITHUB_PERSONAL_ACCESS_TOKEN has unexpected format. "
+            "Expected 'ghp_...' or 'github_pat_...'. Proceeding anyway."
+        )
 
     MCP_SERVERS["github"] = {
         "command": sys.executable,
         "args": [_SERVER_SCRIPT],
     }
     logger.info("GitHub MCP server configured via skills/github.py")
+    return True

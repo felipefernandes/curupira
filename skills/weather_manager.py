@@ -14,6 +14,10 @@ class WeatherSkill(BaseSkill):
         return "get_weather"
 
     @property
+    def display_name(self) -> str:
+        return "🌦️ Previsão do Tempo"
+
+    @property
     def description(self) -> str:
         return "Obtém a previsão do tempo atual para uma cidade específica."
 

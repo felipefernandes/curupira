@@ -10,10 +10,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from skills.introspection import IntrospectionSkill
 
 
-def _make_mock_skill(name, description, parameters=None):
+def _make_mock_skill(name, description, display_name=None, parameters=None):
     """Helper to create a mock skill with properties."""
     skill = MagicMock()
     type(skill).name = PropertyMock(return_value=name)
+    type(skill).display_name = PropertyMock(return_value=display_name or name)
     type(skill).description = PropertyMock(return_value=description)
     type(skill).parameters = PropertyMock(return_value=parameters or {
         "type": "object",
@@ -34,7 +35,8 @@ class TestIntrospectionSkill:
         self.weather_skill = _make_mock_skill(
             "get_weather",
             "Gets weather forecast for a city.",
-            {
+            display_name="🌦️ Previsão do Tempo",
+            parameters={
                 "type": "object",
                 "properties": {
                     "city": {"type": "string", "description": "City name"}
@@ -45,7 +47,8 @@ class TestIntrospectionSkill:
         self.github_skill = _make_mock_skill(
             "github_list_issues",
             "Lists open issues in a GitHub repository.",
-            {
+            display_name="🔗 Github List Issues",
+            parameters={
                 "type": "object",
                 "properties": {
                     "repo_name": {"type": "string", "description": "Repository full name"},
@@ -79,12 +82,17 @@ class TestIntrospectionSkill:
         assert "github_list_issues" in skill_names
         assert "describe_capabilities" not in skill_names  # Self excluded
 
+        # Verify display_name is present
+        for s in result["skills"]:
+            assert "display_name" in s
+
     @pytest.mark.asyncio
     async def test_describe_specific_skill(self):
         """Test describing a specific skill."""
         result = await self.skill.execute({}, skill_name="get_weather")
 
         assert result["name"] == "get_weather"
+        assert result["display_name"] == "🌦️ Previsão do Tempo"
         assert "weather" in result["description"].lower()
         assert len(result["parameters"]) == 1
         assert result["parameters"][0]["name"] == "city"

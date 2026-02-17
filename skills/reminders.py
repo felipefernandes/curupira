@@ -157,6 +157,10 @@ class AddReminderSkill(BaseSkill):
         return "add_reminder"
     
     @property
+    def display_name(self) -> str:
+        return "📝 Criar Lembrete"
+    
+    @property
     def description(self) -> str:
         return "Agendar um novo lembrete. Use quando o usuário pedir para ser lembrado de algo no futuro."
 
@@ -315,6 +319,10 @@ class ListRemindersSkill(BaseSkill):
         return "list_reminders"
     
     @property
+    def display_name(self) -> str:
+        return "📋 Listar Lembretes"
+    
+    @property
     def description(self) -> str:
         return "Listar os lembretes pendentes agendados para o usuário atual."
 
@@ -416,6 +424,10 @@ class DeleteReminderSkill(BaseSkill):
         return "delete_reminder"
 
     @property
+    def display_name(self) -> str:
+        return "🗑️ Deletar Lembrete"
+
+    @property
     def description(self) -> str:
         return "Cancelar/Deletar um lembrete existente pelo ID. Use list_reminders primeiro se não souber o ID."
 
@@ -473,6 +485,10 @@ class UpdateReminderSkill(BaseSkill):
     @property
     def name(self) -> str:
         return "update_reminder"
+
+    @property
+    def display_name(self) -> str:
+        return "✏️ Atualizar Lembrete"
 
     @property
     def description(self) -> str:

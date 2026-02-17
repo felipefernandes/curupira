@@ -110,7 +110,7 @@ class MCPClient:
                 line = await self.process.stderr.readline()
                 if not line:
                     break
-                self.logger.error(f"MCP Server STDERR: {line.decode(errors='replace').strip()}")
+                self.logger.debug(f"MCP Server STDERR: {line.decode(errors='replace').strip()}")
             except Exception as e:
                 self.logger.error(f"Error in stderr loop: {e}")
                 # Avoid busy loop if persistent error occurs

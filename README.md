@@ -99,7 +99,11 @@ GITHUB_PERSONAL_ACCESS_TOKEN=ghp_...
 
 > **Migração:** Se você usava `mcp.json` para configurar o GitHub, basta mover o token para o `.env` e remover o `mcp.json`. A skill agora é carregada automaticamente via `skills/github.py`.
 
-> **Segurança:** Use um token com permissões mínimas (ex: `repo` read-only). O `.env` já está no `.gitignore`.
+> **Segurança:** Crie um [Personal Access Token (classic)](https://github.com/settings/tokens) com os **escopos mínimos necessários**:
+> - `repo` (read-only) — para listar repositórios e issues
+> - `read:org` — se precisar acessar repos de organizações
+>
+> O `.env` já está no `.gitignore`. Variáveis de ambiente do sistema têm precedência sobre o `.env`.
 
 ### 6. Executar
 ```bash

@@ -12,14 +12,16 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core import config
 from core.agent import AgentBrain
 
-# Mock configuration
-config.MCP_SERVERS = {
+# Mock configuration — IMPORTANT: mutate in-place, do NOT reassign,
+# otherwise skills that imported MCP_SERVERS will hold a stale reference.
+config.MCP_SERVERS.clear()
+config.MCP_SERVERS.update({
     "dummy": {
         "command": sys.executable,
         "args": ["tests/dummy_mcp_server.py"],
         "env": {"PYTHONUNBUFFERED": "1"}
     }
-}
+})
 config.AI_PROVIDER = "groq" # Mock provider
 config.GROQ_API_KEY = "mock_key"
 

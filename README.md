@@ -88,16 +88,18 @@ GROQ_API_KEY=gsk_...
 GEMINI_API_KEY=...
 ```
 
-### 5. Configurando MCP (Opcional - Ex: GitHub)
+### 5. Configurando GitHub (Opcional)
 
-Para usar ferramentas extras via MCP (Model Context Protocol), como integração com GitHub:
+Para usar a integração com o GitHub via MCP (Model Context Protocol), adicione seu token no `.env`:
 
-1. Renomeie o arquivo de exemplo:
-   ```bash
-   cp mcp.json.example mcp.json
-   # ou no Windows: copy mcp.json.example mcp.json
-   ```
-2. Edite o `mcp.json` e coloque seus tokens (ex: `GITHUB_PERSONAL_ACCESS_TOKEN`).
+```ini
+# GitHub Integration (Opcional)
+GITHUB_PERSONAL_ACCESS_TOKEN=ghp_...
+```
+
+> **Migração:** Se você usava `mcp.json` para configurar o GitHub, basta mover o token para o `.env` e remover o `mcp.json`. A skill agora é carregada automaticamente via `skills/github.py`.
+
+> **Segurança:** Use um token com permissões mínimas (ex: `repo` read-only). O `.env` já está no `.gitignore`.
 
 ### 6. Executar
 ```bash

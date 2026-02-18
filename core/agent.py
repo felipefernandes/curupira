@@ -1,8 +1,10 @@
 import logging
 import json
 import os
+import re
+import uuid
 import asyncio
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from . import config
 import datetime
 from datetime import datetime
@@ -177,6 +179,31 @@ class AgentBrain:
             self.logger.error(f"Error executing {tool_name}: {e}")
             return json.dumps({"error": str(e)})
 
+    @staticmethod
+    def _parse_failed_generation(failed_gen: str) -> Optional[Tuple[str, dict]]:
+        """Parse a Groq failed_generation string into (fn_name, fn_args).
+
+        Returns None if the string does not contain a recognisable tool call.
+        """
+        if not failed_gen or '<function=' not in failed_gen:
+            return None
+
+        # <function=name(args)></function>
+        match = re.search(r'<function=(\w+)\((.*?)\)></function>', failed_gen, re.DOTALL)
+        if not match:
+            # <function=name>args</function>
+            match = re.search(r'<function=(\w+)>(.*?)</function>', failed_gen, re.DOTALL)
+        if not match:
+            return None
+
+        fn_name = match.group(1)
+        try:
+            fn_args = json.loads(match.group(2))
+        except json.JSONDecodeError:
+            fn_args = {}
+
+        return fn_name, fn_args
+
     async def process(self, user_msg: str, context: Dict[str, Any], chat_history: str = "") -> str:
         """
         Main Agent Loop (Async).
@@ -299,7 +326,6 @@ class AgentBrain:
                     if "<function=" in content:
                         try:
                             # Regex to capture name and args: <function=name>(args)</function>
-                            import re
                             match = re.search(r"<function=(\w+)>(.*?)</function>", content, re.DOTALL)
                             if match:
                                 fn_name = match.group(1)
@@ -318,7 +344,6 @@ class AgentBrain:
                                 
                                 # CRITICAL FIX: Rewrite history to look like a VALID tool call
                                 # Groq API rejects <function> tags in content on next turn
-                                import uuid
                                 fake_tool_id = f"call_{uuid.uuid4().hex[:8]}"
                                 
                                 # Create a synthetic assistant message with proper tool_calls
@@ -354,44 +379,33 @@ class AgentBrain:
                     # which Groq rejects before returning the response.
                     err_body = getattr(e, 'body', None) or {}
                     failed_gen = err_body.get('error', {}).get('failed_generation', '') if isinstance(err_body, dict) else ''
-                    if failed_gen and '<function=' in failed_gen:
-                        import re
-                        import uuid
-                        # Match both <function=name(args)></function> and <function=name>args</function>
-                        match = re.search(r'<function=(\w+)\((.*?)\)></function>', failed_gen, re.DOTALL)
-                        if not match:
-                            match = re.search(r'<function=(\w+)>(.*?)</function>', failed_gen, re.DOTALL)
-                        if match:
-                            fn_name = match.group(1)
-                            args_str = match.group(2)
-                            self.logger.warning(f"Recovered tool call from failed_generation: {fn_name}")
-                            try:
-                                fn_args = json.loads(args_str)
-                            except json.JSONDecodeError:
-                                fn_args = {}
+                    parsed = self._parse_failed_generation(failed_gen)
+                    if parsed:
+                        fn_name, fn_args = parsed
+                        self.logger.warning(f"Recovered tool call from failed_generation: {fn_name}")
 
-                            result_str = await self._execute_tool_call(fn_name, fn_args, context)
+                        result_str = await self._execute_tool_call(fn_name, fn_args, context)
 
-                            fake_tool_id = f"call_{uuid.uuid4().hex[:8]}"
-                            messages.append({
-                                "role": "assistant",
-                                "content": None,
-                                "tool_calls": [{
-                                    "id": fake_tool_id,
-                                    "type": "function",
-                                    "function": {
-                                        "name": fn_name,
-                                        "arguments": json.dumps(fn_args)
-                                    }
-                                }]
-                            })
-                            messages.append({
-                                "role": "tool",
-                                "tool_call_id": fake_tool_id,
-                                "name": fn_name,
-                                "content": result_str
-                            })
-                            continue  # Re-prompt with tool result
+                        fake_tool_id = f"call_{uuid.uuid4().hex[:8]}"
+                        messages.append({
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [{
+                                "id": fake_tool_id,
+                                "type": "function",
+                                "function": {
+                                    "name": fn_name,
+                                    "arguments": json.dumps(fn_args)
+                                }
+                            }]
+                        })
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": fake_tool_id,
+                            "name": fn_name,
+                            "content": result_str
+                        })
+                        continue  # Re-prompt with tool result
 
                     self.logger.error(f"Groq API Error: {e}")
                     return "Desculpe, tive um problema de conexão com meu cérebro digital."

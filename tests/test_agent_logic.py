@@ -183,3 +183,84 @@ async def test_process_message_tool_execution(agent, mock_groq_client):
     assert response == "Tool executed."
     mock_skill.execute.assert_called_with({}, arg=1)
 
+
+# --- _parse_failed_generation tests ---
+
+class TestParseFailedGeneration:
+    """Tests for AgentBrain._parse_failed_generation."""
+
+    def test_parens_format(self):
+        """Match <function=name(args)></function>."""
+        gen = '<function=rss_read({"url": "https://example.com/feed", "limit": 5})></function>'
+        result = AgentBrain._parse_failed_generation(gen)
+        assert result is not None
+        fn_name, fn_args = result
+        assert fn_name == "rss_read"
+        assert fn_args == {"url": "https://example.com/feed", "limit": 5}
+
+    def test_angle_bracket_format(self):
+        """Match <function=name>args</function>."""
+        gen = '<function=get_weather>{"city": "SP"}</function>'
+        result = AgentBrain._parse_failed_generation(gen)
+        assert result is not None
+        fn_name, fn_args = result
+        assert fn_name == "get_weather"
+        assert fn_args == {"city": "SP"}
+
+    def test_invalid_json_args(self):
+        """Falls back to empty dict when args are not valid JSON."""
+        gen = '<function=test(not-json)></function>'
+        result = AgentBrain._parse_failed_generation(gen)
+        assert result is not None
+        fn_name, fn_args = result
+        assert fn_name == "test"
+        assert fn_args == {}
+
+    def test_no_function_tag(self):
+        """Returns None when string has no function tag."""
+        assert AgentBrain._parse_failed_generation("just a normal error") is None
+
+    def test_empty_string(self):
+        assert AgentBrain._parse_failed_generation("") is None
+
+    def test_none_input(self):
+        assert AgentBrain._parse_failed_generation(None) is None
+
+
+@pytest.mark.asyncio
+async def test_groq_failed_generation_recovery(agent, mock_groq_client):
+    """Test that a Groq 400 with failed_generation recovers and retries."""
+    # Simulate Groq 400 error with failed_generation
+    error = Exception("tool_use_failed")
+    error.body = {
+        "error": {
+            "message": "Failed to call a function.",
+            "type": "invalid_request_error",
+            "code": "tool_use_failed",
+            "failed_generation": '<function=rss_read({"url": "https://example.com/feed", "limit": 5})></function>'
+        }
+    }
+
+    # Second call succeeds with final text
+    msg_final = MagicMock()
+    msg_final.content = "Here are the latest articles."
+    msg_final.tool_calls = None
+
+    mock_response_ok = MagicMock()
+    mock_response_ok.choices = [MagicMock(message=msg_final)]
+
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.side_effect = [error, mock_response_ok]
+
+    # Register the skill so _execute_tool_call works
+    mock_skill = AsyncMock()
+    mock_skill.name = "rss_read"
+    mock_skill.description = "Read RSS"
+    mock_skill.parameters = {"type": "object", "properties": {}, "required": []}
+    mock_skill.execute.return_value = {"entries": []}
+    agent.register_skill(mock_skill)
+
+    response = await agent.process("Read news", {})
+
+    assert response == "Here are the latest articles."
+    mock_skill.execute.assert_called_once_with({}, url="https://example.com/feed", limit=5)

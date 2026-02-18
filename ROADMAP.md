@@ -45,7 +45,7 @@
 ### 📰 RSS Reader
 - [x] **Leitura de feeds:** Busca as últimas entradas de qualquer URL RSS/Atom. (Issue #54)
 - [x] **Listagem:** Lista feeds pré-configurados via `RSS_FEEDS_JSON`.
-- [x] **Resiliência:** Timeout de 15s, User-Agent personalizado e tratamento de feeds inválidos.
+- [x] **Resiliência:** Timeout de 15s, User-Agent personalizado e Segurança (Whitelist).
 
 ---
 

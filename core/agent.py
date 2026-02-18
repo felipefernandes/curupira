@@ -20,9 +20,9 @@ class AgentBrain:
     """Agente responsável por gerenciar habilidades e integrações com APIs."""
 
     # Compiled patterns for Llama-3 malformed tool call recovery
-    _RE_FUNC_PARENS = re.compile(r'<function=(\w+)\((.*?)\)></function>', re.DOTALL)
-    _RE_FUNC_ANGLES = re.compile(r'<function=(\w+)>(.*?)</function>', re.DOTALL)
-    _RE_FUNC_COLON  = re.compile(r'<function=(\w+)":\s*(.*?)</function>', re.DOTALL)
+    _RE_FUNC_PARENS = re.compile(r'<function=(\w+)\((.*?)\)></function>', re.DOTALL)  # <function=name(args)></function>
+    _RE_FUNC_ANGLES = re.compile(r'<function=(\w+)>(.*?)</function>', re.DOTALL)      # <function=name>args</function>
+    _RE_FUNC_COLON  = re.compile(r'<function=(\w+)":\s*(.*?)</function>', re.DOTALL)  # <function=name":args</function>
     
     def __init__(self, provider: str, api_key: Optional[str] = None, model_name: str = "default"):
         """Inicializa o agente com provider e API key.

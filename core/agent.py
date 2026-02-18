@@ -222,21 +222,23 @@ class AgentBrain:
 
         # Setup Client
         client = None
-        model = config.REFLECTION_MODEL
-        use_groq = False
-
-        if config.AI_PROVIDER == 'groq' and config.GROQ_API_KEY:
+        if config.AI_PROVIDER == 'groq':
+             if not config.GROQ_API_KEY:
+                 self.logger.warning("AI_PROVIDER is 'groq' but GROQ_API_KEY is missing via reflect.")
+                 return None
              client = self._get_groq_client()
              use_groq = True
-             model = config.GROQ_MODEL if hasattr(config, 'GROQ_MODEL') else "llama-3.3-70b-versatile"
+             model = config.GROQ_MODEL
         elif config.AI_PROVIDER == 'gemini':
+             if not config.GEMINI_API_KEY:
+                 self.logger.warning("AI_PROVIDER is 'gemini' but GEMINI_API_KEY is missing via reflect.")
+                 return None
              client = self._get_gemini_client()
              model = config.GEMINI_MODEL
              use_groq = False
-        elif config.GROQ_API_KEY:
-             # FallbackLegacy behavior
-             client = self._get_groq_client()
-             use_groq = True
+        else:
+             self.logger.warning(f"Unknown AI_PROVIDER for reflection: {config.AI_PROVIDER}")
+             return None
         
         if not client:
             return None

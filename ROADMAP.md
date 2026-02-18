@@ -42,33 +42,28 @@
 - [x] Leitura de temperatura, CPU e RAM.
 - [x] Feedback visual com emojis.
 
+### 📰 RSS Reader
+- [x] **Leitura de feeds:** Busca as últimas entradas de qualquer URL RSS/Atom. (Issue #54)
+- [x] **Listagem:** Lista feeds pré-configurados via `RSS_FEEDS_JSON`.
+- [x] **Resiliência:** Timeout de 15s, User-Agent personalizado e tratamento de feeds inválidos.
+
 ---
 
-## 🔮 Skills Futuras (Backlog)
+## 🔮 Backlog Priorizado (Q1 2026)
 
-### 💻 Terminal & Sistema (Power User)
-- [ ] Execução segura de comandos shell (logs, disco).
-- [ ] Monitoramento avançado com alertas proativos.
+### 🚀 Prioridade Alta (Core Assistant)
+Estas skills transformam o Curupira em um assistente pessoal proativo.
+- [ ] **Google Agenda:** Gestão completa de calendário (OAuth). (Issue #48)
+- [ ] **Compreensão de Áudio:** Transcrição e resposta a áudios. (Issue #60)
 
-### 📂 Gerenciamento de Arquivos
-- [ ] Operações de arquivo: Criar, ler, escrever, deletar, mover, copiar.
 
-### 🌐 Navegação Web (Headless)
-- [ ] Acesso a URLs e extração de texto limpo (`trafilatura`/`bs4`).
-- [ ] Resumo de conteúdo web.
+### 🛠️ Prioridade Média (Produtividade)
+Ferramentas de produtividade pessoal.
+- [ ] **Tempo de Transporte:** Rotas e trânsito (Maps). (Issue #61)
+- [ ] **Emails:** Leitura e envio. (Issue #50)
+- [ ] **Notion:** Segundo cérebro. (Issue #49)
 
-### ☁️ Integração Vercel & Logs
-- [ ] Conexão API Vercel para logs de deployment.
-- [ ] Resumo inteligente de logs extensos.
-
-### 📄 Relatórios & Notificações
-- [ ] Geração de PDFs leves (`fpdf2`).
-- [ ] Envio de e-mails com anexos (SMTP/Resend).
-
-### 📊 Monitoramento & Analytics
-- [ ] Integração GA4 (Métricas diárias).
-- [ ] Detecção de anomalias estatísticas.
-
-### 🔗 Integrações Externas
-- [ ] Google Agenda.
-- [ ] Notion.
+### 🤓 Prioridade Baixa (DevOps & Tools)
+Monitoramento técnico e entretenimento.
+- [ ] **Monitoramento:** Vercel (#45), Analytics (#47), Logs (#53).
+- [ ] **Outros:** PDF (#46), Entretenimento (#59).

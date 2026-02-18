@@ -20,6 +20,7 @@ Baseado na **Arquitetura da Restrição** e no **Conceito Diet**, ele transforma
 *   **🌦️ Previsão do Tempo**: Pergunte *"Vai chover?"* e ele verifica a previsão local (Open-Meteo) para você.
 *   **🔌 Multi-Provedor de IA**: Suporte nativo para **Groq** (LLaMA 3 - *default para velocidade*) e **Google Gemini** (Flash - *para janelas de contexto maiores*).
 *   **🌡️ Monitoramento de Hardware**: Pergunte *"Como está o sistema?"* para ver uso de CPU, RAM, Disco e Temperatura do Raspberry Pi em tempo real.
+*   **📰 RSS Reader**: Peça *"Quais são as notícias de hoje?"* e o Curupira busca as últimas manchetes de feeds RSS/Atom configurados — ou de qualquer URL que você informar.
 
 ## 🛠️ Tecnologias
 
@@ -88,7 +89,16 @@ GROQ_API_KEY=gsk_...
 GEMINI_API_KEY=...
 ```
 
-### 5. Configurando GitHub (Opcional)
+### 5. Configurando RSS (Opcional)
+
+Por padrão o Curupira já vem com G1, TechCrunch e Hacker News. Para personalizar, adicione no `.env`:
+
+```ini
+# Feeds RSS personalizados (JSON)
+RSS_FEEDS_JSON={"G1": "https://g1.globo.com/rss/g1/", "Meu Blog": "https://meublog.com/feed"}
+```
+
+### 7. Configurando GitHub (Opcional)
 
 Para usar a integração com o GitHub via MCP (Model Context Protocol), adicione seu token no `.env`:
 
@@ -105,7 +115,7 @@ GITHUB_PERSONAL_ACCESS_TOKEN=ghp_...
 >
 > O `.env` já está no `.gitignore`. Variáveis de ambiente do sistema têm precedência sobre o `.env`.
 
-### 6. Executar
+### 8. Executar
 ```bash
 python bot.py
 ```

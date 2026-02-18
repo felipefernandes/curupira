@@ -226,14 +226,26 @@ class AgentBrain:
              if not config.GROQ_API_KEY:
                  self.logger.warning("AI_PROVIDER is 'groq' but GROQ_API_KEY is missing via reflect.")
                  return None
-             client = self._get_groq_client()
+             # Use explicit key for reflection client
+             try:
+                 from groq import AsyncGroq
+                 client = AsyncGroq(api_key=config.GROQ_API_KEY)
+             except ImportError:
+                 self.logger.error("Groq library not installed.")
+                 return None
              use_groq = True
              model = config.GROQ_MODEL
         elif config.AI_PROVIDER == 'gemini':
              if not config.GEMINI_API_KEY:
                  self.logger.warning("AI_PROVIDER is 'gemini' but GEMINI_API_KEY is missing via reflect.")
                  return None
-             client = self._get_gemini_client()
+             # Use explicit key for reflection client
+             try:
+                 from google import genai
+                 client = genai.Client(api_key=config.GEMINI_API_KEY)
+             except ImportError:
+                 self.logger.error("Google GenAI library not installed.")
+                 return None
              model = config.GEMINI_MODEL
              use_groq = False
         else:

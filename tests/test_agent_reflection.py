@@ -11,8 +11,7 @@ def mock_agent():
          patch("core.agent.RssReadSkill"), \
          patch("core.agent.RssListSkill"):
         agent = AgentBrain(provider="groq", api_key="dummy_key")
-        agent._get_groq_client = MagicMock()
-        agent._get_gemini_client = MagicMock()
+        # We don't need to mock _get_... anymore for reflect tests as reflect uses direct instantiation
         return agent
 
 @pytest.mark.asyncio
@@ -29,16 +28,17 @@ async def test_reflect_groq_success(mock_agent):
         mock_response = MagicMock()
         mock_response.choices[0].message.content = "Hello Groq"
         mock_client.chat.completions.create.return_value = mock_response
-        mock_agent._get_groq_client.return_value = mock_client
 
         # Execute
-        result = await mock_agent.reflect({"context": "test"})
+        # Since it is a local import inside the function `from groq import AsyncGroq`, we must patch `groq.AsyncGroq`
+        with patch("groq.AsyncGroq", return_value=mock_client) as MockGroqLib:
+            result = await mock_agent.reflect({"context": "test"})
 
-        # Assert
-        assert result == "Hello Groq"
-        mock_agent._get_groq_client.assert_called_once()
-        mock_client.chat.completions.create.assert_called_once()
-        assert mock_client.chat.completions.create.call_args[1]['model'] == "llama-test"
+            # Assert
+            assert result == "Hello Groq"
+            MockGroqLib.assert_called_once_with(api_key="valid_key")
+            mock_client.chat.completions.create.assert_called_once()
+            assert mock_client.chat.completions.create.call_args[1]['model'] == "llama-test"
 
 @pytest.mark.asyncio
 async def test_reflect_groq_missing_key(mock_agent):
@@ -48,8 +48,6 @@ async def test_reflect_groq_missing_key(mock_agent):
         
         result = await mock_agent.reflect({})
         assert result is None
-        # Verify no client was created
-        mock_agent._get_groq_client.assert_not_called()
 
 @pytest.mark.asyncio
 async def test_reflect_gemini_success(mock_agent):
@@ -64,16 +62,17 @@ async def test_reflect_gemini_success(mock_agent):
         mock_response = MagicMock()
         mock_response.candidates[0].content.parts[0].text = "Hello Gemini"
         mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
-        mock_agent._get_gemini_client.return_value = mock_client
 
-        # Execute
-        result = await mock_agent.reflect({"context": "test"})
+        # Mock google.genai.Client
+        with patch("google.genai.Client", return_value=mock_client) as MockGenAI:
+            # Execute
+            result = await mock_agent.reflect({"context": "test"})
 
-        # Assert
-        assert result == "Hello Gemini"
-        mock_agent._get_gemini_client.assert_called_once()
-        mock_client.aio.models.generate_content.assert_called_once()
-        assert mock_client.aio.models.generate_content.call_args[1]['model'] == "gemini-test"
+            # Assert
+            assert result == "Hello Gemini"
+            MockGenAI.assert_called_once_with(api_key="valid_key")
+            mock_client.aio.models.generate_content.assert_called_once()
+            assert mock_client.aio.models.generate_content.call_args[1]['model'] == "gemini-test"
 
 @pytest.mark.asyncio
 async def test_reflect_gemini_missing_key(mock_agent):
@@ -83,7 +82,6 @@ async def test_reflect_gemini_missing_key(mock_agent):
         
         result = await mock_agent.reflect({})
         assert result is None
-        mock_agent._get_gemini_client.assert_not_called()
 
 @pytest.mark.asyncio
 async def test_reflect_unknown_provider(mock_agent):
@@ -91,3 +89,36 @@ async def test_reflect_unknown_provider(mock_agent):
     with patch("core.config.AI_PROVIDER", "unknown_provider"):
         result = await mock_agent.reflect({})
         assert result is None
+
+@pytest.mark.asyncio
+async def test_reflect_cross_provider(mock_agent):
+    """
+    Test reflect when Agent is init with Gemini but Config wants to use Groq for reflection.
+    Should use Groq Key, NOT Agent's Gemini Key.
+    """
+    # 1. Init agent with Gemini (so self.api_key = 'gemini_key')
+    mock_agent.provider = 'gemini'
+    mock_agent.api_key = 'gemini_key'
+
+    # 2. Config says use Groq for reflection
+    with patch("core.config.AI_PROVIDER", "groq"), \
+         patch("core.config.GROQ_API_KEY", "groq_key_123"), \
+         patch("core.config.GROQ_MODEL", "llama-test"), \
+         patch("core.config.REFLECTION_ENABLED", True):
+        
+        mock_client = AsyncMock()
+        mock_response = MagicMock()
+        mock_response.choices[0].message.content = "I am Groq"
+        mock_client.chat.completions.create.return_value = mock_response
+
+        # Mock groq.AsyncGroq
+        with patch("groq.AsyncGroq", return_value=mock_client) as MockGroqLib:
+            # Execute
+            result = await mock_agent.reflect({"context": "test"})
+
+            # Assert
+            assert result == "I am Groq"
+            
+            # CRITICAL: Verify AsyncGroq was init with GROQ_API_KEY, not self.api_key
+            # The assert_called_once_with checks the arguments passed to constructor
+            MockGroqLib.assert_called_once_with(api_key="groq_key_123")

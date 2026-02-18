@@ -9,6 +9,8 @@ from typing import Any, Dict, List
 
 import feedparser
 
+_USER_AGENT = "Curupira-Bot/1.0 (RSS reader; +https://github.com/felipefernandes/curupira)"
+
 from core import config
 from skills.base import BaseSkill
 
@@ -60,14 +62,16 @@ class RssReadSkill(BaseSkill):
 
         try:
             feed = await asyncio.wait_for(
-                asyncio.to_thread(feedparser.parse, url),
+                asyncio.to_thread(feedparser.parse, url, agent=_USER_AGENT),
                 timeout=15,
             )
         except asyncio.TimeoutError:
             return {"error": f"Timeout ao buscar o feed: {url}"}
 
         if feed.bozo and not feed.entries:
-            return {"error": f"Não foi possível ler o feed: {url}"}
+            bozo_reason = str(getattr(feed, "bozo_exception", "unknown"))
+            logger.warning(f"Feed inválido ou inacessível: {url} — {bozo_reason}")
+            return {"error": f"Não foi possível ler o feed: {url}", "reason": bozo_reason}
 
         entries: List[Dict[str, str]] = []
         for entry in feed.entries[:limit]:

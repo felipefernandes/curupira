@@ -1,8 +1,10 @@
 import logging
 import json
 import os
+import re
+import uuid
 import asyncio
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from . import config
 import datetime
 from datetime import datetime
@@ -16,6 +18,10 @@ from skills.rss import RssReadSkill, RssListSkill
 
 class AgentBrain:
     """Agente responsável por gerenciar habilidades e integrações com APIs."""
+
+    # Compiled patterns for Llama-3 malformed tool call recovery
+    _RE_FUNC_PARENS = re.compile(r'<function=(\w+)\((.*?)\)></function>', re.DOTALL)
+    _RE_FUNC_ANGLES = re.compile(r'<function=(\w+)>(.*?)</function>', re.DOTALL)
     
     def __init__(self, provider: str, api_key: Optional[str] = None, model_name: str = "default"):
         """Inicializa o agente com provider e API key.
@@ -177,6 +183,31 @@ class AgentBrain:
             self.logger.error(f"Error executing {tool_name}: {e}")
             return json.dumps({"error": str(e)})
 
+    @staticmethod
+    def _parse_failed_generation(failed_gen: str) -> Optional[Tuple[str, dict]]:
+        """Parse a Groq failed_generation string into (fn_name, fn_args).
+
+        Returns None if the string does not contain a recognisable tool call.
+        """
+        if not failed_gen or '<function=' not in failed_gen:
+            return None
+
+        # <function=name(args)></function>
+        match = AgentBrain._RE_FUNC_PARENS.search(failed_gen)
+        if not match:
+            # <function=name>args</function>
+            match = AgentBrain._RE_FUNC_ANGLES.search(failed_gen)
+        if not match:
+            return None
+
+        fn_name = match.group(1)
+        try:
+            fn_args = json.loads(match.group(2))
+        except json.JSONDecodeError:
+            fn_args = {}
+
+        return fn_name, fn_args
+
     async def process(self, user_msg: str, context: Dict[str, Any], chat_history: str = "") -> str:
         """
         Main Agent Loop (Async).
@@ -299,8 +330,7 @@ class AgentBrain:
                     if "<function=" in content:
                         try:
                             # Regex to capture name and args: <function=name>(args)</function>
-                            import re
-                            match = re.search(r"<function=(\w+)>(.*?)</function>", content, re.DOTALL)
+                            match = self._RE_FUNC_ANGLES.search(content)
                             if match:
                                 fn_name = match.group(1)
                                 args_str = match.group(2)
@@ -318,7 +348,6 @@ class AgentBrain:
                                 
                                 # CRITICAL FIX: Rewrite history to look like a VALID tool call
                                 # Groq API rejects <function> tags in content on next turn
-                                import uuid
                                 fake_tool_id = f"call_{uuid.uuid4().hex[:8]}"
                                 
                                 # Create a synthetic assistant message with proper tool_calls
@@ -349,6 +378,39 @@ class AgentBrain:
                     return content
                         
                 except Exception as e:
+                    # Recover from Groq 400 "tool_use_failed" errors
+                    # Llama sometimes generates <function=name(args)></function>
+                    # which Groq rejects before returning the response.
+                    err_body = getattr(e, 'body', None) or {}
+                    failed_gen = err_body.get('error', {}).get('failed_generation', '') if isinstance(err_body, dict) else ''
+                    parsed = self._parse_failed_generation(failed_gen)
+                    if parsed:
+                        fn_name, fn_args = parsed
+                        self.logger.warning(f"Recovered tool call from failed_generation: {fn_name}")
+
+                        result_str = await self._execute_tool_call(fn_name, fn_args, context)
+
+                        fake_tool_id = f"call_{uuid.uuid4().hex[:8]}"
+                        messages.append({
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [{
+                                "id": fake_tool_id,
+                                "type": "function",
+                                "function": {
+                                    "name": fn_name,
+                                    "arguments": json.dumps(fn_args)
+                                }
+                            }]
+                        })
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": fake_tool_id,
+                            "name": fn_name,
+                            "content": result_str
+                        })
+                        continue  # Re-prompt with tool result
+
                     self.logger.error(f"Groq API Error: {e}")
                     return "Desculpe, tive um problema de conexão com meu cérebro digital."
 

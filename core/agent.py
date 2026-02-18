@@ -225,13 +225,18 @@ class AgentBrain:
         model = config.REFLECTION_MODEL
         use_groq = False
 
-        if config.GROQ_API_KEY:
+        if config.AI_PROVIDER == 'groq' and config.GROQ_API_KEY:
              client = self._get_groq_client()
              use_groq = True
+             model = config.GROQ_MODEL if hasattr(config, 'GROQ_MODEL') else "llama-3.3-70b-versatile"
         elif config.AI_PROVIDER == 'gemini':
              client = self._get_gemini_client()
-             model = config.GEMINI_MODEL # Fallback
+             model = config.GEMINI_MODEL
              use_groq = False
+        elif config.GROQ_API_KEY:
+             # FallbackLegacy behavior
+             client = self._get_groq_client()
+             use_groq = True
         
         if not client:
             return None
@@ -268,7 +273,7 @@ class AgentBrain:
                 from google.genai import types
                 response = await client.aio.models.generate_content(
                     model=model,
-                    contents=[types.Content(parts=[types.Part.from_text(f"{system_prompt}\n\n{user_content}")])],
+                    contents=[types.Content(parts=[types.Part(text=f"{system_prompt}\n\n{user_content}")])],
                     config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=100)
                 )
                 if response.candidates:

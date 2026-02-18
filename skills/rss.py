@@ -40,9 +40,9 @@ class RssReadSkill(BaseSkill):
         return {
             "type": "object",
             "properties": {
-                "url": {
+                "feed_identifier": {
                     "type": "string",
-                    "description": "The NAME of a configured feed (e.g. 'G1', 'TechCrunch'). Must be in config.py. Use 'rss_list' to see available options."
+                    "description": "The NAME of a configured feed (e.g. 'G1', 'TechCrunch') or a whitelisted URL. Use 'rss_list' to see options."
                 },
                 "limit": {
                     "type": "integer",
@@ -51,11 +51,11 @@ class RssReadSkill(BaseSkill):
                     )
                 }
             },
-            "required": ["url"]
+            "required": ["feed_identifier"]
         }
 
     async def execute(self, context: Dict[str, Any], **kwargs) -> Any:
-        feed_identifier: str = kwargs.get("url", "").strip()
+        feed_identifier: str = kwargs.get("feed_identifier", "").strip()
         limit: int = kwargs.get("limit", 5)
 
         # Input Validation

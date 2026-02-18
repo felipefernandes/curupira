@@ -10,12 +10,12 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
         
     async def test_execute_validation(self):
         # Test Empty Input
-        res_empty = await self.skill.execute({}, url="")
+        res_empty = await self.skill.execute({}, feed_identifier="")
         self.assertIn("error", res_empty)
         self.assertIn("Nome do feed", res_empty["error"])
 
         # Test Invalid Limit
-        res_limit = await self.skill.execute({}, url="TestFeed", limit=0)
+        res_limit = await self.skill.execute({}, feed_identifier="TestFeed", limit=0)
         self.assertIn("error", res_limit)
         self.assertIn("Limite", res_limit["error"])
 
@@ -30,7 +30,7 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
         mock_parse.return_value = mock_feed
         
         # Execute with NAME "TestFeed"
-        result = await self.skill.execute({}, url="TestFeed")
+        result = await self.skill.execute({}, feed_identifier="TestFeed")
         
         # Verify URL was resolved
         args, _ = mock_parse.call_args
@@ -49,7 +49,7 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
         mock_parse.return_value = mock_feed
         
         # Execute with NAME "testfeed" (lower case)
-        result = await self.skill.execute({}, url="testfeed")
+        result = await self.skill.execute({}, feed_identifier="testfeed")
         
         # Verify URL was resolved
         args, _ = mock_parse.call_args
@@ -66,7 +66,7 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
         mock_feed.entries = [{}]
         mock_parse.return_value = mock_feed
         
-        result = await self.skill.execute({}, url="TestFeed")
+        result = await self.skill.execute({}, feed_identifier="TestFeed")
         
         entry = result['entries'][0]
         self.assertEqual(entry['title'], "Sem título")
@@ -83,7 +83,7 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
         mock_parse.return_value = mock_feed
         
         # Default limit should be 5
-        result = await self.skill.execute({}, url="TestFeed")
+        result = await self.skill.execute({}, feed_identifier="TestFeed")
         
         self.assertEqual(len(result['entries']), 5)
         self.assertEqual(result['entries'][0]['title'], "Entry 0")
@@ -92,7 +92,7 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
     async def test_execute_with_url_blocked(self, mock_parse):
         # Arbitrary URL should now fail
         url = "http://direct.url.com/rss"
-        result = await self.skill.execute({}, url=url)
+        result = await self.skill.execute({}, feed_identifier=url)
         
         # Verify it was BLOCKED (not parsed)
         self.assertIn("error", result)
@@ -109,7 +109,7 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
         mock_parse.return_value = mock_feed
         
         # Use a VALID name so it passes security check
-        result = await self.skill.execute({}, url="TestFeed")
+        result = await self.skill.execute({}, feed_identifier="TestFeed")
         
         self.assertIn("error", result)
         self.assertIn("Connection Refused", str(result))
@@ -125,7 +125,7 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
 
         mock_wait_for.side_effect = side_effect
         
-        result = await self.skill.execute({}, url="TestFeed")
+        result = await self.skill.execute({}, feed_identifier="TestFeed")
         
         self.assertIn("error", result)
         self.assertIn("Timeout", result["error"])

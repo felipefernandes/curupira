@@ -84,6 +84,9 @@ else:
 # RSS Configuration
 RSS_FEEDS_DEFAULT: Dict[str, str] = {
     "G1": "https://g1.globo.com/rss/g1/",
+    "G1 Brasil": "https://g1.globo.com/rss/g1/brasil/",
+    "G1 Tecnologia": "https://g1.globo.com/rss/g1/tecnologia/",
+    "Folha de São Paulo": "https://feeds.folha.uol.com.br/emcimadahora/rss091.xml",
     "TechCrunch": "https://techcrunch.com/feed/",
     "Hacker News": "https://hnrss.org/frontpage",
 }
@@ -102,3 +105,7 @@ if _rss_env.strip():
         RSS_FEEDS = RSS_FEEDS_DEFAULT.copy()
 else:
     RSS_FEEDS = RSS_FEEDS_DEFAULT.copy()
+
+# Heartbeat Reflection Configuration
+REFLECTION_ENABLED = os.getenv("REFLECTION_ENABLED", "true").lower() == "true"
+REFLECTION_MODEL = os.getenv("REFLECTION_MODEL", "llama-3.3-70b-versatile") # Default to fast/smart Groq model

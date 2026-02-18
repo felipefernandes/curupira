@@ -38,9 +38,9 @@ brain.register_skill(DeleteReminderSkill(reminder_manager))
 brain.register_skill(UpdateReminderSkill(reminder_manager))
 
 # Skill: Hardware Monitoring
-# Skill: Hardware Monitoring
 from skills.hardware import HardwareMonitoringSkill
-brain.register_skill(HardwareMonitoringSkill())
+hardware_skill = HardwareMonitoringSkill()
+brain.register_skill(hardware_skill)
 
 # Skill: Time
 from skills.time import GetTimeSkill
@@ -172,8 +172,45 @@ async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
         logging.info(f"Skipping reminder {reminder_id} (Status: {status})")
 
 async def system_heartbeat(context: ContextTypes.DEFAULT_TYPE):
-    """Logs a heartbeat message to ensure system is alive."""
-    logging.info("💓 Status Heartbeat: Online. System is healthy.")
+    """
+    Heartbeat + Reflection Loop.
+    Logs status and checks if the Agent wants to speak proactively.
+    """
+    logging.info("💓 Status Heartbeat: Online.")
+    
+    if not config.REFLECTION_ENABLED:
+        return
+
+    try:
+        # 1. Gather Context (Lightweight)
+        hw_status = await hardware_skill.execute({})
+        now = datetime.now()
+        
+        reflection_context = {
+            "time": now.strftime("%Y-%m-%d %H:%M:%S"),
+            "hour": now.hour,
+            "hardware": hw_status.get("metrics", {}),
+            # "reminders": await reminder_manager.get_active_count() # Future optimization
+        }
+
+        # 2. Reflect
+        msg = await brain.reflect(reflection_context)
+
+        # 3. Act
+        if msg:
+            logging.info(f"🔔 Proactive Reflection Triggered: {msg}")
+            # Send to authorized user
+            if config.AUTHORIZED_USER_ID != 0:
+                await context.bot.send_message(
+                    chat_id=config.AUTHORIZED_USER_ID, 
+                    text=f"🧙‍♂️ *Curupira (Reflexão):*\n{msg}",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+        else:
+            logging.info("🤫 Reflection: SILENCE")
+
+    except Exception as e:
+        logging.error(f"Heartbeat Reflection Error: {e}")
 
 async def post_init(application: Application):
     await memory_manager.init_db()

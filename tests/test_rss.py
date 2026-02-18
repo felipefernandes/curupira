@@ -19,6 +19,22 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
         self.assertIn("error", res_limit)
         self.assertIn("Limite", res_limit["error"])
 
+    async def test_execute_string_limit_conversion(self):
+        # Test Limit as String (LLM behavior)
+        # Should NOT raise TypeError, but cast to int
+        with patch('skills.rss.config.RSS_FEEDS', {"TestFeed": "http://example.com/feed"}), \
+             patch('skills.rss.feedparser.parse') as mock_parse:
+            
+            mock_feed = MagicMock()
+            mock_feed.entries = []
+            mock_parse.return_value = mock_feed
+            
+            # Passing string "5" should work
+            try:
+                await self.skill.execute({}, feed_identifier="TestFeed", limit="5")
+            except TypeError:
+                self.fail("TypeError raised when limit is a string")
+
     @patch('core.config.RSS_FEEDS', {"TestFeed": "http://example.com/feed"})
     @patch('skills.rss.feedparser.parse')
     async def test_execute_with_name_resolution(self, mock_parse):
@@ -97,6 +113,8 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
         # Verify it was BLOCKED (not parsed)
         self.assertIn("error", result)
         self.assertIn("Security", result.get("reason", ""))
+        # Verify available feeds are listed
+        self.assertIn("Opções disponíveis", result["error"])
         mock_parse.assert_not_called()
 
     @patch('core.config.RSS_FEEDS', {"TestFeed": "http://example.com/feed"})

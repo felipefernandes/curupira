@@ -1,7 +1,7 @@
 # reminders Specification
 
 ## Purpose
-TBD - created by archiving change implement-reminders. Update Purpose after archive.
+Defines the behavior and capabilities of the Reminder system, including natural language scheduling, persistence, management, and agentic integration.
 ## Requirements
 ### Requirement: Natural Language Reminders
 The system MUST be able to schedule reminders based on natural language requests from the user, executed via the AI model's intent detection.
@@ -62,6 +62,7 @@ The system SHALL execute the reminder by verifying its PENDING status and fetchi
 
 
 ### Requirement: Agentic Natural Language Reminders
+The system MUST support agentic capabilities to interpret natural language and invoke the appropriate reminder tools.
 
 #### Scenario: Agentic Invocation
 - **Given** the user says "Me lembre de comprar leite em 10 minutos"
@@ -70,6 +71,7 @@ The system SHALL execute the reminder by verifying its PENDING status and fetchi
 - **And** the System MUST return a confirmation message to the user: "Lembrete criado: comprar leite em 10 minutos."
 
 ### Requirement: Agentic Reminder Management
+The system MUST provide agentic tools for listing, updating, and deleting reminders via natural language interactions.
 
 #### Scenario: List Reminders Agentic
 - **Given** the user asks "quais meus lembretes?"

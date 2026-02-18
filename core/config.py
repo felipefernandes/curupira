@@ -102,3 +102,7 @@ if _rss_env.strip():
         RSS_FEEDS = RSS_FEEDS_DEFAULT.copy()
 else:
     RSS_FEEDS = RSS_FEEDS_DEFAULT.copy()
+
+# Heartbeat Reflection Configuration
+REFLECTION_ENABLED = os.getenv("REFLECTION_ENABLED", "true").lower() == "true"
+REFLECTION_MODEL = os.getenv("REFLECTION_MODEL", "llama-3.3-70b-versatile") # Default to fast/smart Groq model

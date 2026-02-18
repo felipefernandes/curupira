@@ -212,6 +212,80 @@ class AgentBrain:
 
         return fn_name, fn_args
 
+    async def reflect(self, context: Dict[str, Any]) -> Optional[str]:
+        """
+        Executes a reflection cycle to check if the agent should proactively speak.
+        Returns the message string or None if SILENCE.
+        """
+        if not config.REFLECTION_ENABLED:
+            return None
+
+        # Setup Client
+        client = None
+        model = config.REFLECTION_MODEL
+        use_groq = False
+
+        if config.GROQ_API_KEY:
+             client = self._get_groq_client()
+             use_groq = True
+        elif config.AI_PROVIDER == 'gemini':
+             client = self._get_gemini_client()
+             model = config.GEMINI_MODEL # Fallback
+             use_groq = False
+        
+        if not client:
+            return None
+
+        # Construct Prompt
+        system_prompt = (
+            "You are the Guardian of the System (Curupira)."
+            "Analyze the provided context (Time, Hardware, State)."
+            "Decide if you MUST say something to the user."
+            "CRITERIA:"
+            "1. If everything is normal -> Output 'SILENCE' (strict)."
+            "2. If hardware is critical (Temp > 80C, RAM > 90%) -> Warn user."
+            "3. If it's a special time (e.g. 08:00 AM) -> Maybe say 'Bom dia'."
+            "OUTPUT FORMAT: Just the message text OR the word 'SILENCE'. No JSON. No markdown."
+        )
+
+        user_content = f"Context: {json.dumps(context, indent=2, ensure_ascii=False)}"
+
+        try:
+            if use_groq:
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content}
+                ]
+                response = await client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    max_tokens=100,
+                    temperature=0.0 # Strict
+                )
+                result = response.choices[0].message.content.strip()
+            else:
+                # Gemini Fallback
+                from google.genai import types
+                response = await client.aio.models.generate_content(
+                    model=model,
+                    contents=[types.Content(parts=[types.Part.from_text(f"{system_prompt}\n\n{user_content}")])],
+                    config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=100)
+                )
+                if response.candidates:
+                    result = response.candidates[0].content.parts[0].text.strip()
+                else:
+                    result = "SILENCE"
+
+            # Filter Logic
+            if "SILENCE" in result.upper() or len(result) < 3:
+                return None
+            
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Reflection Error: {e}")
+            return None
+
     async def process(self, user_msg: str, context: Dict[str, Any], chat_history: str = "") -> str:
         """
         Main Agent Loop (Async).

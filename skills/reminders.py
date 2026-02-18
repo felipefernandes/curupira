@@ -184,13 +184,27 @@ class AddReminderSkill(BaseSkill):
     def _preprocess_time_string(self, text: str) -> str:
         """
         Pre-processes natural language time strings to fix common parser ambiguities.
-        
+
         Examples:
         - "amanhã as 10h" -> "amanhã às 10:00" (forces absolute time)
         - "as 10" -> "às 10:00"
         - "as 10h30" -> Unchanged (handled by dateparser)
+        - "toda manhã" / "de manhã" -> "amanhã às 08:00"
+        - "toda tarde" / "de tarde" -> "amanhã às 14:00"
+        - "toda noite" / "de noite" -> "amanhã às 20:00"
         """
         import re
+        # Map period-of-day expressions to a concrete time (preserves any leading date word)
+        _PERIOD_MAP = [
+            (r'(?i)\b(?:toda\s+)?manh[aã]\b', '08:00'),
+            (r'(?i)\b(?:toda\s+)?tarde\b', '14:00'),
+            (r'(?i)\b(?:toda\s+)?noite\b', '20:00'),
+        ]
+        for pattern, time_str in _PERIOD_MAP:
+            if re.search(pattern, text):
+                text = re.sub(pattern, f'amanhã às {time_str}', text)
+                break
+
         # Convert "as 10h", "às 10", "at 10H" to "às 10:00"
         # Uses logical grouping to match '10', '10h', '10 h' but avoid '10h30'
         text = re.sub(r'(?i)\b(?:as|às|at)\s+(\d{1,2})(?:\s*[hH])?\b', r'às \1:00', text)
@@ -251,13 +265,6 @@ class AddReminderSkill(BaseSkill):
                 friendly = target_time.strftime('%d/%m %H:%M')
                 return {"error": f"O horário {friendly} já passou. Por favor, escolha um horário futuro."}
                 
-            # Calculate delay
-            wait_seconds = (target_time - now).total_seconds()
-            delay_minutes = wait_seconds // 60
-            
-            # Store in DB
-            reminder_id = await self.manager.add_reminder(user_id, message, target_time)
-
             # Calculate delay in seconds
             delay_seconds = (target_time - now).total_seconds()
             

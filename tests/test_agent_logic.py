@@ -207,6 +207,15 @@ class TestParseFailedGeneration:
         assert fn_name == "get_weather"
         assert fn_args == {"city": "SP"}
 
+    def test_colon_quote_format(self):
+        """Match <function=name":args</function> (Llama colon-quote variant)."""
+        gen = '<function=add_reminder":{"message": "Notícias", "when": "08:00"}</function>'
+        result = AgentBrain._parse_failed_generation(gen)
+        assert result is not None
+        fn_name, fn_args = result
+        assert fn_name == "add_reminder"
+        assert fn_args == {"message": "Notícias", "when": "08:00"}
+
     def test_invalid_json_args(self):
         """Falls back to empty dict when args are not valid JSON."""
         gen = '<function=test(not-json)></function>'

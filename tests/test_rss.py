@@ -43,20 +43,17 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(args[0], "http://example.com/feed")
 
     @patch('skills.rss.feedparser.parse')
-    async def test_execute_with_url(self, mock_parse):
-        mock_feed = MagicMock()
-        mock_feed.bozo = False
-        mock_feed.entries = []
-        mock_feed.feed = {"title": "Direct URL"}
-        mock_parse.return_value = mock_feed
-        
+    async def test_execute_with_url_blocked(self, mock_parse):
+        # Arbitrary URL should now fail
         url = "http://direct.url.com/rss"
-        await self.skill.execute({}, url=url)
+        result = await self.skill.execute({}, url=url)
         
-        # Verify URL was passed directly
-        args, _ = mock_parse.call_args
-        self.assertEqual(args[0], url)
+        # Verify it was BLOCKED (not parsed)
+        self.assertIn("error", result)
+        self.assertIn("Security", result.get("reason", ""))
+        mock_parse.assert_not_called()
 
+    @patch('core.config.RSS_FEEDS', {"TestFeed": "http://example.com/feed"})
     @patch('skills.rss.feedparser.parse')
     async def test_execute_failure(self, mock_parse):
         mock_feed = MagicMock()
@@ -65,7 +62,8 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
         mock_feed.bozo_exception = Exception("Connection Refused")
         mock_parse.return_value = mock_feed
         
-        result = await self.skill.execute({}, url="http://bad.url")
+        # Use a VALID name so it passes security check
+        result = await self.skill.execute({}, url="TestFeed")
         
         self.assertIn("error", result)
         self.assertIn("Connection Refused", str(result))

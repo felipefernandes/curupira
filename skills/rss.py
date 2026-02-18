@@ -42,7 +42,7 @@ class RssReadSkill(BaseSkill):
             "properties": {
                 "url": {
                     "type": "string",
-                    "description": "The URL of the RSS/Atom feed OR the name of a configured feed (e.g. 'G1', 'TechCrunch'). Use 'rss_list' to see available names."
+                    "description": "The NAME of a configured feed (e.g. 'G1', 'TechCrunch'). Must be in config.py. Use 'rss_list' to see available options."
                 },
                 "limit": {
                     "type": "integer",
@@ -58,22 +58,26 @@ class RssReadSkill(BaseSkill):
         url_or_name: str = kwargs.get("url", "").strip()
         limit: int = kwargs.get("limit", 5)
 
-        # 1. Resolve URL from Config (Robustness)
+        # 1. Resolve URL from Config (Security: Whitelist Only)
+        url = None
+        
         # Check exact match
         if url_or_name in config.RSS_FEEDS:
             url = config.RSS_FEEDS[url_or_name]
             logger.info(f"Resolving feed name '{url_or_name}' to URL: {url}")
         else:
             # Check case-insensitive match
-            found = False
             for name, feed_url in config.RSS_FEEDS.items():
                 if name.lower() == url_or_name.lower():
                     url = feed_url
                     logger.info(f"Resolving feed name '{url_or_name}' to URL: {url}")
-                    found = True
                     break
-            if not found:
-                url = url_or_name
+        
+        if not url:
+            return {
+                "error": f"Feed não configurado: '{url_or_name}'",
+                "reason": "Security: Apenas feeds listados no 'config.py' são permitidos para evitar SSRF. Adicione a URL lá primeiro."
+            }
 
         logger.info(f"Fetching RSS feed: {url} (limit={limit})")
 

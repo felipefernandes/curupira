@@ -10,6 +10,7 @@ from skills.base import BaseSkill
 from .mcp_client import MCPClient
 from skills.mcp_skill import MCPSkill
 from skills.introspection import IntrospectionSkill
+from skills.rss import RssReadSkill, RssListSkill
 
 # NOTE: Providers are lazy-loaded to save memory on Raspberry Pi
 
@@ -38,12 +39,13 @@ class AgentBrain:
 
         # Built-in skills (always available)
         self.register_skill(IntrospectionSkill(self))
+        self.register_skill(RssReadSkill())
+        self.register_skill(RssListSkill())
 
     def register_skill(self, skill: BaseSkill):
         """Registers a skill to be used by the agent."""
         if skill.name in self.skills:
              self.logger.warning(f"Overwriting existing skill: {skill.name}")
-        self.skills[skill.name] = skill
         self.skills[skill.name] = skill
         self.logger.info(f"Registered skill: {skill.name}")
 

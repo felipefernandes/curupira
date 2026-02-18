@@ -5,6 +5,7 @@ python-dotenv
 aiosqlite
 httpx
 psutil
+feedparser==6.0.12
 dateparser
 iara-reviewer>=1.5.1
 mcp[cli]

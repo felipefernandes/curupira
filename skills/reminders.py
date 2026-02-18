@@ -203,7 +203,7 @@ class AddReminderSkill(BaseSkill):
         for pattern, time_str in _PERIOD_MAP:
             if re.search(pattern, text):
                 text = re.sub(pattern, f'amanhã às {time_str}', text)
-                break
+                break  # A reminder has a single target time; stop at the first period match
 
         # Convert "as 10h", "às 10", "at 10H" to "às 10:00"
         # Uses logical grouping to match '10', '10h', '10 h' but avoid '10h30'

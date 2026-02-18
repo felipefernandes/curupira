@@ -42,7 +42,7 @@ class RssReadSkill(BaseSkill):
             "properties": {
                 "url": {
                     "type": "string",
-                    "description": "The URL of the RSS/Atom feed."
+                    "description": "The URL of the RSS/Atom feed OR the name of a configured feed (e.g. 'G1', 'TechCrunch'). Use 'rss_list' to see available names."
                 },
                 "limit": {
                     "type": "integer",
@@ -55,8 +55,25 @@ class RssReadSkill(BaseSkill):
         }
 
     async def execute(self, context: Dict[str, Any], **kwargs) -> Any:
-        url: str = kwargs["url"]
+        url_or_name: str = kwargs.get("url", "").strip()
         limit: int = kwargs.get("limit", 5)
+
+        # 1. Resolve URL from Config (Robustness)
+        # Check exact match
+        if url_or_name in config.RSS_FEEDS:
+            url = config.RSS_FEEDS[url_or_name]
+            logger.info(f"Resolving feed name '{url_or_name}' to URL: {url}")
+        else:
+            # Check case-insensitive match
+            found = False
+            for name, feed_url in config.RSS_FEEDS.items():
+                if name.lower() == url_or_name.lower():
+                    url = feed_url
+                    logger.info(f"Resolving feed name '{url_or_name}' to URL: {url}")
+                    found = True
+                    break
+            if not found:
+                url = url_or_name
 
         logger.info(f"Fetching RSS feed: {url} (limit={limit})")
 

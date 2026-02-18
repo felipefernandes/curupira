@@ -18,6 +18,10 @@ from skills.rss import RssReadSkill, RssListSkill
 
 class AgentBrain:
     """Agente responsável por gerenciar habilidades e integrações com APIs."""
+
+    # Compiled patterns for Llama-3 malformed tool call recovery
+    _RE_FUNC_PARENS = re.compile(r'<function=(\w+)\((.*?)\)></function>', re.DOTALL)
+    _RE_FUNC_ANGLES = re.compile(r'<function=(\w+)>(.*?)</function>', re.DOTALL)
     
     def __init__(self, provider: str, api_key: Optional[str] = None, model_name: str = "default"):
         """Inicializa o agente com provider e API key.
@@ -189,10 +193,10 @@ class AgentBrain:
             return None
 
         # <function=name(args)></function>
-        match = re.search(r'<function=(\w+)\((.*?)\)></function>', failed_gen, re.DOTALL)
+        match = AgentBrain._RE_FUNC_PARENS.search(failed_gen)
         if not match:
             # <function=name>args</function>
-            match = re.search(r'<function=(\w+)>(.*?)</function>', failed_gen, re.DOTALL)
+            match = AgentBrain._RE_FUNC_ANGLES.search(failed_gen)
         if not match:
             return None
 
@@ -326,7 +330,7 @@ class AgentBrain:
                     if "<function=" in content:
                         try:
                             # Regex to capture name and args: <function=name>(args)</function>
-                            match = re.search(r"<function=(\w+)>(.*?)</function>", content, re.DOTALL)
+                            match = self._RE_FUNC_ANGLES.search(content)
                             if match:
                                 fn_name = match.group(1)
                                 args_str = match.group(2)

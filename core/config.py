@@ -84,6 +84,9 @@ else:
 # RSS Configuration
 RSS_FEEDS_DEFAULT: Dict[str, str] = {
     "G1": "https://g1.globo.com/rss/g1/",
+    "G1 Brasil": "https://g1.globo.com/rss/g1/brasil/",
+    "G1 Tecnologia": "https://g1.globo.com/rss/g1/tecnologia/",
+    "Folha de São Paulo": "https://feeds.folha.uol.com.br/emcimadahora/rss091.xml",
     "TechCrunch": "https://techcrunch.com/feed/",
     "Hacker News": "https://hnrss.org/frontpage",
 }

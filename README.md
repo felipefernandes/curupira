@@ -20,7 +20,7 @@ Baseado na **Arquitetura da Restrição** e no **Conceito Diet**, ele transforma
 *   **🌦️ Previsão do Tempo**: Pergunte *"Vai chover?"* e ele verifica a previsão local (Open-Meteo) para você.
 *   **🔌 Multi-Provedor de IA**: Suporte nativo para **Groq** (LLaMA 3 - *default para velocidade*) e **Google Gemini** (Flash - *para janelas de contexto maiores*).
 *   **🌡️ Monitoramento de Hardware**: Pergunte *"Como está o sistema?"* para ver uso de CPU, RAM, Disco e Temperatura do Raspberry Pi em tempo real.
-*   **📰 RSS Reader**: Peça *"Quais são as notícias de hoje?"* e o Curupira busca as últimas manchetes de feeds RSS/Atom configurados — ou de qualquer URL que você informar.
+*   **📰 RSS Reader**: Peça *"Quais são as notícias de hoje?"* e o Curupira busca as últimas manchetes de feeds RSS/Atom configurados.
 
 ## 🛠️ Tecnologias
 

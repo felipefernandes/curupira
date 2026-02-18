@@ -40,9 +40,9 @@ class RssReadSkill(BaseSkill):
         return {
             "type": "object",
             "properties": {
-                "url": {
+                "feed_identifier": {
                     "type": "string",
-                    "description": "The URL of the RSS/Atom feed."
+                    "description": "The NAME of a configured feed (e.g. 'G1', 'TechCrunch') or a whitelisted URL. Use 'rss_list' to see options."
                 },
                 "limit": {
                     "type": "integer",
@@ -51,12 +51,40 @@ class RssReadSkill(BaseSkill):
                     )
                 }
             },
-            "required": ["url"]
+            "required": ["feed_identifier"]
         }
 
     async def execute(self, context: Dict[str, Any], **kwargs) -> Any:
-        url: str = kwargs["url"]
+        feed_identifier: str = kwargs.get("feed_identifier", "").strip()
         limit: int = kwargs.get("limit", 5)
+
+        # Input Validation
+        if not feed_identifier:
+            return {"error": "Nome do feed não fornecido.", "reason": "Input Validation: Empty identifier."}
+
+        if limit < 1:
+            return {"error": "Limite inválido.", "reason": "Input Validation: Limit must be >= 1."}
+
+        # 1. Resolve URL from Config (Security: Whitelist Only)
+        url = None
+        
+        # Check exact match
+        if feed_identifier in config.RSS_FEEDS:
+            url = config.RSS_FEEDS[feed_identifier]
+            logger.info(f"Resolving feed '{feed_identifier}' to URL: {url}")
+        else:
+            # Check case-insensitive match (O(N) is fine for small config)
+            for name, feed_url in config.RSS_FEEDS.items():
+                if name.lower() == feed_identifier.lower():
+                    url = feed_url
+                    logger.info(f"Resolving feed '{feed_identifier}' to URL: {url}")
+                    break
+        
+        if not url:
+            return {
+                "error": f"Feed não configurado: '{feed_identifier}'",
+                "reason": "Security: Apenas feeds listados no 'config.py' são permitidos para evitar SSRF."
+            }
 
         logger.info(f"Fetching RSS feed: {url} (limit={limit})")
 

@@ -74,11 +74,64 @@ def test_mcp_config_env_fallback(monkeypatch):
     """Test loading MCP config from env var when file is missing"""
     mock_env_config = '{"server2": {"command": "python"}}'
     monkeypatch.setenv("MCP_SERVERS_CONFIG", mock_env_config)
-    
+
     with patch("pathlib.Path.is_file", return_value=False):
         if 'core.config' in sys.modules:
             importlib.reload(sys.modules['core.config'])
         from core import config
-        
+
         assert "server2" in config.MCP_SERVERS
         assert config.MCP_SERVERS["server2"]["command"] == "python"
+
+
+# --- RSS Configuration Tests ---
+
+def test_rss_feeds_defaults(monkeypatch):
+    """Test RSS_FEEDS uses defaults when env var is not set."""
+    monkeypatch.delenv("RSS_FEEDS_JSON", raising=False)
+
+    with patch("dotenv.load_dotenv"), patch("pathlib.Path.is_file", return_value=False):
+        if 'core.config' in sys.modules:
+            importlib.reload(sys.modules['core.config'])
+        from core import config
+
+    assert "G1" in config.RSS_FEEDS
+    assert "TechCrunch" in config.RSS_FEEDS
+    assert "Hacker News" in config.RSS_FEEDS
+
+
+def test_rss_feeds_from_env(monkeypatch):
+    """Test RSS_FEEDS loads from RSS_FEEDS_JSON env var."""
+    custom = '{"MyBlog": "https://myblog.com/feed"}'
+    monkeypatch.setenv("RSS_FEEDS_JSON", custom)
+
+    with patch("dotenv.load_dotenv"), patch("pathlib.Path.is_file", return_value=False):
+        if 'core.config' in sys.modules:
+            importlib.reload(sys.modules['core.config'])
+        from core import config
+
+    assert config.RSS_FEEDS == {"MyBlog": "https://myblog.com/feed"}
+
+
+def test_rss_feeds_invalid_json(monkeypatch):
+    """Test RSS_FEEDS falls back to defaults on invalid JSON."""
+    monkeypatch.setenv("RSS_FEEDS_JSON", "not-json{{{")
+
+    with patch("dotenv.load_dotenv"), patch("pathlib.Path.is_file", return_value=False):
+        if 'core.config' in sys.modules:
+            importlib.reload(sys.modules['core.config'])
+        from core import config
+
+    assert "G1" in config.RSS_FEEDS
+
+
+def test_rss_feeds_wrong_type(monkeypatch):
+    """Test RSS_FEEDS falls back to defaults when JSON is not a dict."""
+    monkeypatch.setenv("RSS_FEEDS_JSON", '["a", "b"]')
+
+    with patch("dotenv.load_dotenv"), patch("pathlib.Path.is_file", return_value=False):
+        if 'core.config' in sys.modules:
+            importlib.reload(sys.modules['core.config'])
+        from core import config
+
+    assert "G1" in config.RSS_FEEDS

@@ -3,6 +3,7 @@ Skill RSS: leitura e listagem de RSS/Atom feeds.
 Ref: Issue #54 - https://github.com/felipefernandes/curupira/issues/54
 """
 
+import asyncio
 import logging
 from typing import Any, Dict, List
 
@@ -57,7 +58,13 @@ class RssReadSkill(BaseSkill):
 
         logger.info(f"Fetching RSS feed: {url} (limit={limit})")
 
-        feed = feedparser.parse(url)
+        try:
+            feed = await asyncio.wait_for(
+                asyncio.to_thread(feedparser.parse, url),
+                timeout=15,
+            )
+        except asyncio.TimeoutError:
+            return {"error": f"Timeout ao buscar o feed: {url}"}
 
         if feed.bozo and not feed.entries:
             return {"error": f"Não foi possível ler o feed: {url}"}

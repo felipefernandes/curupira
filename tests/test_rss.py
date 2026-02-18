@@ -7,6 +7,17 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.skill = RssReadSkill()
         
+    async def test_execute_validation(self):
+        # Test Empty Input
+        res_empty = await self.skill.execute({}, url="")
+        self.assertIn("error", res_empty)
+        self.assertIn("Nome do feed", res_empty["error"])
+
+        # Test Invalid Limit
+        res_limit = await self.skill.execute({}, url="TestFeed", limit=0)
+        self.assertIn("error", res_limit)
+        self.assertIn("Limite", res_limit["error"])
+
     @patch('core.config.RSS_FEEDS', {"TestFeed": "http://example.com/feed"})
     @patch('skills.rss.feedparser.parse')
     async def test_execute_with_name_resolution(self, mock_parse):

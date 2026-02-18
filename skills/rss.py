@@ -55,28 +55,35 @@ class RssReadSkill(BaseSkill):
         }
 
     async def execute(self, context: Dict[str, Any], **kwargs) -> Any:
-        url_or_name: str = kwargs.get("url", "").strip()
+        feed_identifier: str = kwargs.get("url", "").strip()
         limit: int = kwargs.get("limit", 5)
+
+        # Input Validation
+        if not feed_identifier:
+            return {"error": "Nome do feed não fornecido.", "reason": "Input Validation: Empty identifier."}
+
+        if limit < 1:
+            return {"error": "Limite inválido.", "reason": "Input Validation: Limit must be >= 1."}
 
         # 1. Resolve URL from Config (Security: Whitelist Only)
         url = None
         
         # Check exact match
-        if url_or_name in config.RSS_FEEDS:
-            url = config.RSS_FEEDS[url_or_name]
-            logger.info(f"Resolving feed name '{url_or_name}' to URL: {url}")
+        if feed_identifier in config.RSS_FEEDS:
+            url = config.RSS_FEEDS[feed_identifier]
+            logger.info(f"Resolving feed '{feed_identifier}' to URL: {url}")
         else:
-            # Check case-insensitive match
+            # Check case-insensitive match (O(N) is fine for small config)
             for name, feed_url in config.RSS_FEEDS.items():
-                if name.lower() == url_or_name.lower():
+                if name.lower() == feed_identifier.lower():
                     url = feed_url
-                    logger.info(f"Resolving feed name '{url_or_name}' to URL: {url}")
+                    logger.info(f"Resolving feed '{feed_identifier}' to URL: {url}")
                     break
         
         if not url:
             return {
-                "error": f"Feed não configurado: '{url_or_name}'",
-                "reason": "Security: Apenas feeds listados no 'config.py' são permitidos para evitar SSRF. Adicione a URL lá primeiro."
+                "error": f"Feed não configurado: '{feed_identifier}'",
+                "reason": "Security: Apenas feeds listados no 'config.py' são permitidos para evitar SSRF."
             }
 
         logger.info(f"Fetching RSS feed: {url} (limit={limit})")

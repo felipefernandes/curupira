@@ -81,4 +81,24 @@ else:
     except json.JSONDecodeError:
         logger.warning("MCP_SERVERS_CONFIG is not valid JSON!")
 
+# RSS Configuration
+RSS_FEEDS_DEFAULT: Dict[str, str] = {
+    "G1": "https://g1.globo.com/rss/g1/",
+    "TechCrunch": "https://techcrunch.com/feed/",
+    "Hacker News": "https://hnrss.org/frontpage",
+}
 
+_rss_env = os.getenv("RSS_FEEDS_JSON", "")
+if _rss_env.strip():
+    try:
+        _parsed = json.loads(_rss_env)
+        if isinstance(_parsed, dict):
+            RSS_FEEDS = _parsed
+        else:
+            logger.warning("RSS_FEEDS_JSON must be a dict. Using defaults.")
+            RSS_FEEDS = RSS_FEEDS_DEFAULT.copy()
+    except json.JSONDecodeError:
+        logger.warning("RSS_FEEDS_JSON is not valid JSON. Using defaults.")
+        RSS_FEEDS = RSS_FEEDS_DEFAULT.copy()
+else:
+    RSS_FEEDS = RSS_FEEDS_DEFAULT.copy()

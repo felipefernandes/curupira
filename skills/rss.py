@@ -56,7 +56,10 @@ class RssReadSkill(BaseSkill):
 
     async def execute(self, context: Dict[str, Any], **kwargs) -> Any:
         feed_identifier: str = kwargs.get("feed_identifier", "").strip()
-        limit: int = kwargs.get("limit", 5)
+        try:
+            limit = int(kwargs.get("limit", 5))
+        except (ValueError, TypeError):
+            limit = 5
 
         # Input Validation
         if not feed_identifier:
@@ -81,8 +84,9 @@ class RssReadSkill(BaseSkill):
                     break
         
         if not url:
+            available_feeds = ", ".join(config.RSS_FEEDS.keys())
             return {
-                "error": f"Feed não configurado: '{feed_identifier}'",
+                "error": f"Feed não configurado: '{feed_identifier}'. Opções disponíveis: {available_feeds}",
                 "reason": "Security: Apenas feeds listados no 'config.py' são permitidos para evitar SSRF."
             }
 

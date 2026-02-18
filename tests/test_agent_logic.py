@@ -264,3 +264,17 @@ async def test_groq_failed_generation_recovery(agent, mock_groq_client):
 
     assert response == "Here are the latest articles."
     mock_skill.execute.assert_called_once_with({}, url="https://example.com/feed", limit=5)
+
+
+@pytest.mark.asyncio
+async def test_groq_generic_error_returns_fallback(agent, mock_groq_client):
+    """Test that a generic Groq error (no failed_generation) returns the fallback message."""
+    error = Exception("Network error")
+    # No .body attribute → falls through to generic handler
+
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.side_effect = error
+
+    response = await agent.process("Hello", {})
+
+    assert "problema" in response.lower() or "desculpe" in response.lower()

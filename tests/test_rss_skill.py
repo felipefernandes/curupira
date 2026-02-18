@@ -123,6 +123,7 @@ class TestRssListSkill:
 
     def test_skill_properties(self):
         assert self.skill.name == "rss_list"
+        assert self.skill.display_name  # triggers the property
         assert self.skill.parameters["properties"] == {}
 
     @pytest.mark.asyncio

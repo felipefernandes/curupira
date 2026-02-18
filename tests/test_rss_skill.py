@@ -65,13 +65,16 @@ class TestRssReadSkill:
 
     @pytest.mark.asyncio
     async def test_read_feed_bozo_no_entries(self):
-        """Test error handling for unparseable feed."""
+        """Test error handling for unparseable feed includes error and reason."""
         mock_feed = _make_mock_feed(bozo=True, entries=[])
+        mock_feed.bozo_exception = Exception("Not a valid RSS feed")
 
         with patch("skills.rss.asyncio.to_thread", new_callable=AsyncMock, return_value=mock_feed):
             result = await self.skill.execute({}, url="https://bad.example.com/feed")
 
         assert "error" in result
+        assert "reason" in result
+        assert "Not a valid RSS feed" in result["reason"]
 
     @pytest.mark.asyncio
     async def test_read_feed_bozo_with_entries(self):

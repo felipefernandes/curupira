@@ -276,8 +276,9 @@ class AgentBrain:
                 else:
                     result = "SILENCE"
 
-            # Filter Logic
-            if "SILENCE" in result.upper() or len(result) < 3:
+            # Filter Logic - Robust Check
+            clean_result = result.strip().upper().replace('"', '').replace("'", "").rstrip('.')
+            if clean_result == "SILENCE" or len(clean_result) < 2:
                 return None
             
             return result

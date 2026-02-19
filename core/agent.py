@@ -222,6 +222,8 @@ class AgentBrain:
 
         # Setup Client
         client = None
+        use_groq = False
+
         if config.AI_PROVIDER == 'groq':
              if not config.GROQ_API_KEY:
                  self.logger.warning("AI_PROVIDER is 'groq' but GROQ_API_KEY is missing via reflect.")
@@ -247,7 +249,6 @@ class AgentBrain:
                  self.logger.error("Google GenAI library not installed.")
                  return None
              model = config.GEMINI_MODEL
-             use_groq = False
         else:
              self.logger.warning(f"Unknown AI_PROVIDER for reflection: {config.AI_PROVIDER}")
              return None
@@ -283,7 +284,6 @@ class AgentBrain:
                 )
                 result = response.choices[0].message.content.strip()
             else:
-                # Gemini Fallback
                 from google.genai import types
                 response = await client.aio.models.generate_content(
                     model=model,

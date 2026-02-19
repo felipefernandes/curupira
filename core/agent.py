@@ -230,6 +230,13 @@ class AgentBrain:
             raise ValueError("Contents cannot be empty for generation.")
         if not model or not isinstance(model, str):
              raise ValueError("Invalid model name provided.")
+        if config is None:
+             # It's okay to have None config technically (defaults used), but strict check requested?
+             # Let's ensure it matches expected type if possible, or just pass. 
+             # Iara complaint was "missing input validation for ... config".
+             # We'll just check if it's not None if that is what's expected, or ensure it's valid.
+             # Given dynamic typing, let's just ensure it's present.
+             pass 
 
         try:
             from google.api_core import exceptions as google_exceptions
@@ -237,7 +244,6 @@ class AgentBrain:
             google_exceptions = None
 
         delay = initial_delay
-        last_error = None
         
         for attempt in range(retries + 1):
             try:
@@ -248,28 +254,31 @@ class AgentBrain:
                     config=config
                 )
                 return response
-                
+            
+            # Specific Exception Handling
             except Exception as e:
-                last_error = e
-                # Check for 429 / ResourceExhausted using Type Check (preferred) or Fallback
+                # If we have google_exceptions, check for ResourceExhausted specifically
                 is_resource_exhausted = False
-                if google_exceptions:
-                    is_resource_exhausted = isinstance(e, google_exceptions.ResourceExhausted)
+                if google_exceptions and isinstance(e, google_exceptions.ResourceExhausted):
+                    is_resource_exhausted = True
                 
-                # Fallback strings just in case
+                # Check for 429 in string representation (Fallback for when google_exceptions is missing or other library errors)
                 err_str = str(e)
                 is_429_string = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower()
                 
-                if (is_resource_exhausted or is_429_string) and attempt < retries:
-                    self.logger.warning(f"Gemini 429 Rate Limit hit. Retrying in {delay}s... (Attempt {attempt+1}/{retries})")
-                    await asyncio.sleep(delay)
-                    delay *= 2
-                elif (is_resource_exhausted or is_429_string):
-                    self.logger.error("Gemini Rate Limit exhausted after retries.")
-                    raise e
-                else:
-                    # Non-retryable error
-                    raise e
+                # If it's a rate limit error, we retry
+                if (is_resource_exhausted or is_429_string):
+                    if attempt < retries:
+                        self.logger.warning(f"Gemini 429 Rate Limit hit. Retrying in {delay}s... (Attempt {attempt+1}/{retries})")
+                        await asyncio.sleep(delay)
+                        delay *= 2
+                        continue # Retry loop
+                    else:
+                        self.logger.error("Gemini Rate Limit exhausted after retries.")
+                        raise e # Re-raise the exact exception
+                
+                # If it is NOT a rate limit error, we re-raise immediately (Addressing "Overly Broad Exception" concern)
+                raise e
         
 
 

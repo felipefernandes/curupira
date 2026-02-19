@@ -1,0 +1,38 @@
+author:	github-actions
+association:	none
+edited:	false
+status:	none
+--
+## 🧜‍♀️ Revisão da Iara
+
+🐛 **Bug**: None found. Logic for feed name resolution (exact match → case-insensitive → fallback) is correct and handles edge cases like empty strings.  
+🔒 **Security**: ⚠️ **Risk** - Unvalidated input could enable SSRF attacks. The code accepts arbitrary strings as URLs without checking if they're safe (e.g., `http://localhost`, `file://`, or internal IPs). Add validation to reject non-URL inputs unless they match a configured feed name.  
+⚡ **Performance**: None. Case-insensitive search is O(n) but acceptable for small config dictionaries.  
+🧹 **Clean Code**: ✅ Good. Logging clarifies resolution steps. Consider renaming `url_or_name` to `feed_identifier` for clarity.  
+
+**Security Fix Recommendation**:  
+```python
+# Add validation before using as URL
+if not (url_or_name in config.RSS_FEEDS or validators.url(url_or_name)):
+    raise ValueError("Invalid feed identifier")
+```  
+
+✅ **Iara Approved**: Code is robust but requires input validation for security. Fix SSRF risk before shipping. 🧜‍♀️✨
+
+
+---
+*Iara é a guardiã do código do Curupira · Powered by OpenRouter (Free Models)*
+--
+author:	codecov
+association:	none
+edited:	false
+status:	none
+--
+## [Codecov](https://app.codecov.io/gh/felipefernandes/curupira/pull/74?dropdown=coverage&src=pr&el=h1&utm_medium=referral&utm_source=github&utm_content=comment&utm_campaign=pr+comments&utm_term=Felipe+Fernandes) Report
+:x: Patch coverage is `98.48485%` with `1 line` in your changes missing coverage. Please review.
+| [Files with missing lines](https://app.codecov.io/gh/felipefernandes/curupira/pull/74?dropdown=coverage&src=pr&el=tree&utm_medium=referral&utm_source=github&utm_content=comment&utm_campaign=pr+comments&utm_term=Felipe+Fernandes) | Patch % | Lines |
+|---|---|---|
+| [tests/test\_rss.py](https://app.codecov.io/gh/felipefernandes/curupira/pull/74?src=pr&el=tree&utm_medium=referral&utm_source=github&utm_content=comment&utm_campaign=pr+comments&utm_term=Felipe+Fernandes#diff-dGVzdHMvdGVzdF9yc3MucHk=) | 98.11% | [1 Missing :warning: ](https://app.codecov.io/gh/felipefernandes/curupira/pull/74?src=pr&el=tree&utm_medium=referral&utm_source=github&utm_content=comment&utm_campaign=pr+comments&utm_term=Felipe+Fernandes) |
+
+:loudspeaker: Thoughts on this report? [Let us know!](https://github.com/codecov/feedback/issues/255)
+--

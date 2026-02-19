@@ -27,7 +27,8 @@ def mock_groq_client():
 
 @pytest.fixture
 def agent():
-    return AgentBrain("groq", "fake_key", "fake_model")
+    with patch("core.agent.config.GROQ_API_KEY", "fake_key"):
+        return AgentBrain("groq", "fake_model")
 
 @pytest.mark.asyncio
 async def test_agent_initialization(agent):

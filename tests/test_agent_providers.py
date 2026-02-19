@@ -5,7 +5,8 @@ import sys
 
 @pytest.fixture
 def agent():
-    return AgentBrain("groq", "fake_key")
+    with patch("core.agent.config.GROQ_API_KEY", "fake_key"):
+        return AgentBrain("groq")
 
 # --- Groq Client Tests ---
 

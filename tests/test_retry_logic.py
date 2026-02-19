@@ -13,7 +13,7 @@ from core.agent import AgentBrain
 
 class TestRetryLogic(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        self.agent = AgentBrain(provider='gemini', api_key='dummy', model_name='gemini-2.5-flash')
+        self.agent = AgentBrain(provider='gemini', model_name='gemini-2.5-flash')
         # Mock logger to avoid clutter
         self.agent.logger = MagicMock()
 

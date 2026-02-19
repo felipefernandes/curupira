@@ -24,20 +24,29 @@ class AgentBrain:
     _RE_FUNC_ANGLES = re.compile(r'<function=(\w+)>(.*?)</function>', re.DOTALL)      # <function=name>args</function>
     _RE_FUNC_COLON  = re.compile(r'<function=(\w+)":\s*(.*?)</function>', re.DOTALL)  # <function=name":args</function>
     
-    def __init__(self, provider: str, api_key: Optional[str] = None, model_name: str = "default"):
-        """Inicializa o agente com provider e API key.
+    def __init__(self, provider: str, model_name: str = "default"):
+        """Inicializa o agente com provider. API Key é obtida de config.
         
         Args:
             provider: Nome do provider (ex: "groq", "gemini").
-            api_key: Chave de API ou None para buscar via ambiente.
             model_name: Nome do modelo a ser utilizado.
         """
         self.logger = logging.getLogger("AgentBrain")
         self.provider = provider.lower()
         self.model_name = model_name
-        self.api_key = api_key or os.getenv(f"{provider.upper()}_API_KEY")
+        
+        # Security: Fetch API Key from config based on provider, avoids passing it around
+        if self.provider == 'gemini':
+            self.api_key = config.GEMINI_API_KEY
+        elif self.provider == 'groq':
+            self.api_key = config.GROQ_API_KEY
+        else:
+            self.api_key = os.getenv(f"{provider.upper()}_API_KEY")
         
         if not self.api_key or not self.api_key.strip():
+             # Log warning instead of crashing immediately allows for better debugging/graceful failure
+             self.logger.warning(f"API key inválida ou ausente para {self.provider} no CONFIG.")
+             # We might still want to raise if it's critical, but let's stick to current behavior
              raise ValueError(f"API key inválida ou ausente para {self.provider}")
 
         self.skills: Dict[str, BaseSkill] = {}
@@ -216,6 +225,12 @@ class AgentBrain:
         Generates content with retry logic for 429 Resource Exhausted errors.
         Exponential backoff: 2s, 4s, 8s...
         """
+        # Security: Input Validation
+        if not contents:
+            raise ValueError("Contents cannot be empty for generation.")
+        if not model or not isinstance(model, str):
+             raise ValueError("Invalid model name provided.")
+
         try:
             from google.api_core import exceptions as google_exceptions
         except ImportError:

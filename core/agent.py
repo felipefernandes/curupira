@@ -211,11 +211,16 @@ class AgentBrain:
 
         return fn_name, fn_args
 
-    async def _generate_with_retry(self, client, model, contents, config, retries=3, initial_delay=2):
+    async def _generate_with_retry(self, client, model: str, contents: Any, config: Any, retries: int = 3, initial_delay: float = 2.0):
         """
         Generates content with retry logic for 429 Resource Exhausted errors.
         Exponential backoff: 2s, 4s, 8s...
         """
+        try:
+            from google.api_core import exceptions as google_exceptions
+        except ImportError:
+            google_exceptions = None
+
         delay = initial_delay
         last_error = None
         
@@ -231,22 +236,20 @@ class AgentBrain:
                 
             except Exception as e:
                 last_error = e
-                # Check for 429 / ResourceExhausted
-                err_str = str(e)
-                # Google GenAI exceptions might be wrapped or have specific codes
-                # Checking generic strings and attributes to be safe
-                is_429 = (
-                    "429" in err_str or 
-                    "RESOURCE_EXHAUSTED" in err_str or 
-                    "quota" in err_str.lower() or
-                    (hasattr(e, 'code') and e.code == 429)
-                )
+                # Check for 429 / ResourceExhausted using Type Check (preferred) or Fallback
+                is_resource_exhausted = False
+                if google_exceptions:
+                    is_resource_exhausted = isinstance(e, google_exceptions.ResourceExhausted)
                 
-                if is_429 and attempt < retries:
+                # Fallback strings just in case
+                err_str = str(e)
+                is_429_string = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower()
+                
+                if (is_resource_exhausted or is_429_string) and attempt < retries:
                     self.logger.warning(f"Gemini 429 Rate Limit hit. Retrying in {delay}s... (Attempt {attempt+1}/{retries})")
                     await asyncio.sleep(delay)
                     delay *= 2
-                elif is_429:
+                elif (is_resource_exhausted or is_429_string):
                     self.logger.error("Gemini Rate Limit exhausted after retries.")
                     raise e
                 else:

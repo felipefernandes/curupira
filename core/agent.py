@@ -253,7 +253,7 @@ class AgentBrain:
                     # Non-retryable error
                     raise e
         
-        raise last_error
+
 
 
     async def reflect(self, context: Dict[str, Any]) -> Optional[str]:

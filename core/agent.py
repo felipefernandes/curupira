@@ -143,7 +143,6 @@ class AgentBrain:
         if not self.skills:
             return None
         
-        # Lazy import types only when needed
         from google.genai import types
         
         declarations = []
@@ -269,7 +268,7 @@ class AgentBrain:
             "1. If everything is normal -> Output 'SILENCE' (strict)."
             "2. If hardware is critical (Temp > 80C, RAM > 90%) -> Warn user."
             "3. If it's a special time (e.g. 08:00 AM) -> Maybe say 'Bom dia'."
-            "OUTPUT FORMAT: Just the message text OR the word 'SILENCE'. No JSON. No markdown."
+            "OUTPUT FORMAT: strictly return the message text OR the single word 'SILENCE'. No JSON. No markdown. Do not include 'Reflexão:' prefix."
         )
 
         user_content = f"Context: {json.dumps(context, indent=2, ensure_ascii=False)}"
@@ -300,8 +299,16 @@ class AgentBrain:
                     result = "SILENCE"
 
             # Filter Logic - Robust Check
-            clean_result = result.strip().upper().replace('"', '').replace("'", "").rstrip('.')
-            if clean_result == "SILENCE" or len(clean_result) < 2:
+            clean_result = result.strip().upper()
+            
+            # Remove quotes and trailing punctuation
+            clean_result = clean_result.replace('"', '').replace("'", "").rstrip('.')
+            
+            # Expanded Silence Triggers - catches common hallucinations
+            silence_triggers = ["SILENCE", "SIL", "SILENCIO", "NOTHING", "NO", "NONE"]
+            
+            if clean_result in silence_triggers or len(clean_result) < 2:
+                self.logger.info(f"Reflection: SILENCE ({clean_result})")
                 return None
             
             return result

@@ -218,15 +218,35 @@ class AgentBrain:
 
         return fn_name, fn_args
 
-    async def _generate_with_retry(self, client, model: str, contents: Any, config: Any, retries: int = config.RETRY_ATTEMPTS, initial_delay: float = config.RETRY_INITIAL_DELAY):
+    def _is_retryable_error(self, e: Exception) -> bool:
+        """Determines if an exception is a retryable rate limit error."""
+        try:
+            from google.api_core import exceptions as google_exceptions
+            if isinstance(e, google_exceptions.ResourceExhausted):
+                return True
+        except ImportError:
+            pass
+
+        err_str = str(e).lower()
+        # More specific checks to avoid false positives
+        return "429" in err_str or "resource_exhausted" in err_str or "quota exceeded" in err_str
+
+    async def _generate_with_retry(self, client, model: str, contents: Any, config: Any, retries: Optional[int] = None, initial_delay: Optional[float] = None):
         """
         Generates content with retry logic for 429 Resource Exhausted errors.
         Exponential backoff: 2s, 4s, 8s...
         """
+        # Resolve defaults at runtime
+        # We access the module-level config imported as 'core_config' to avoid shadowing
+        from . import config as core_config
+        
+        retries = retries if retries is not None else core_config.RETRY_ATTEMPTS
+        initial_delay = initial_delay if initial_delay is not None else core_config.RETRY_INITIAL_DELAY
+
         # Segurança: Validação de Entrada
         if not contents:
             raise ValueError("Conteúdo vazio não permitido para geração.")
-        if not model or not isinstance(model, str):
+        if not model or not isinstance(model, str) or not model.strip():
              raise ValueError("Invalid model name provided.")
         
         allowed_config_types = (dict,)
@@ -238,12 +258,6 @@ class AgentBrain:
 
         if config is not None and not isinstance(config, allowed_config_types):
                  raise ValueError(f"Invalid config type: {type(config)}. Expected dict or GenerateContentConfig.") 
-
-        try:
-            from google.api_core import exceptions as google_exceptions
-        except ImportError:
-            google_exceptions = None
-
         
         delay = initial_delay
         
@@ -259,19 +273,8 @@ class AgentBrain:
                 )
                 return response
             
-            # Specific Exception Handling
             except Exception as e:
-                # If we have google_exceptions, check for ResourceExhausted specifically
-                is_resource_exhausted = False
-                if google_exceptions and isinstance(e, google_exceptions.ResourceExhausted):
-                    is_resource_exhausted = True
-                
-                # Check for 429 in string representation
-                err_str = str(e)
-                is_429_string = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower()
-                
-                # If it's a rate limit error, we retry
-                if (is_resource_exhausted or is_429_string):
+                if self._is_retryable_error(e):
                     if attempt < retries:
                         # Add Jitter: Random value between 0 and 1 second
                         jitter = random.uniform(0, 1)

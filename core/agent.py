@@ -245,6 +245,8 @@ class AgentBrain:
             google_exceptions = None
 
         
+        delay = initial_delay
+        
         # import random (Moved to top)
 
         for attempt in range(retries + 1):

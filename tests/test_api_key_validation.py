@@ -14,14 +14,14 @@ def test_api_key_validation_empty_string():
     with patch.dict(os.environ, {"GROQ_API_KEY": ""}, clear=True):
         # Also need to patch config if it was already loaded
         with patch("core.agent.config.GROQ_API_KEY", ""):
-            with pytest.raises(ValueError, match="API key inválida ou ausente"):
+            with pytest.raises(ValueError, match="API key não configurada"):
                 AgentBrain("groq")
 
 def test_api_key_validation_whitespace():
     """Valida que API keys com apenas espaços no ambiente são rejeitadas."""
     with patch.dict(os.environ, {"GROQ_API_KEY": "   "}, clear=True):
         with patch("core.agent.config.GROQ_API_KEY", "   "):
-            with pytest.raises(ValueError, match="API key inválida ou ausente"):
+            with pytest.raises(ValueError, match="API key não configurada"):
                 AgentBrain("groq")
 
 def test_api_key_validation_none_no_env():
@@ -30,7 +30,7 @@ def test_api_key_validation_none_no_env():
     with patch.dict(os.environ, {}, clear=True):
          # We must ensure config doesn't have it either (mocking config import might be cleaner but this works)
          with patch("core.agent.config.GROQ_API_KEY", None):
-            with pytest.raises(ValueError, match="API key inválida ou ausente"):
+            with pytest.raises(ValueError, match="API key não configurada"):
                 AgentBrain("groq")
 
 def test_api_key_validation_success():

@@ -13,6 +13,7 @@ from .mcp_client import MCPClient
 from skills.mcp_skill import MCPSkill
 from skills.introspection import IntrospectionSkill
 from skills.rss import RssReadSkill, RssListSkill
+import random
 
 # NOTE: Providers are lazy-loaded to save memory on Raspberry Pi
 
@@ -227,10 +228,15 @@ class AgentBrain:
             raise ValueError("Conteúdo vazio não permitido para geração.")
         if not model or not isinstance(model, str):
              raise ValueError("Invalid model name provided.")
-        if config is not None:
-             # Basic validation to ensure it's not a primitive type that would break the SDK
-             # We explicitly reject primitives/lists which are definitely wrong.
-             if isinstance(config, (str, int, float, list, tuple)):
+        
+        allowed_config_types = (dict,)
+        try:
+            from google.genai import types
+            allowed_config_types = (dict, types.GenerateContentConfig)
+        except ImportError:
+            pass
+
+        if config is not None and not isinstance(config, allowed_config_types):
                  raise ValueError(f"Invalid config type: {type(config)}. Expected dict or GenerateContentConfig.") 
 
         try:
@@ -238,13 +244,12 @@ class AgentBrain:
         except ImportError:
             google_exceptions = None
 
-        delay = initial_delay
         
-        import random
+        # import random (Moved to top)
 
         for attempt in range(retries + 1):
             try:
-                # Use 'aio' for Async generation
+                # Async generation
                 response = await client.aio.models.generate_content(
                     model=model,
                     contents=contents,
@@ -631,6 +636,9 @@ class AgentBrain:
                          
                      # Append Agent Response
                      contents.append(response.candidates[0].content)
+                     
+                     if not response.candidates[0].content.parts:
+                         return "Erro: Resposta vazia do modelo (sem conteúdo)."
                      
                      function_calls = []
                      text_content = ""

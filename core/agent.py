@@ -308,7 +308,7 @@ class AgentBrain:
             silence_triggers = ["SILENCE", "SIL", "SILENCIO", "NOTHING", "NO", "NONE"]
             
             if clean_result in silence_triggers or len(clean_result) < 2:
-                self.logger.info(f"Reflection filtered (Content: '{result}')")
+                self.logger.info(f"Reflection: SILENCE ({clean_result})")
                 return None
             
             return result

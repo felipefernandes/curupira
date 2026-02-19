@@ -253,6 +253,10 @@ class AgentBrain:
              self.logger.warning(f"Unknown AI_PROVIDER for reflection: {config.AI_PROVIDER}")
              return None
         
+        if not model:
+            self.logger.error("Model name is empty.")
+            return None
+        
         if not client:
             return None
 
@@ -527,7 +531,7 @@ class AgentBrain:
             contents = [
                 types.Content(
                     role="user",
-                    parts=[types.Part.from_text(f"{system_prompt}\n\nHistórico:\n{chat_history}\n\nMensagem Atual: {user_msg}")]
+                    parts=[types.Part(text=f"{system_prompt}\n\nHistórico:\n{chat_history}\n\nMensagem Atual: {user_msg}")]
                 )
             ]
             

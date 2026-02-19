@@ -211,6 +211,51 @@ class AgentBrain:
 
         return fn_name, fn_args
 
+    async def _generate_with_retry(self, client, model, contents, config, retries=3, initial_delay=2):
+        """
+        Generates content with retry logic for 429 Resource Exhausted errors.
+        Exponential backoff: 2s, 4s, 8s...
+        """
+        delay = initial_delay
+        last_error = None
+        
+        for attempt in range(retries + 1):
+            try:
+                # Use 'aio' for Async generation
+                response = await client.aio.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=config
+                )
+                return response
+                
+            except Exception as e:
+                last_error = e
+                # Check for 429 / ResourceExhausted
+                err_str = str(e)
+                # Google GenAI exceptions might be wrapped or have specific codes
+                # Checking generic strings and attributes to be safe
+                is_429 = (
+                    "429" in err_str or 
+                    "RESOURCE_EXHAUSTED" in err_str or 
+                    "quota" in err_str.lower() or
+                    (hasattr(e, 'code') and e.code == 429)
+                )
+                
+                if is_429 and attempt < retries:
+                    self.logger.warning(f"Gemini 429 Rate Limit hit. Retrying in {delay}s... (Attempt {attempt+1}/{retries})")
+                    await asyncio.sleep(delay)
+                    delay *= 2
+                elif is_429:
+                    self.logger.error("Gemini Rate Limit exhausted after retries.")
+                    raise e
+                else:
+                    # Non-retryable error
+                    raise e
+        
+        raise last_error
+
+
     async def reflect(self, context: Dict[str, Any]) -> Optional[str]:
         """
         Executes a reflection cycle to check if the agent should proactively speak.
@@ -545,8 +590,9 @@ class AgentBrain:
             while current_turn < max_turns:
                  current_turn += 1
                  try:
-                     # Use 'aio' for Async generation
-                     response = await client.aio.models.generate_content(
+                     # Use 'aio' for Async generation with retry
+                     response = await self._generate_with_retry(
+                         client=client,
                          model=self.model_name,
                          contents=contents,
                          config=types.GenerateContentConfig(tools=tools)
@@ -558,12 +604,20 @@ class AgentBrain:
                      # Append Agent Response
                      contents.append(response.candidates[0].content)
                      
-                     part = response.candidates[0].content.parts[0]
+                     part_with_fn = None
+                     text_content = ""
                      
-                     if part.function_call:
-                         fn_name = part.function_call.name
+                     for part in response.candidates[0].content.parts:
+                         if part.function_call:
+                             part_with_fn = part
+                             break # Prioritize tool execution
+                         if part.text:
+                             text_content += part.text
+
+                     if part_with_fn:
+                         fn_name = part_with_fn.function_call.name
                          # Convert map to dict
-                         fn_args = {k: v for k, v in part.function_call.args.items()}
+                         fn_args = {k: v for k, v in part_with_fn.function_call.args.items()}
                          
                          result_str = await self._execute_tool_call(fn_name, fn_args, context)
                          
@@ -585,10 +639,12 @@ class AgentBrain:
                          )
                          continue
                      else:
-                         return part.text or ""
+                         return text_content or ""
 
                  except Exception as e:
                      self.logger.error(f"Gemini API Error: {e}")
+                     if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                         return "Desculpe, atingi meu limite de velocidade de pensamento (429). Tente novamente em alguns instantes."
                      return "Desculpe, tive um erro ao processar com o Gemini."
 
         return "Desculpe, o Curupira está confuso e não conseguiu responder."

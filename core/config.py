@@ -32,6 +32,8 @@ RETRY_INITIAL_DELAY = float(os.getenv("RETRY_INITIAL_DELAY", 2.0))
 # Security Configuration
 try:
     AUTHORIZED_USER_ID = int(os.getenv('AUTHORIZED_USER_ID', 0))
+    if AUTHORIZED_USER_ID < 0:
+        raise ValueError("AUTHORIZED_USER_ID deve ser um número positivo.")
 except ValueError:
     AUTHORIZED_USER_ID = 0
 

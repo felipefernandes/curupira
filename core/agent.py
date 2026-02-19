@@ -15,7 +15,7 @@ from skills.introspection import IntrospectionSkill
 from skills.rss import RssReadSkill, RssListSkill
 import random
 
-# NOTE: Providers are lazy-loaded to save memory on Raspberry Pi
+# NOTE: Providers are lazy-loaded to save memory
 
 class AgentBrain:
     """Agente responsável por gerenciar habilidades e integrações com APIs."""
@@ -277,7 +277,7 @@ class AgentBrain:
                 if self._is_retryable_error(e):
                     if attempt < retries:
                         # Add Jitter: Random value between 0 and 1 second
-                        jitter = random.uniform(0, 1)
+                        jitter = random.random()
                         sleep_time = delay + jitter
                         
                         self.logger.warning(f"Gemini 429 Rate Limit hit. Retrying in {sleep_time:.2f}s... (Attempt {attempt+1}/{retries})")

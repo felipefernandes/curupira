@@ -25,7 +25,7 @@ reminder_manager = ReminderManager()
 weather_skill = WeatherSkill()
 
 # Agent Brain Setup
-brain = AgentBrain(config.AI_PROVIDER, config.GEMINI_API_KEY if config.AI_PROVIDER == 'gemini' else config.GROQ_API_KEY, config.GEMINI_MODEL if config.AI_PROVIDER == 'gemini' else config.GROQ_MODEL)
+brain = AgentBrain(config.AI_PROVIDER, config.GEMINI_MODEL if config.AI_PROVIDER == 'gemini' else config.GROQ_MODEL)
 
 # Configure MCP Skills (before start_mcp_clients)
 configure_github()

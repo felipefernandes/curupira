@@ -40,9 +40,10 @@ jobs:
         id: review
         env:
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          IARA_LANGUAGE: "pt-br"
         run: |
-          # Instala a versão mais recente da Iara (pacote oficial)
-          pip install --upgrade iara-reviewer
+          # Instala a versão mais recente da Iara (pacote oficial) com suporte a RAG
+          pip install --upgrade "iara-reviewer[rag]"
           
           # Executa a revisão usando o CLI oficial via módulo python
           # O pacote iara lê de stdin por padrão quando chamado via pipe ou redirecionamento

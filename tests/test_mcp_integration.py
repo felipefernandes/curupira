@@ -32,7 +32,7 @@ async def test_mcp_integration():
     logger = logging.getLogger("TestMCP")
     
     logger.info("Initializing AgentBrain...")
-    brain = AgentBrain("groq", "mock_key", "mock_model")
+    brain = AgentBrain("groq", "mock_model")
     
     # Mock the LLM client to avoid real API calls
     brain.client = MagicMock()

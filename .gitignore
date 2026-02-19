@@ -25,3 +25,9 @@ test-results/
 
 # Logs
 dummy_server.log
+
+# JSON (Data/Logs)
+*.json
+!package.json
+!tsconfig.json
+!mcp.json

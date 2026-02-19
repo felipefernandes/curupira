@@ -15,8 +15,9 @@ def mock_agent():
     with patch("core.agent.BaseSkill"), \
          patch("core.agent.IntrospectionSkill"), \
          patch("core.agent.RssReadSkill"), \
-         patch("core.agent.RssListSkill"):
-        agent = AgentBrain(provider="groq", api_key="dummy_key")
+         patch("core.agent.RssListSkill"), \
+         patch("core.agent.config.GROQ_API_KEY", "dummy_key"):
+        agent = AgentBrain(provider="groq")
         return agent
 
 @pytest.mark.asyncio

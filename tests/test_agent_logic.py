@@ -27,7 +27,8 @@ def mock_groq_client():
 
 @pytest.fixture
 def agent():
-    return AgentBrain("groq", "fake_key", "fake_model")
+    with patch("core.agent.config.GROQ_API_KEY", "fake_key"):
+        return AgentBrain("groq", "fake_model")
 
 @pytest.mark.asyncio
 async def test_agent_initialization(agent):
@@ -107,6 +108,13 @@ async def test_process_message_gemini_flow(agent):
     # Mock google.genai module
     mock_genai = MagicMock()
     mock_types = MagicMock()
+    
+    # Create a dummy class for GenerateContentConfig so isinstance works
+    class MockGenerateContentConfig:
+        def __init__(self, tools=None, temperature=None, max_output_tokens=None):
+            pass
+            
+    mock_types.GenerateContentConfig = MockGenerateContentConfig
     mock_genai.types = mock_types
     
     # Setup mock Part.from_text to return a mock part

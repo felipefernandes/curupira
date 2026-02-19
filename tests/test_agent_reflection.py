@@ -9,8 +9,9 @@ def mock_agent():
     with patch("core.agent.BaseSkill"), \
          patch("core.agent.IntrospectionSkill"), \
          patch("core.agent.RssReadSkill"), \
-         patch("core.agent.RssListSkill"):
-        agent = AgentBrain(provider="groq", api_key="dummy_key")
+         patch("core.agent.RssListSkill"), \
+         patch("core.agent.config.GROQ_API_KEY", "dummy_key"):
+        agent = AgentBrain(provider="groq")
         # We don't need to mock _get_... anymore for reflect tests as reflect uses direct instantiation
         return agent
 

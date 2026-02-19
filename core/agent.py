@@ -13,6 +13,7 @@ from .mcp_client import MCPClient
 from skills.mcp_skill import MCPSkill
 from skills.introspection import IntrospectionSkill
 from skills.rss import RssReadSkill, RssListSkill
+import random
 
 # NOTE: Providers are lazy-loaded to save memory on Raspberry Pi
 
@@ -24,21 +25,27 @@ class AgentBrain:
     _RE_FUNC_ANGLES = re.compile(r'<function=(\w+)>(.*?)</function>', re.DOTALL)      # <function=name>args</function>
     _RE_FUNC_COLON  = re.compile(r'<function=(\w+)":\s*(.*?)</function>', re.DOTALL)  # <function=name":args</function>
     
-    def __init__(self, provider: str, api_key: Optional[str] = None, model_name: str = "default"):
-        """Inicializa o agente com provider e API key.
+    def __init__(self, provider: str, model_name: str = "default"):
+        """Inicializa o agente com provider. API Key é obtida de config.
         
         Args:
             provider: Nome do provider (ex: "groq", "gemini").
-            api_key: Chave de API ou None para buscar via ambiente.
             model_name: Nome do modelo a ser utilizado.
         """
         self.logger = logging.getLogger("AgentBrain")
         self.provider = provider.lower()
         self.model_name = model_name
-        self.api_key = api_key or os.getenv(f"{provider.upper()}_API_KEY")
+        
+        # Security: Fetch API Key from config based on provider, avoids passing it around
+        if self.provider == 'gemini':
+            self.api_key = config.GEMINI_API_KEY
+        elif self.provider == 'groq':
+            self.api_key = config.GROQ_API_KEY
+        else:
+            self.api_key = os.getenv(f"{provider.upper()}_API_KEY")
         
         if not self.api_key or not self.api_key.strip():
-             raise ValueError(f"API key inválida ou ausente para {self.provider}")
+             raise ValueError(f"API key não configurada para {self.provider} no CONFIG.")
 
         self.skills: Dict[str, BaseSkill] = {}
         self.mcp_clients: List[MCPClient] = []
@@ -210,6 +217,82 @@ class AgentBrain:
             fn_args = {}
 
         return fn_name, fn_args
+
+    def _is_retryable_error(self, e: Exception) -> bool:
+        """Determines if an exception is a retryable rate limit error."""
+        try:
+            from google.api_core import exceptions as google_exceptions
+            if isinstance(e, google_exceptions.ResourceExhausted):
+                return True
+        except ImportError:
+            pass
+
+        err_str = str(e).lower()
+        # More specific checks to avoid false positives
+        return "429" in err_str or "resource_exhausted" in err_str or "quota exceeded" in err_str
+
+    async def _generate_with_retry(self, client, model: str, contents: Any, config: Any, retries: Optional[int] = None, initial_delay: Optional[float] = None):
+        """
+        Generates content with retry logic for 429 Resource Exhausted errors.
+        Exponential backoff: 2s, 4s, 8s...
+        """
+        # Resolve defaults at runtime
+        # We access the module-level config imported as 'core_config' to avoid shadowing
+        from . import config as core_config
+        
+        retries = retries if retries is not None else core_config.RETRY_ATTEMPTS
+        initial_delay = initial_delay if initial_delay is not None else core_config.RETRY_INITIAL_DELAY
+
+        # Segurança: Validação de Entrada
+        if not contents:
+            raise ValueError("Conteúdo vazio não permitido para geração.")
+        if not model or not isinstance(model, str) or not model.strip():
+             raise ValueError("Invalid model name provided.")
+        
+        allowed_config_types = (dict,)
+        try:
+            from google.genai import types
+            allowed_config_types = (dict, types.GenerateContentConfig)
+        except ImportError:
+            pass
+
+        if config is not None and not isinstance(config, allowed_config_types):
+                 raise ValueError(f"Invalid config type: {type(config)}. Expected dict or GenerateContentConfig.") 
+        
+        delay = initial_delay
+        
+        # import random (Moved to top)
+
+        for attempt in range(retries + 1):
+            try:
+                # Async generation
+                response = await client.aio.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=config
+                )
+                return response
+            
+            except Exception as e:
+                if self._is_retryable_error(e):
+                    if attempt < retries:
+                        # Add Jitter: Random value between 0 and 1 second
+                        jitter = random.uniform(0, 1)
+                        sleep_time = delay + jitter
+                        
+                        self.logger.warning(f"Gemini 429 Rate Limit hit. Retrying in {sleep_time:.2f}s... (Attempt {attempt+1}/{retries})")
+                        await asyncio.sleep(sleep_time)
+                        delay = min(delay * 2, 60.0) # Cap at 60s
+                        continue # Retry loop
+                    else:
+                        self.logger.error("Gemini Rate Limit exhausted after retries.")
+                        raise e # Re-raise the exact exception
+                
+                # If it is NOT a rate limit error, we re-raise immediately
+                raise e
+        
+
+
 
     async def reflect(self, context: Dict[str, Any]) -> Optional[str]:
         """
@@ -545,8 +628,9 @@ class AgentBrain:
             while current_turn < max_turns:
                  current_turn += 1
                  try:
-                     # Use 'aio' for Async generation
-                     response = await client.aio.models.generate_content(
+                     # Use 'aio' for Async generation with retry
+                     response = await self._generate_with_retry(
+                         client=client,
                          model=self.model_name,
                          contents=contents,
                          config=types.GenerateContentConfig(tools=tools)
@@ -558,12 +642,27 @@ class AgentBrain:
                      # Append Agent Response
                      contents.append(response.candidates[0].content)
                      
-                     part = response.candidates[0].content.parts[0]
+                     text_parts = []
+                     function_calls = []
                      
-                     if part.function_call:
-                         fn_name = part.function_call.name
+                     for part in response.candidates[0].content.parts:
+                         if part.function_call:
+                             function_calls.append(part)
+                         if part.text:
+                             text_parts.append(part.text)
+                     
+                     text_content = "".join(text_parts)
+
+                     if not function_calls and not text_content:
+                         return "Erro: Resposta vazia do modelo."
+
+                     # Prioritize first function call found
+                     part_with_fn = function_calls[0] if function_calls else None
+
+                     if part_with_fn:
+                         fn_name = part_with_fn.function_call.name
                          # Convert map to dict
-                         fn_args = {k: v for k, v in part.function_call.args.items()}
+                         fn_args = {k: v for k, v in part_with_fn.function_call.args.items()}
                          
                          result_str = await self._execute_tool_call(fn_name, fn_args, context)
                          
@@ -585,10 +684,17 @@ class AgentBrain:
                          )
                          continue
                      else:
-                         return part.text or ""
+                         return text_content or ""
 
                  except Exception as e:
-                     self.logger.error(f"Gemini API Error: {e}")
+                     # Try to catch specific Google API errors if available
+                     error_type = type(e).__name__
+                     self.logger.error(f"Gemini API Error ({error_type}): {e}")
+                     
+                     # Check for rate limits specifically in string or type
+                     if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e) or "ResourceExhausted" in error_type:
+                          return "Desculpe, estou temporariamente sobrecarregado. Tente novamente em alguns instantes."
+                     
                      return "Desculpe, tive um erro ao processar com o Gemini."
 
         return "Desculpe, o Curupira está confuso e não conseguiu responder."

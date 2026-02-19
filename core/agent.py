@@ -222,16 +222,36 @@ class AgentBrain:
 
         # Setup Client
         client = None
-        model = config.REFLECTION_MODEL
         use_groq = False
 
-        if config.GROQ_API_KEY:
-             client = self._get_groq_client()
+        if config.AI_PROVIDER == 'groq':
+             if not config.GROQ_API_KEY:
+                 self.logger.warning("AI_PROVIDER is 'groq' but GROQ_API_KEY is missing via reflect.")
+                 return None
+             # Use explicit key for reflection client
+             try:
+                 from groq import AsyncGroq
+                 client = AsyncGroq(api_key=config.GROQ_API_KEY)
+             except ImportError:
+                 self.logger.error("Groq library not installed.")
+                 return None
              use_groq = True
+             model = config.GROQ_MODEL
         elif config.AI_PROVIDER == 'gemini':
-             client = self._get_gemini_client()
-             model = config.GEMINI_MODEL # Fallback
-             use_groq = False
+             if not config.GEMINI_API_KEY:
+                 self.logger.warning("AI_PROVIDER is 'gemini' but GEMINI_API_KEY is missing via reflect.")
+                 return None
+             # Use explicit key for reflection client
+             try:
+                 from google import genai
+                 client = genai.Client(api_key=config.GEMINI_API_KEY)
+             except ImportError:
+                 self.logger.error("Google GenAI library not installed.")
+                 return None
+             model = config.GEMINI_MODEL
+        else:
+             self.logger.warning(f"Unknown AI_PROVIDER for reflection: {config.AI_PROVIDER}")
+             return None
         
         if not client:
             return None
@@ -264,11 +284,10 @@ class AgentBrain:
                 )
                 result = response.choices[0].message.content.strip()
             else:
-                # Gemini Fallback
                 from google.genai import types
                 response = await client.aio.models.generate_content(
                     model=model,
-                    contents=[types.Content(parts=[types.Part.from_text(f"{system_prompt}\n\n{user_content}")])],
+                    contents=[types.Content(parts=[types.Part(text=f"{system_prompt}\n\n{user_content}")])],
                     config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=100)
                 )
                 if response.candidates:

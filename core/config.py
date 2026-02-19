@@ -16,11 +16,12 @@ AI_PROVIDER = os.getenv('AI_PROVIDER', 'groq').lower()
 
 # Gemini Configuration
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 # Groq Configuration
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+# GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 
 # Security Configuration
 try:
@@ -80,6 +81,8 @@ else:
              logger.warning("MCP_SERVERS_CONFIG must be a dictionary! Defaulting to empty.")
     except json.JSONDecodeError:
         logger.warning("MCP_SERVERS_CONFIG is not valid JSON!")
+    except Exception as e:
+        logger.error(f"Error parsing MCP_SERVERS_CONFIG: {e}")
 
 # RSS Configuration
 RSS_FEEDS_DEFAULT: Dict[str, str] = {
@@ -102,6 +105,9 @@ if _rss_env.strip():
             RSS_FEEDS = RSS_FEEDS_DEFAULT.copy()
     except json.JSONDecodeError:
         logger.warning("RSS_FEEDS_JSON is not valid JSON. Using defaults.")
+        RSS_FEEDS = RSS_FEEDS_DEFAULT.copy()
+    except Exception as e:
+        logger.error(f"Error parsing RSS_FEEDS_JSON: {e}. Using defaults.")
         RSS_FEEDS = RSS_FEEDS_DEFAULT.copy()
 else:
     RSS_FEEDS = RSS_FEEDS_DEFAULT.copy()

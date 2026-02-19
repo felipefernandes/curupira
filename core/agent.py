@@ -279,7 +279,7 @@ class AgentBrain:
                         
                         self.logger.warning(f"Gemini 429 Rate Limit hit. Retrying in {sleep_time:.2f}s... (Attempt {attempt+1}/{retries})")
                         await asyncio.sleep(sleep_time)
-                        delay *= 2
+                        delay = min(delay * 2, 60.0) # Cap at 60s
                         continue # Retry loop
                     else:
                         self.logger.error("Gemini Rate Limit exhausted after retries.")
@@ -639,17 +639,19 @@ class AgentBrain:
                      # Append Agent Response
                      contents.append(response.candidates[0].content)
                      
-                     if not response.candidates[0].content.parts:
-                         return "Erro: Resposta vazia do modelo (sem conteúdo)."
-                     
+                     text_parts = []
                      function_calls = []
-                     text_content = ""
                      
                      for part in response.candidates[0].content.parts:
                          if part.function_call:
                              function_calls.append(part)
                          if part.text:
-                             text_content += part.text
+                             text_parts.append(part.text)
+                     
+                     text_content = "".join(text_parts)
+
+                     if not function_calls and not text_content:
+                         return "Erro: Resposta vazia do modelo."
 
                      # Prioritize first function call found
                      part_with_fn = function_calls[0] if function_calls else None

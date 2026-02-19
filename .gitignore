@@ -31,3 +31,11 @@ dummy_server.log
 !package.json
 !tsconfig.json
 !mcp.json
+
+# Github PRs e Comentários
+pr_*.*
+comments_*.*
+iara_review*.*
+
+debug_output.*
+test_debug*.*

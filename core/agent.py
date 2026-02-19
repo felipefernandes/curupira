@@ -44,7 +44,7 @@ class AgentBrain:
             self.api_key = os.getenv(f"{provider.upper()}_API_KEY")
         
         if not self.api_key or not self.api_key.strip():
-             raise ValueError(f"API key inválida ou ausente para {self.provider} no CONFIG.")
+             raise ValueError(f"API key não configurada para {self.provider} no CONFIG.")
 
         self.skills: Dict[str, BaseSkill] = {}
         self.mcp_clients: List[MCPClient] = []
@@ -217,14 +217,14 @@ class AgentBrain:
 
         return fn_name, fn_args
 
-    async def _generate_with_retry(self, client, model: str, contents: Any, config: Any, retries: int = 3, initial_delay: float = 2.0):
+    async def _generate_with_retry(self, client, model: str, contents: Any, config: Any, retries: int = config.RETRY_ATTEMPTS, initial_delay: float = config.RETRY_INITIAL_DELAY):
         """
         Generates content with retry logic for 429 Resource Exhausted errors.
         Exponential backoff: 2s, 4s, 8s...
         """
-        # Security: Input Validation
+        # Segurança: Validação de Entrada
         if not contents:
-            raise ValueError("Contents cannot be empty for generation.")
+            raise ValueError("Conteúdo vazio não permitido para geração.")
         if not model or not isinstance(model, str):
              raise ValueError("Invalid model name provided.")
         if config is not None:

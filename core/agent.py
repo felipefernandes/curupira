@@ -44,10 +44,7 @@ class AgentBrain:
             self.api_key = os.getenv(f"{provider.upper()}_API_KEY")
         
         if not self.api_key or not self.api_key.strip():
-             # Log warning instead of crashing immediately allows for better debugging/graceful failure
-             self.logger.warning(f"API key inválida ou ausente para {self.provider} no CONFIG.")
-             # We might still want to raise if it's critical, but let's stick to current behavior
-             raise ValueError(f"API key inválida ou ausente para {self.provider}")
+             raise ValueError(f"API key inválida ou ausente para {self.provider} no CONFIG.")
 
         self.skills: Dict[str, BaseSkill] = {}
         self.mcp_clients: List[MCPClient] = []

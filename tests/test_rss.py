@@ -134,11 +134,16 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
 
     @patch('core.config.RSS_FEEDS', {"TestFeed": "http://example.com/feed"})
     @patch('skills.rss.asyncio.wait_for')
-    async def test_read_feed_timeout(self, mock_wait_for):
+    @patch('skills.rss.asyncio.to_thread', new_callable=MagicMock)
+    async def test_read_feed_timeout(self, mock_to_thread, mock_wait_for):
+        # Use a Future instead of a coroutine to avoid RuntimeWarning about unawaited coroutines
+        future = asyncio.Future()
+        mock_to_thread.return_value = future
+
         # Implement side effect to cleanup coroutine and raise error
         async def side_effect(fut, timeout):
-            if asyncio.iscoroutine(fut):
-                fut.close()
+            # fut is the future
+            fut.cancel() # Clean up
             raise asyncio.TimeoutError()
 
         mock_wait_for.side_effect = side_effect

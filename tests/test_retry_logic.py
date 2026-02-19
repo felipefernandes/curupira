@@ -13,11 +13,18 @@ from core.agent import AgentBrain
 
 class TestRetryLogic(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
+        # Patch config to have a valid key for AgentBrain instantiation
+        self.config_patcher = patch('core.agent.config.GEMINI_API_KEY', 'dummy_test_key')
+        self.config_patcher.start()
+        
         self.agent = AgentBrain(provider='gemini', model_name='gemini-2.5-flash')
         # Mock logger to avoid clutter
         self.agent.logger = MagicMock()
 
-    @unittest.skip("Flaky mock behavior in this environment. Logic verified by test_retry_exhaustion.")
+    def tearDown(self):
+        self.config_patcher.stop()
+
+    # @unittest.skip("Flaky mock behavior in this environment. Logic verified by test_retry_exhaustion.")
     async def test_retry_success_after_failure(self):
         """Test that it retries and succeeds after a 429 error."""
         client_mock = MagicMock()
@@ -28,7 +35,7 @@ class TestRetryLogic(unittest.IsolatedAsyncioTestCase):
         valid_response.candidates[0].content.parts[0].text = "Success"
         
         # Error with code 429 attribute
-        error_429 = Exception("Resource Exhausted")
+        error_429 = Exception("429 RESOURCE_EXHAUSTED")
         error_429.code = 429
         
         # AsyncMock for generate_content

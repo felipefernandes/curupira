@@ -230,13 +230,11 @@ class AgentBrain:
             raise ValueError("Contents cannot be empty for generation.")
         if not model or not isinstance(model, str):
              raise ValueError("Invalid model name provided.")
-        if config is None:
-             # It's okay to have None config technically (defaults used), but strict check requested?
-             # Let's ensure it matches expected type if possible, or just pass. 
-             # Iara complaint was "missing input validation for ... config".
-             # We'll just check if it's not None if that is what's expected, or ensure it's valid.
-             # Given dynamic typing, let's just ensure it's present.
-             pass 
+        if config is not None:
+             # Basic validation to ensure it's not a primitive type that would break the SDK
+             # We explicitly reject primitives/lists which are definitely wrong.
+             if isinstance(config, (str, int, float, list, tuple)):
+                 raise ValueError(f"Invalid config type: {type(config)}. Expected dict or GenerateContentConfig.") 
 
         try:
             from google.api_core import exceptions as google_exceptions
@@ -245,6 +243,8 @@ class AgentBrain:
 
         delay = initial_delay
         
+        import random
+
         for attempt in range(retries + 1):
             try:
                 # Use 'aio' for Async generation
@@ -262,22 +262,26 @@ class AgentBrain:
                 if google_exceptions and isinstance(e, google_exceptions.ResourceExhausted):
                     is_resource_exhausted = True
                 
-                # Check for 429 in string representation (Fallback for when google_exceptions is missing or other library errors)
+                # Check for 429 in string representation
                 err_str = str(e)
                 is_429_string = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower()
                 
                 # If it's a rate limit error, we retry
                 if (is_resource_exhausted or is_429_string):
                     if attempt < retries:
-                        self.logger.warning(f"Gemini 429 Rate Limit hit. Retrying in {delay}s... (Attempt {attempt+1}/{retries})")
-                        await asyncio.sleep(delay)
+                        # Add Jitter: Random value between 0 and 1 second
+                        jitter = random.uniform(0, 1)
+                        sleep_time = delay + jitter
+                        
+                        self.logger.warning(f"Gemini 429 Rate Limit hit. Retrying in {sleep_time:.2f}s... (Attempt {attempt+1}/{retries})")
+                        await asyncio.sleep(sleep_time)
                         delay *= 2
                         continue # Retry loop
                     else:
                         self.logger.error("Gemini Rate Limit exhausted after retries.")
                         raise e # Re-raise the exact exception
                 
-                # If it is NOT a rate limit error, we re-raise immediately (Addressing "Overly Broad Exception" concern)
+                # If it is NOT a rate limit error, we re-raise immediately
                 raise e
         
 
@@ -631,15 +635,17 @@ class AgentBrain:
                      # Append Agent Response
                      contents.append(response.candidates[0].content)
                      
-                     part_with_fn = None
+                     function_calls = []
                      text_content = ""
                      
                      for part in response.candidates[0].content.parts:
                          if part.function_call:
-                             part_with_fn = part
-                             break # Prioritize tool execution
+                             function_calls.append(part)
                          if part.text:
                              text_content += part.text
+
+                     # Prioritize first function call found
+                     part_with_fn = function_calls[0] if function_calls else None
 
                      if part_with_fn:
                          fn_name = part_with_fn.function_call.name
@@ -669,9 +675,14 @@ class AgentBrain:
                          return text_content or ""
 
                  except Exception as e:
-                     self.logger.error(f"Gemini API Error: {e}")
-                     if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                         return "Desculpe, atingi meu limite de velocidade de pensamento (429). Tente novamente em alguns instantes."
+                     # Try to catch specific Google API errors if available
+                     error_type = type(e).__name__
+                     self.logger.error(f"Gemini API Error ({error_type}): {e}")
+                     
+                     # Check for rate limits specifically in string or type
+                     if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e) or "ResourceExhausted" in error_type:
+                          return "Desculpe, estou temporariamente sobrecarregado. Tente novamente em alguns instantes."
+                     
                      return "Desculpe, tive um erro ao processar com o Gemini."
 
         return "Desculpe, o Curupira está confuso e não conseguiu responder."

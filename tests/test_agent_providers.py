@@ -48,13 +48,17 @@ async def test_get_gemini_client_new(agent):
     mock_client_cls = MagicMock()
     mock_genai.Client = mock_client_cls
     
-    # Create a mock specifically for the google package that points to our mock_genai
+    # Create a mock specifically for the google package
     mock_google = MagicMock()
+    # Assign genai as a child attribute (submodule)
     mock_google.genai = mock_genai
 
-    # We patch BOTH google and google.genai
-    # This ensures 'from google import genai' works via sys.modules OR via updated google module
-    with patch.dict(sys.modules, {"google": mock_google, "google.genai": mock_genai}):
+    # Patch only the top-level 'google' module. 
+    # Python's import system will find 'genai' inside 'google' via the attribute lookup
+    # or we can explicitly patch sys.modules['google'] and let it handle submodules.
+    # Iara suggested patching 'google' and setting attribute.
+    
+    with patch.dict(sys.modules, {"google": mock_google}):
         client = agent._get_gemini_client()
         
         assert client is not None
@@ -87,6 +91,9 @@ def test_get_groq_tools(agent):
     assert tools[0]["function"]["name"] == "test_skill"
     assert tools[0]["function"]["description"] == "Test Description"
     assert tools[0]["function"]["parameters"] == {"param": "value"}
+    
+    # Cleanup
+    agent.skills = {}
 
 def test_get_gemini_tools_empty(agent):
     """Should return None if no skills."""
@@ -101,20 +108,23 @@ def test_get_gemini_tools_valid(agent):
     mock_skill.parameters = {"param": "value"}
     agent.skills = {"test_skill": mock_skill}
 
-    # Mock google.genai module and its types attribute
+    # Mock google package and genai submodule
+    mock_google = MagicMock()
     mock_genai = MagicMock()
-    mock_types = MagicMock()
-    mock_genai.types = mock_types
     
-    # Mock constructors
-    mock_types.FunctionDeclaration = MagicMock()
-    mock_types.Tool = MagicMock()
+    # Link them
+    mock_google.genai = mock_genai
 
-    # Pass the mock_genai as the module
-    with patch.dict(sys.modules, {"google.genai": mock_genai}):
+    # Patch 'google' and 'google.genai'. 
+    # This ensures consistent module resolution.
+    with patch.dict(sys.modules, {"google": mock_google, "google.genai": mock_genai}):
+        
         tools = agent._get_gemini_tools()
         
-        # Verify FunctionDeclaration called
+        # Access the auto-created 'types' mock from mock_genai
+        mock_types = mock_genai.types
+
+        # Verify FunctionDeclaration called on the auto-created mock
         mock_types.FunctionDeclaration.assert_called_once_with(
             name="test_skill",
             description="Test Description",
@@ -125,3 +135,12 @@ def test_get_gemini_tools_valid(agent):
         mock_types.Tool.assert_called_once()
         assert tools is not None
         assert len(tools) == 1
+        
+        # Extra assertion for tool structure
+        expected_declaration = mock_types.FunctionDeclaration.return_value
+        args, kwargs = mock_types.Tool.call_args
+        assert "function_declarations" in kwargs
+        assert kwargs["function_declarations"] == [expected_declaration]
+        
+    # Validation: Reset skills to ensure isolation
+    agent.skills = {}

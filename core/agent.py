@@ -427,11 +427,19 @@ class AgentBrain:
         # Re-add timestamp definition (accidentally removed)
         current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+        # Inject persistent user facts
+        user_facts = context.get('user_facts', '')
+        facts_section = (
+            f"\nFatos persistentes sobre o usuário (use-os proativamente, sem perguntar novamente):\n{user_facts}"
+            if user_facts else ""
+        )
+
         system_prompt = f"""
 
         Você é o Curupira, um assistente virtual (Persona do Folclore Brasileiro) leve e eficiente.
         Seu objetivo é ajudar o usuário: {user_name}.
         Horário atual do sistema: {current_time_str}
+        {facts_section}
         
         {tools_context}
         
@@ -444,11 +452,11 @@ class AgentBrain:
         6. Capacidades: Você possui acesso total às ferramentas listadas. Use-as para cumprir o objetivo do usuário.
         7. Protocolo: SEMPRE use formato JSON válido para chamadas de ferramentas.
         8. ATENÇÃO CRÍTICA: O nome da função ('name') deve ser EXATAMENTE o identificador da ferramenta (ex: 'get_weather'). JAMAIS coloque argumentos JSON ou chaves no campo 'name'. Os argumentos devem ir APENAS no campo 'arguments'.
+        9. Memória de Longo Prazo: Quando o usuário revelar informações importantes (cidade, preferências, nome preferido, horário de rotina, etc.), chame 'save_user_fact' para persistir esse dado. Use os fatos já conhecidos diretamente, sem pedir confirmação.
         
         Contexto Atual:
         {chat_history}
         """
-
 
 
         max_turns = 5

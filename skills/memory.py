@@ -118,10 +118,16 @@ class MemoryManager:
                 row = await cursor.fetchone()
                 return row[0] if row else None
 
-    async def get_facts(self, user_id):
-        """Retrieves all facts for a user as a formatted text list."""
+    async def get_facts(self, user_id, limit: int = 20):
+        """Retrieves facts for a user as a formatted text list.
+
+        Returns the most recent `limit` facts to avoid bloating the agent prompt.
+        """
         async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT key, value FROM facts WHERE user_id = ?", (user_id,)) as cursor:
+            async with db.execute(
+                "SELECT key, value FROM facts WHERE user_id = ? ORDER BY id DESC LIMIT ?",
+                (user_id, limit)
+            ) as cursor:
                 rows = await cursor.fetchall()
                 if not rows:
                     return ""

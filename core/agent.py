@@ -366,7 +366,7 @@ class AgentBrain:
                     model=model,
                     messages=messages,
                     max_tokens=100,
-                    temperature=0.0 # Strict
+                    temperature=config.GROQ_TEMPERATURE_REFLECTION  # determinístico para reflexão
                 )
                 result = response.choices[0].message.content.strip()
             else:
@@ -418,45 +418,47 @@ class AgentBrain:
         available_tools_desc = []
         for skill in self.skills.values():
             available_tools_desc.append(f"- {skill.name}: {skill.description}")
-        
-        tools_context = "\n".join(available_tools_desc) if available_tools_desc else "Nenhuma ferramenta extra disponível no momento."
 
-        # Use 'Usuário' as fallback if name is not in context
+        tools_context = "\n".join(available_tools_desc) if available_tools_desc else "Nenhuma ferramenta disponível no momento."
+
         user_name = context.get('user_name', 'Usuário')
-        
-        # Re-add timestamp definition (accidentally removed)
         current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # Inject persistent user facts
+        # Inject persistent user facts (from issue #88)
         user_facts = context.get('user_facts', '')
         facts_section = (
-            f"\nFatos persistentes sobre o usuário (use-os proativamente, sem perguntar novamente):\n{user_facts}"
-            if user_facts else ""
+            f"\n{user_facts}"
+            if user_facts else "Nenhum fato registrado ainda."
         )
 
-        system_prompt = f"""
+        system_prompt = f"""## IDENTIDADE
+Você é o Curupira, assistente pessoal de {user_name}.
+Horário atual: {current_time_str}
+Personalidade: direto, leve, ligeiramente místico. Sem ser prolixo. Responda sempre em português brasileiro.
 
-        Você é o Curupira, um assistente virtual (Persona do Folclore Brasileiro) leve e eficiente.
-        Seu objetivo é ajudar o usuário: {user_name}.
-        Horário atual do sistema: {current_time_str}
-        {facts_section}
-        
-        {tools_context}
-        
-        Instruções:
-        1. Responda de forma natural e amigável.
-        2. Ferramentas (Skills/MCP): Se o usuário solicitar algo que possa ser resolvido por uma das ferramentas listadas acima, utilize-a proativamente.
-        3. Formatação: Se uma ferramenta retornar um resumo formatado (especialmente com emojis), privilegie o uso desse conteúdo na sua resposta final, mantendo os emojis.
-        4. Contexto de Ferramentas: Ao consultar dados via ferramenta, baseie-se estritamente no retorno dela. Ignore informações do histórico que contradigam o estado atual retornado.
-        5. Erros: Não invente informações em caso de erro na ferramenta.
-        6. Capacidades: Você possui acesso total às ferramentas listadas. Use-as para cumprir o objetivo do usuário.
-        7. Protocolo: SEMPRE use formato JSON válido para chamadas de ferramentas.
-        8. ATENÇÃO CRÍTICA: O nome da função ('name') deve ser EXATAMENTE o identificador da ferramenta (ex: 'get_weather'). JAMAIS coloque argumentos JSON ou chaves no campo 'name'. Os argumentos devem ir APENAS no campo 'arguments'.
-        9. Memória de Longo Prazo: Quando o usuário revelar informações importantes (cidade, preferências, nome preferido, horário de rotina, etc.), chame 'save_user_fact' para persistir esse dado. Use os fatos já conhecidos diretamente, sem pedir confirmação.
-        
-        Contexto Atual:
-        {chat_history}
-        """
+## AMBIENTE DE HARDWARE
+Você opera em um Raspberry Pi com recursos limitados de CPU e RAM.
+Prefira respostas curtas e objetivas. Nunca mencione "aguardar processamento".
+
+## FATOS PERSISTENTES DO USUÁRIO
+Use esses dados proativamente — nunca peça informações que já estão aqui:
+{facts_section}
+
+## FERRAMENTAS DISPONÍVEIS
+{tools_context}
+
+## REGRAS DE COMPORTAMENTO
+1. **Ferramentas**: Use-as proativamente. Nunca pergunte se deve usar uma ferramenta disponível.
+2. **RSS/Notícias**: Identifique o feed mais relevante pelo contexto e busque direto, sem listar opções nem pedir confirmação. Apresente artigos com título e link exatos — nunca resuma genericamente.
+3. **Clima**: Se a cidade do usuário estiver nos Fatos Persistentes, use-a diretamente.
+4. **Rigidez factual**: Baseie respostas APENAS no retorno das ferramentas. Nunca invente dados não retornados por uma skill.
+5. **Diálogo natural**: Continue conversas de forma orgânica, inclusive após mensagens proativas suas.
+6. **Memória de longo prazo**: Ao aprender dado relevante (cidade, rotina, preferência), chame `save_user_fact` imediatamente.
+7. **Protocolo de ferramentas**: Use JSON válido. O campo `name` deve ser EXATAMENTE o identificador da ferramenta — nunca inclua argumentos no `name`.
+
+## HISTÓRICO RECENTE
+{chat_history}
+"""
 
 
         max_turns = 5
@@ -481,7 +483,8 @@ class AgentBrain:
                         messages=messages,
                         tools=tools if tools else None,
                         tool_choice="auto" if tools else None,
-                        max_tokens=2048 # Increased to prevent cut-off responses
+                        max_tokens=2048,
+                        temperature=config.GROQ_TEMPERATURE
                     )
                     
                     msg = response.choices[0].message

@@ -71,6 +71,23 @@ async def test_process_message_groq_flow(agent, mock_groq_client):
     mock_groq_client.chat.completions.create.assert_called_once()
 
 @pytest.mark.asyncio
+async def test_groq_call_includes_temperature(agent, mock_groq_client):
+    """temperature deve ser passado à API Groq com valor entre 0.0 e 1.0."""
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = "Olá!"
+    mock_response.choices[0].message.tool_calls = None
+
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.return_value = mock_response
+
+    await agent.process("Olá", {"user_name": "TestUser"})
+
+    call_kwargs = mock_groq_client.chat.completions.create.call_args.kwargs
+    assert "temperature" in call_kwargs, "temperature deve ser passado à API"
+    assert 0.0 <= call_kwargs["temperature"] <= 1.0, "temperature deve estar entre 0.0 e 1.0"
+
+@pytest.mark.asyncio
 async def test_execute_tool_call_success(agent):
     """Test successful tool execution"""
     mock_skill = AsyncMock()

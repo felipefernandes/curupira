@@ -10,6 +10,7 @@ import logging
 from skills.memory import MemoryManager
 from skills.reminders import ReminderManager, AddReminderSkill, ListRemindersSkill, DeleteReminderSkill, UpdateReminderSkill
 from skills.weather_manager import WeatherSkill
+from skills.memory import SaveFactSkill
 from core.agent import AgentBrain
 from skills.github import configure as configure_github
 
@@ -45,6 +46,9 @@ brain.register_skill(hardware_skill)
 # Skill: Time
 from skills.time import GetTimeSkill
 brain.register_skill(GetTimeSkill())
+
+# Skill: Save User Fact (long-term memory)
+brain.register_skill(SaveFactSkill(memory_manager))
 
 # Onboarding States
 WAITING_NAME = 1
@@ -120,12 +124,13 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     # 2. Retrieve Context
     context_history = await memory_manager.get_context(user_id)
-    # active_reminders = await reminder_manager.get_active_reminders(user_id) # Agent can fetch if needed via Skill
-    
+    user_facts = await memory_manager.get_facts(user_id)
+
     # 3. Agent Brain Execution
     agent_context = {
         "user_id": user_id,
         "user_name": full_name,
+        "user_facts": user_facts,
         "job_queue": context.job_queue
     }
     

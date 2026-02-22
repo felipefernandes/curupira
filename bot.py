@@ -126,13 +126,15 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 2. Retrieve Context
     context_history = await memory_manager.get_context(user_id)
     user_facts = await memory_manager.get_facts(user_id)
+    assistant_surname = await memory_manager.get_fact_value(user_id, "assistant_surname") or ""
 
     # 3. Agent Brain Execution
     agent_context = {
         "user_id": user_id,
         "user_name": full_name,
         "user_facts": user_facts,
-        "job_queue": context.job_queue
+        "job_queue": context.job_queue,
+        "assistant_surname": assistant_surname,
     }
 
     async def keep_typing():

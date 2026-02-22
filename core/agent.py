@@ -413,9 +413,14 @@ class AgentBrain:
             result = self._RE_THINK_OPEN.sub('', result)  # truncated <think>... (no closing tag)
             result = result.strip()
 
-            # After stripping CoT, the result might be empty — treat as SILENCE
+            # Re-check for silence after stripping CoT — model may output <think>...</think>SILENCE
             if not result:
                 self.logger.info("Reflection: SILENCE (empty after <think> strip)")
+                return None
+
+            clean_after = result.upper().replace('"', '').replace("'", "").rstrip('.')
+            if clean_after in silence_triggers or len(clean_after) < 2:
+                self.logger.info(f"Reflection: SILENCE (post-strip: {clean_after})")
                 return None
 
             return result

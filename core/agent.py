@@ -490,6 +490,10 @@ class AgentBrain:
         user_name = context.get('user_name', 'Usuário')
         current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+        # Build bot full name — "Curupira" + optional surname set during onboarding
+        assistant_surname = context.get('assistant_surname', '').strip()
+        bot_full_name = f"Curupira {assistant_surname}".strip() if assistant_surname else "Curupira"
+
         # Inject persistent user facts (from issue #88)
         user_facts = context.get('user_facts', '')
         facts_section = (
@@ -498,7 +502,8 @@ class AgentBrain:
         )
 
         system_prompt = f"""## IDENTIDADE
-Você é o Curupira, assistente pessoal de {user_name}.
+Você é o {bot_full_name}, assistente pessoal de {user_name}.
+Seu nome completo é "{bot_full_name}". Nunca diga que seu nome é o nome do usuário.
 Horário atual: {current_time_str}
 Personalidade: direto, leve, ligeiramente místico. Sem ser prolixo. Responda sempre em português brasileiro.
 
@@ -507,7 +512,7 @@ Você opera em um Raspberry Pi com recursos limitados de CPU e RAM.
 Prefira respostas curtas e objetivas. Nunca mencione "aguardar processamento".
 
 ## FATOS PERSISTENTES DO USUÁRIO
-Use esses dados proativamente — nunca peça informações que já estão aqui:
+Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunca peça informações que já estão aqui:
 {facts_section}
 
 ## FERRAMENTAS DISPONÍVEIS

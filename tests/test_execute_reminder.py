@@ -42,6 +42,7 @@ async def _execute_reminder_impl(context, reminder_manager, memory_manager, brai
     recurrence, is_task, remind_at = await reminder_manager.get_reminder_recurrence(reminder_id)
 
     # --- Execute the reminder action ---
+    task_error = False
     if is_task:
         try:
             user_facts = await memory_manager.get_facts(job.chat_id)
@@ -56,6 +57,7 @@ async def _execute_reminder_impl(context, reminder_manager, memory_manager, brai
             response_text = await brain.process(message, agent_context, chat_history=[])
             await context.bot.send_message(chat_id=job.chat_id, text=response_text)
         except Exception:
+            task_error = True
             await context.bot.send_message(
                 chat_id=job.chat_id,
                 text=f"⚠️ Erro ao executar tarefa agendada: {message}",
@@ -75,7 +77,7 @@ async def _execute_reminder_impl(context, reminder_manager, memory_manager, brai
             data={"id": reminder_id, "msg": message},
             name=f"reminder_{reminder_id}",
         )
-    else:
+    elif not task_error:
         await reminder_manager.mark_as_sent(reminder_id)
 
 
@@ -206,6 +208,43 @@ class TestExecuteReminderCallback(unittest.IsolatedAsyncioTestCase):
         text = context.bot.send_message.call_args[1]["text"]
         self.assertIn("⚠️", text)
         self.assertIn("busca vagas", text)
+        # One-shot task failure must NOT mark as sent (leaves reminder PENDING)
+        mgr.mark_as_sent.assert_not_awaited()
+
+    async def test_is_task_one_shot_error_does_not_mark_sent(self):
+        """task_error=True on a one-shot task: reminder stays PENDING (no mark_as_sent)."""
+        context = _make_context(reminder_data={"id": 10, "msg": "enviar relatório"})
+        mgr = _make_reminder_manager(message="enviar relatório", is_task=True, recurrence=None)
+        mem_mgr = _make_memory_manager()
+        brain = MagicMock()
+        brain.process = AsyncMock(side_effect=ValueError("unavailable"))
+
+        await _execute_reminder_impl(context, mgr, mem_mgr, brain)
+
+        mgr.mark_as_sent.assert_not_awaited()
+        context.job_queue.run_once.assert_not_called()
+
+    async def test_is_task_recurring_error_still_reschedules(self):
+        """task_error=True on a recurring task: still reschedules for next occurrence."""
+        remind_at = datetime.now() + timedelta(hours=1)
+        context = _make_context(reminder_data={"id": 11, "msg": "busca vagas diária"})
+        mgr = _make_reminder_manager(
+            message="busca vagas diária", is_task=True,
+            recurrence="DAILY@09:00", remind_at=remind_at,
+        )
+        mem_mgr = _make_memory_manager()
+        brain = MagicMock()
+        brain.process = AsyncMock(side_effect=RuntimeError("transient error"))
+
+        await _execute_reminder_impl(context, mgr, mem_mgr, brain)
+
+        # Error message sent
+        text = context.bot.send_message.call_args[1]["text"]
+        self.assertIn("⚠️", text)
+        # Recurring task must still be rescheduled (transient failures don't stop the schedule)
+        mgr.reset_recurring_reminder.assert_awaited_once()
+        context.job_queue.run_once.assert_called_once()
+        mgr.mark_as_sent.assert_not_awaited()
 
     async def test_one_shot_calls_mark_as_sent_not_reschedule(self):
         """One-shot reminder (no recurrence) calls mark_as_sent, not reschedule."""

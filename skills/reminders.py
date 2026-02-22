@@ -73,8 +73,13 @@ class ReminderManager:
           DAILY@RANDOM:HH:MM-HH:MM        — every day at random time in range
           WEEKLY:DOW[,DOW...]@HH:MM        — specific weekday(s) at fixed time
           WORKDAYS@HH:MM                  — Mon–Fri at fixed time
+
+        Returns from_time + 24h as a safe fallback for malformed input.
         """
         from_time = from_time or datetime.now()
+
+        if not recurrence_str or "@" not in recurrence_str:
+            return from_time + timedelta(hours=24)
 
         DOW_NAMES = {"MON": 0, "TUE": 1, "WED": 2, "THU": 3, "FRI": 4, "SAT": 5, "SUN": 6}
 
@@ -96,6 +101,8 @@ class ReminderManager:
             if is_random:
                 start_min = sh * 60 + sm
                 end_min = eh * 60 + em
+                if start_min > end_min:
+                    start_min, end_min = end_min, start_min
                 rand_min = random.randint(start_min, end_min)
                 return base.replace(hour=rand_min // 60, minute=rand_min % 60, second=0, microsecond=0)
             return base.replace(hour=h, minute=m, second=0, microsecond=0)

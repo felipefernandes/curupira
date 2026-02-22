@@ -98,6 +98,43 @@ class TestNextOccurrence(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# _next_occurrence — input validation (Iara bug fixes)
+# ---------------------------------------------------------------------------
+
+class TestNextOccurrenceValidation(unittest.TestCase):
+
+    def test_malformed_no_at_sign_returns_24h_fallback(self):
+        """Malformed recurrence string without '@' returns from_time + 24h."""
+        from_time = _dt(10, 0)
+        result = ReminderManager._next_occurrence("DAILY09:00", from_time)
+        expected = from_time + timedelta(hours=24)
+        self.assertAlmostEqual(result.timestamp(), expected.timestamp(), delta=1)
+
+    def test_empty_string_returns_24h_fallback(self):
+        """Empty recurrence string returns from_time + 24h."""
+        from_time = _dt(9, 0)
+        result = ReminderManager._next_occurrence("", from_time)
+        expected = from_time + timedelta(hours=24)
+        self.assertAlmostEqual(result.timestamp(), expected.timestamp(), delta=1)
+
+    def test_random_range_start_greater_than_end_is_swapped(self):
+        """RANDOM range with start > end is automatically swapped — no ValueError."""
+        from_time = _dt(6, 0)  # well before range
+        # Range is inverted: 23:00-19:00 (should be swapped to 19:00-23:00)
+        result = ReminderManager._next_occurrence("DAILY@RANDOM:23:00-19:00", from_time)
+        total_min = result.hour * 60 + result.minute
+        self.assertGreaterEqual(total_min, 19 * 60)
+        self.assertLessEqual(total_min, 23 * 60)
+
+    def test_random_range_equal_start_and_end_returns_exact_time(self):
+        """RANDOM range where start == end returns that exact time."""
+        from_time = _dt(6, 0)
+        result = ReminderManager._next_occurrence("DAILY@RANDOM:10:00-10:00", from_time)
+        self.assertEqual(result.hour, 10)
+        self.assertEqual(result.minute, 0)
+
+
+# ---------------------------------------------------------------------------
 # _parse_schedule
 # ---------------------------------------------------------------------------
 

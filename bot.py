@@ -197,6 +197,7 @@ async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
     recurrence, is_task, remind_at = await reminder_manager.get_reminder_recurrence(reminder_id)
 
     # --- Execute the reminder action ---
+    task_error = False
     if is_task:
         # Run message through the agent brain to trigger skills
         try:
@@ -210,8 +211,9 @@ async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
                 "assistant_surname": assistant_surname,
             }
             response_text = await brain.process(message, agent_context, chat_history=[])
-            await context.bot.send_message(chat_id=job.chat_id, text=response_text, parse_mode=ParseMode.HTML)
+            await context.bot.send_message(chat_id=job.chat_id, text=response_text)
         except Exception as e:
+            task_error = True
             logging.error(f"Error executing task reminder {reminder_id}: {e}")
             await context.bot.send_message(chat_id=job.chat_id, text=f"⚠️ Erro ao executar tarefa agendada: {message}")
     else:
@@ -230,7 +232,7 @@ async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
             name=f"reminder_{reminder_id}",
         )
         logging.info(f"Recurring reminder {reminder_id} rescheduled → {next_time}")
-    else:
+    elif not task_error:
         await reminder_manager.mark_as_sent(reminder_id)
 
 async def system_heartbeat(context: ContextTypes.DEFAULT_TYPE):

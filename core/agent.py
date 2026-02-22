@@ -57,6 +57,10 @@ class AgentBrain:
         self.mcp_clients: List[MCPClient] = []
         self.client = None
 
+        # Proactive greeting deduplication: only one greeting per calendar day.
+        # Stores the last date (datetime.date) a greeting was sent, or None.
+        self._last_greeting_date: Optional[datetime.date] = None
+
         # Built-in skills (always available)
         self.register_skill(IntrospectionSkill(self))
         self.register_skill(RssReadSkill())
@@ -348,18 +352,33 @@ class AgentBrain:
         if not client:
             return None
 
+        # Resolve greeting window from config
+        greeting_start = config.REFLECTION_GREETING_HOUR_START
+        greeting_end   = config.REFLECTION_GREETING_HOUR_END
+        current_hour   = context.get("hour", -1)
+        greeting_allowed = greeting_start <= current_hour < greeting_end
+
         # Construct Prompt
         # /no_think instructs Qwen3 to skip chain-of-thought output
+        greeting_rule = (
+            f"3. If the current hour is between {greeting_start}:00 and {greeting_end}:00 "
+            "AND you have NOT greeted the user yet today -> Say 'Bom dia' naturally."
+            if greeting_allowed
+            else
+            "3. Greetings (Bom dia, Good morning, etc.) are FORBIDDEN right now — "
+            f"they are only allowed between {greeting_start}:00 and {greeting_end}:00."
+        )
         system_prompt = (
             "/no_think\n"
-            "You are the Guardian of the System (Curupira)."
-            "Analyze the provided context (Time, Hardware, State)."
-            "Decide if you MUST say something to the user."
-            "CRITERIA:"
-            "1. If everything is normal -> Output 'SILENCE' (strict)."
-            "2. If hardware is critical (Temp > 80C, RAM > 90%) -> Warn user."
-            "3. If it's a special time (e.g. 08:00 AM) -> Maybe say 'Bom dia'."
-            "OUTPUT FORMAT: strictly return the message text OR the single word 'SILENCE'. No JSON. No markdown. Do not include 'Reflexão:' prefix."
+            "You are the Guardian of the System (Curupira). "
+            "Analyze the provided context (Time, Hardware, State). "
+            "Decide if you MUST say something to the user. "
+            "CRITERIA: "
+            "1. If everything is normal -> Output 'SILENCE' (strict). "
+            "2. If hardware is critical (CPU Temp > 80C or RAM > 90%) -> Warn the user immediately. "
+            f"{greeting_rule} "
+            "OUTPUT FORMAT: strictly return the message text OR the single word 'SILENCE'. "
+            "No JSON. No markdown. No 'Reflexão:' prefix. One greeting per day maximum."
         )
 
         user_content = f"Context: {json.dumps(context, indent=2, ensure_ascii=False)}"
@@ -422,6 +441,24 @@ class AgentBrain:
             if clean_after in silence_triggers or len(clean_after) < 2:
                 self.logger.info(f"Reflection: SILENCE (post-strip: {clean_after})")
                 return None
+
+            # -------------------------------------------------------------------
+            # Greeting deduplication: if the message contains a morning greeting,
+            # only allow it once per calendar day (regardless of LLM decision).
+            # -------------------------------------------------------------------
+            _GREETING_KEYWORDS = ("bom dia", "good morning", "bonjour", "buenos días")
+            is_greeting = any(kw in result.lower() for kw in _GREETING_KEYWORDS)
+
+            if is_greeting:
+                today = datetime.now().date()
+                if self._last_greeting_date == today:
+                    self.logger.info(
+                        f"Reflection: SILENCE (greeting already sent today: {today})"
+                    )
+                    return None
+                # Record that we sent a greeting today
+                self._last_greeting_date = today
+                self.logger.info(f"Reflection: greeting approved for {today}, updating _last_greeting_date.")
 
             return result
             

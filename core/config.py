@@ -133,3 +133,10 @@ else:
 # Heartbeat Reflection Configuration
 REFLECTION_ENABLED = os.getenv("REFLECTION_ENABLED", "true").lower() == "true"
 REFLECTION_MODEL = os.getenv("REFLECTION_MODEL", "llama-3.3-70b-versatile") # Default to fast/smart Groq model
+
+# Greeting window: the bot may only send a "Bom dia"-style greeting ONCE PER DAY,
+# and only when the current hour falls within [GREETING_HOUR_START, GREETING_HOUR_END).
+# Outside this window the model is explicitly instructed to stay silent about greetings.
+# Override via env vars: REFLECTION_GREETING_HOUR_START / REFLECTION_GREETING_HOUR_END
+REFLECTION_GREETING_HOUR_START = int(os.getenv("REFLECTION_GREETING_HOUR_START", "7"))
+REFLECTION_GREETING_HOUR_END   = int(os.getenv("REFLECTION_GREETING_HOUR_END",   "9"))

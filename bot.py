@@ -4,6 +4,7 @@ from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, Application
 from core import config
+import asyncio
 import re
 from datetime import datetime
 import logging
@@ -133,12 +134,24 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "user_facts": user_facts,
         "job_queue": context.job_queue
     }
-    
+
+    async def keep_typing():
+        """Sends TYPING action every 4s while the agent processes."""
+        try:
+            while True:
+                await update.effective_chat.send_action("typing")
+                await asyncio.sleep(4)
+        except asyncio.CancelledError:
+            pass
+
+    typing_task = asyncio.create_task(keep_typing())
     try:
         response_text = await brain.process(user_msg, agent_context, chat_history=context_history)
     except Exception as e:
         logging.error(f"Brain Error: {e}")
         response_text = "Ocorreu um erro interno no meu cérebro. Tente novamente."
+    finally:
+        typing_task.cancel()
 
     # 4. Log Response
     await memory_manager.log_message(user_id, "model", response_text)

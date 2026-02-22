@@ -6,6 +6,8 @@ Issue #88 — Facts Injection: https://github.com/felipefernandes/curupira/issue
 import pytest
 import sys
 import os
+import tempfile
+import aiosqlite
 from unittest.mock import AsyncMock, MagicMock, patch
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -161,3 +163,41 @@ class TestUserFactsInjection:
         system_content = messages[0]["content"] if messages else ""
 
         assert "Fatos persistentes" not in system_content
+
+
+# ---------------------------------------------------------------------------
+# MemoryManager DB migration — reminders table columns
+# ---------------------------------------------------------------------------
+
+class TestMemoryManagerMigration:
+
+    @pytest.mark.asyncio
+    async def test_init_db_creates_recurrence_and_is_task_columns(self):
+        """init_db adds recurrence and is_task columns to the reminders table."""
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        try:
+            mm = MemoryManager(db_path=db_path)
+            await mm.init_db()
+
+            async with aiosqlite.connect(db_path) as db:
+                async with db.execute("PRAGMA table_info(reminders)") as cursor:
+                    columns = [row[1] for row in await cursor.fetchall()]
+
+            assert "recurrence" in columns
+            assert "is_task" in columns
+        finally:
+            os.unlink(db_path)
+
+    @pytest.mark.asyncio
+    async def test_init_db_migration_idempotent(self):
+        """Calling init_db twice does not raise (columns already exist)."""
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        try:
+            mm = MemoryManager(db_path=db_path)
+            await mm.init_db()
+            # Second call must not raise
+            await mm.init_db()
+        finally:
+            os.unlink(db_path)

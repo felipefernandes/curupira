@@ -194,7 +194,7 @@ async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
         logging.info(f"Skipping reminder {reminder_id} (Status: {status})")
         return
 
-    recurrence, is_task = await reminder_manager.get_reminder_recurrence(reminder_id)
+    recurrence, is_task, remind_at = await reminder_manager.get_reminder_recurrence(reminder_id)
 
     # --- Execute the reminder action ---
     if is_task:
@@ -219,7 +219,7 @@ async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
 
     # --- Reschedule or mark as sent ---
     if recurrence:
-        next_time = reminder_manager._next_occurrence(recurrence)
+        next_time = reminder_manager._next_occurrence(recurrence, from_time=remind_at)
         await reminder_manager.reset_recurring_reminder(reminder_id, next_time)
         next_delay = (next_time - datetime.now()).total_seconds()
         context.job_queue.run_once(

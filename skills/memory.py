@@ -31,7 +31,8 @@ class MemoryManager:
             
         # Check for legacy DB at root and migrate if needed
         legacy_db = pathlib.Path(__file__).parent.parent / "curupira.db"
-        if legacy_db.exists() and not (db_path or DB_FILE).exists():
+        target_path = pathlib.Path(db_path) if db_path else DB_FILE
+        if legacy_db.exists() and not target_path.exists():
             self.logger.warning(f"Migrating legacy database from {legacy_db} to {DB_FILE}")
             try:
                 shutil.move(str(legacy_db), str(DB_FILE))

@@ -35,16 +35,25 @@ class ReminderManager:
                 rows = await cursor.fetchall()
                 return rows
 
-    async def get_reminder_recurrence(self, reminder_id) -> Tuple[Optional[str], bool]:
-        """Returns (recurrence_str, is_task) for a reminder."""
+    async def get_reminder_recurrence(self, reminder_id) -> Tuple[Optional[str], bool, Optional[datetime]]:
+        """Returns (recurrence_str, is_task, remind_at) for a reminder."""
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute(
-                "SELECT recurrence, is_task FROM reminders WHERE id = ?", (reminder_id,)
+                "SELECT recurrence, is_task, remind_at FROM reminders WHERE id = ?", (reminder_id,)
             ) as cursor:
                 row = await cursor.fetchone()
                 if not row:
-                    return None, False
-                return row[0], bool(row[1])
+                    return None, False, None
+                remind_at = None
+                if row[2]:
+                    if isinstance(row[2], str):
+                        try:
+                            remind_at = datetime.fromisoformat(row[2])
+                        except ValueError:
+                            pass
+                    elif isinstance(row[2], datetime):
+                        remind_at = row[2]
+                return row[0], bool(row[1]), remind_at
 
     async def reset_recurring_reminder(self, reminder_id, next_time: datetime):
         """Updates remind_at for a recurring reminder (keeps status PENDING)."""

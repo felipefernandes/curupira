@@ -24,10 +24,14 @@ async def test_reflect_groq_success(mock_agent):
          patch("core.config.GROQ_MODEL", "llama-test"), \
          patch("core.config.REFLECTION_ENABLED", True):
         
-        # Mock Client Response
-        mock_client = AsyncMock()
+        # Mock Client Response — choices como lista real para garantir .content como string
+        mock_message = MagicMock()
+        mock_message.content = "Hello Groq"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
         mock_response = MagicMock()
-        mock_response.choices[0].message.content = "Hello Groq"
+        mock_response.choices = [mock_choice]
+        mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = mock_response
 
         # Execute
@@ -107,9 +111,13 @@ async def test_reflect_cross_provider(mock_agent):
          patch("core.config.GROQ_MODEL", "llama-test"), \
          patch("core.config.REFLECTION_ENABLED", True):
         
-        mock_client = AsyncMock()
+        mock_message = MagicMock()
+        mock_message.content = "I am Groq"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
         mock_response = MagicMock()
-        mock_response.choices[0].message.content = "I am Groq"
+        mock_response.choices = [mock_choice]
+        mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = mock_response
 
         # Mock groq.AsyncGroq

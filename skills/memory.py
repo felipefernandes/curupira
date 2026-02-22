@@ -84,6 +84,19 @@ class MemoryManager:
                 )
             """)
             await db.commit()
+
+            # Migration: add recurrence columns if they don't exist yet
+            for col, defn in [
+                ("recurrence", "TEXT DEFAULT NULL"),
+                ("is_task", "INTEGER DEFAULT 0"),
+            ]:
+                try:
+                    await db.execute(f"ALTER TABLE reminders ADD COLUMN {col} {defn}")
+                    await db.commit()
+                    self.logger.info(f"Migrated reminders table: added column '{col}'.")
+                except Exception:
+                    pass  # Column already exists
+
             self.logger.info("Database initialized.")
 
     async def add_user(self, user_id, username, full_name):

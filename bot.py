@@ -172,29 +172,66 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # --- JOB QUEUE CALLBACKS ---
 async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
-    """Executes a scheduled reminder after verifying DB status."""
+    """Executes a scheduled reminder after verifying DB status.
+
+    For recurring reminders: resets remind_at and reschedules instead of marking SENT.
+    For is_task reminders: runs the message through the agent brain to trigger skills.
+    """
     job = context.job
-    # Data is now a dict {"id": id, "msg": msg}
-    reminder_data = job.data 
-    
+    reminder_data = job.data
+
     if not isinstance(reminder_data, dict):
-        # Fallback for old jobs (memory only) - unlikely to happen if restarted
+        # Fallback for old plain-text jobs
         await context.bot.send_message(chat_id=job.chat_id, text=f"⏰ Lembrete: {reminder_data}")
         return
 
     reminder_id = reminder_data["id"]
-    # Single Source of Truth: Fetch latest message from DB
     db_message = await reminder_manager.get_reminder_message(reminder_id)
     message = db_message if db_message else reminder_data.get("msg", "Lembrete sem texto")
 
-    # Check status in DB
     status = await reminder_manager.get_reminder_status(reminder_id)
-    
-    if status == 'PENDING':
-        await context.bot.send_message(chat_id=job.chat_id, text=f"⏰ Lembrete: {message}")
-        await reminder_manager.mark_as_sent(reminder_id)
-    else:
+    if status != 'PENDING':
         logging.info(f"Skipping reminder {reminder_id} (Status: {status})")
+        return
+
+    recurrence, is_task = await reminder_manager.get_reminder_recurrence(reminder_id)
+
+    # --- Execute the reminder action ---
+    if is_task:
+        # Run message through the agent brain to trigger skills
+        try:
+            user_facts = await memory_manager.get_facts(job.chat_id)
+            assistant_surname = await memory_manager.get_fact_value(job.chat_id, "assistant_surname") or ""
+            agent_context = {
+                "user_id": job.chat_id,
+                "user_name": "Usuário",
+                "user_facts": user_facts,
+                "job_queue": context.job_queue,
+                "assistant_surname": assistant_surname,
+            }
+            response_text = await brain.process(message, agent_context, chat_history=[])
+            await context.bot.send_message(chat_id=job.chat_id, text=response_text, parse_mode=ParseMode.HTML)
+        except Exception as e:
+            logging.error(f"Error executing task reminder {reminder_id}: {e}")
+            await context.bot.send_message(chat_id=job.chat_id, text=f"⚠️ Erro ao executar tarefa agendada: {message}")
+    else:
+        await context.bot.send_message(chat_id=job.chat_id, text=f"⏰ Lembrete: {message}")
+
+    # --- Reschedule or mark as sent ---
+    if recurrence:
+        next_time = reminder_manager._next_occurrence(recurrence)
+        await reminder_manager.reset_recurring_reminder(reminder_id, next_time)
+        next_delay = (next_time - datetime.now()).total_seconds()
+        context.job_queue.run_once(
+            execute_reminder,
+            when=max(next_delay, 1),
+            chat_id=job.chat_id,
+            data={"id": reminder_id, "msg": message},
+            name=f"reminder_{reminder_id}",
+        )
+        logging.info(f"Recurring reminder {reminder_id} rescheduled → {next_time}")
+    else:
+        await reminder_manager.mark_as_sent(reminder_id)
 
 async def system_heartbeat(context: ContextTypes.DEFAULT_TYPE):
     """

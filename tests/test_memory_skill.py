@@ -139,7 +139,7 @@ class TestUserFactsInjection:
         system_content = messages[0]["content"]
         assert "São Paulo" in system_content
         assert "07:00" in system_content
-        assert "Fatos persistentes" in system_content
+        assert "FATOS PERSISTENTES" in system_content
 
     @pytest.mark.asyncio
     async def test_no_facts_section_when_empty(self, agent):

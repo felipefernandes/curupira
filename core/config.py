@@ -20,8 +20,18 @@ GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 # Groq Configuration
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
-# GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+# Model options (set via GROQ_MODEL env var):
+#   llama-3.1-8b-instant  — rápido, leve, menor custo (default)
+#   llama-3.3-70b-versatile — melhor raciocínio, recomendado para produção
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+
+# Temperature controls (set via env var):
+#   0.0 = determinístico (melhor para ferramentas e reflexão)
+#   0.7 = balanceado criatividade/precisão (recomendado para diálogo)
+#   1.0 = máxima criatividade (não recomendado para uso de ferramentas)
+GROQ_TEMPERATURE = float(os.getenv("GROQ_TEMPERATURE", "0.7"))
+GROQ_TEMPERATURE_REFLECTION = float(os.getenv("GROQ_TEMPERATURE_REFLECTION", "0.0"))
+
 
 # Retry Configuration
 # Maximum number of retries for 429/ResourceExhausted errors

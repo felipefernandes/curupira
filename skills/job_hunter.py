@@ -99,6 +99,11 @@ class JobHunterRunSearchSkill(BaseSkill):
         prompt_override: Optional[str] = kwargs.get("prompt_override")
         score_cutoff: Optional[float] = kwargs.get("score_cutoff") or config.JOB_HUNTER_SCORE_CUTOFF
 
+        if sources and not all(isinstance(s, str) for s in sources):
+            return {"error": "Fontes (sources) devem ser uma lista de strings."}
+        if keywords and not all(isinstance(k, str) for k in keywords):
+            return {"error": "Palavras-chave (keywords) devem ser uma lista de strings."}
+
         body: Dict[str, Any] = {}
         if sources:
             body["sources"] = sources

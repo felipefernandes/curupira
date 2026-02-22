@@ -23,7 +23,7 @@ class TestJobHunterRunSearchSkill(unittest.IsolatedAsyncioTestCase):
     def test_metadata(self):
         self.assertEqual(self.skill.name, "job_hunter_run_search")
         self.assertIn("vaga", self.skill.description.lower())
-        self.assertIn("display_name", dir(self.skill))
+        self.assertIn("Buscar", self.skill.display_name)
 
     def test_parameters_all_optional(self):
         params = self.skill.parameters
@@ -70,6 +70,43 @@ class TestJobHunterRunSearchSkill(unittest.IsolatedAsyncioTestCase):
         # Body should be empty (no overrides)
         _, call_kwargs = mock_post.call_args
         self.assertEqual(call_kwargs["json"], {})
+
+    @patch("skills.job_hunter.config.JOB_HUNTER_URL", FAKE_URL)
+    @patch("skills.job_hunter.config.JOB_HUNTER_TOKEN", FAKE_TOKEN)
+    @patch("skills.job_hunter.config.JOB_HUNTER_SOURCES", None)
+    @patch("skills.job_hunter.config.JOB_HUNTER_KEYWORDS", None)
+    @patch("skills.job_hunter.config.JOB_HUNTER_SCORE_CUTOFF", None)
+    @patch("skills.job_hunter.requests.post")
+    async def test_run_search_with_prompt_override(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"status": "success", "fetched": 4, "approved": 1}
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        await self.skill.execute({}, prompt_override="Avalie vagas de jogos indie.")
+
+        _, call_kwargs = mock_post.call_args
+        self.assertEqual(call_kwargs["json"]["prompt_override"], "Avalie vagas de jogos indie.")
+
+    @patch("skills.job_hunter.config.JOB_HUNTER_URL", FAKE_URL)
+    @patch("skills.job_hunter.config.JOB_HUNTER_TOKEN", FAKE_TOKEN)
+    @patch("skills.job_hunter.config.JOB_HUNTER_SOURCES", None)
+    @patch("skills.job_hunter.config.JOB_HUNTER_KEYWORDS", None)
+    @patch("skills.job_hunter.config.JOB_HUNTER_SCORE_CUTOFF", None)
+    async def test_invalid_sources_type_returns_error(self):
+        result = await self.skill.execute({}, sources=[1, 2, 3])
+        self.assertIn("error", result)
+        self.assertIn("sources", result["error"].lower())
+
+    @patch("skills.job_hunter.config.JOB_HUNTER_URL", FAKE_URL)
+    @patch("skills.job_hunter.config.JOB_HUNTER_TOKEN", FAKE_TOKEN)
+    @patch("skills.job_hunter.config.JOB_HUNTER_SOURCES", None)
+    @patch("skills.job_hunter.config.JOB_HUNTER_KEYWORDS", None)
+    @patch("skills.job_hunter.config.JOB_HUNTER_SCORE_CUTOFF", None)
+    async def test_invalid_keywords_type_returns_error(self):
+        result = await self.skill.execute({}, keywords=[True, False])
+        self.assertIn("error", result)
+        self.assertIn("keywords", result["error"].lower())
 
     @patch("skills.job_hunter.config.JOB_HUNTER_URL", FAKE_URL)
     @patch("skills.job_hunter.config.JOB_HUNTER_TOKEN", FAKE_TOKEN)
@@ -205,6 +242,8 @@ class TestJobHunterGetDefaultsSkill(unittest.IsolatedAsyncioTestCase):
 
     def test_metadata(self):
         self.assertEqual(self.skill.name, "job_hunter_get_defaults")
+        self.assertIn("Config", self.skill.display_name)
+        self.assertIn("padrão", self.skill.description.lower())
         self.assertEqual(self.skill.parameters.get("required"), [])
 
     @patch("skills.job_hunter.config.JOB_HUNTER_URL", "")
@@ -266,6 +305,19 @@ class TestJobHunterGetDefaultsSkill(unittest.IsolatedAsyncioTestCase):
         result = await self.skill.execute({})
         self.assertIn("error", result)
         self.assertIn("403", result["error"])
+
+
+    @patch("skills.job_hunter.config.JOB_HUNTER_URL", FAKE_URL)
+    @patch("skills.job_hunter.config.JOB_HUNTER_TOKEN", FAKE_TOKEN)
+    @patch("skills.job_hunter.requests.get")
+    async def test_connection_error_returns_error(self, mock_get):
+        import requests as req
+
+        mock_get.side_effect = req.ConnectionError("Connection refused")
+
+        result = await self.skill.execute({})
+        self.assertIn("error", result)
+        self.assertIn("conexão", result["error"].lower())
 
 
 if __name__ == "__main__":

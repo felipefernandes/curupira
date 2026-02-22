@@ -25,8 +25,11 @@ class AgentBrain:
     _RE_FUNC_ANGLES = re.compile(r'<function=(\w+)>(.*?)</function>', re.DOTALL)      # <function=name>args</function>
     _RE_FUNC_COLON  = re.compile(r'<function=(\w+)":\s*(.*?)</function>', re.DOTALL)  # <function=name":args</function>
 
-    # Compiled pattern to strip CoT reasoning blocks (Qwen3, DeepSeek-R1, etc.)
+    # Compiled patterns to strip CoT reasoning blocks (Qwen3, DeepSeek-R1, etc.)
+    # _RE_THINK: complete pair <think>...</think>
+    # _RE_THINK_OPEN: truncated tag with no closing </think> (model cut off by max_tokens)
     _RE_THINK = re.compile(r'<think>.*?</think>', re.DOTALL)
+    _RE_THINK_OPEN = re.compile(r'<think>.*', re.DOTALL)
     
     def __init__(self, provider: str, model_name: str = "default"):
         """Inicializa o agente com provider. API Key é obtida de config.
@@ -346,7 +349,9 @@ class AgentBrain:
             return None
 
         # Construct Prompt
+        # /no_think instructs Qwen3 to skip chain-of-thought output
         system_prompt = (
+            "/no_think\n"
             "You are the Guardian of the System (Curupira)."
             "Analyze the provided context (Time, Hardware, State)."
             "Decide if you MUST say something to the user."
@@ -368,8 +373,8 @@ class AgentBrain:
                 response = await client.chat.completions.create(
                     model=model,
                     messages=messages,
-                    max_tokens=100,
-                    temperature=config.GROQ_TEMPERATURE_REFLECTION  # determinístico para reflexão
+                    max_tokens=400,  # must fit complete <think>...</think> block
+                    temperature=config.GROQ_TEMPERATURE_REFLECTION
                 )
                 result = response.choices[0].message.content.strip()
             else:
@@ -377,7 +382,7 @@ class AgentBrain:
                 response = await client.aio.models.generate_content(
                     model=model,
                     contents=[types.Content(parts=[types.Part(text=f"{system_prompt}\n\n{user_content}")])],
-                    config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=100)
+                    config=types.GenerateContentConfig(temperature=0.0, max_output_tokens=400)
                 )
                 if response.candidates:
                     result = response.candidates[0].content.parts[0].text.strip()
@@ -398,13 +403,15 @@ class AgentBrain:
                 return None
 
             # Strip <think>...</think> blocks produced by Qwen3, DeepSeek-R1 and similar CoT models.
-            # _RE_THINK is pre-compiled (class attribute) and removes all complete <think>…</think>
-            # pairs, including multi-line content. Incomplete tags (no closing tag) are left as-is.
+            # Pass 1: remove complete pairs (most common case with max_tokens=400)
+            # Pass 2: remove truncated open tags (fallback if model is still cut off)
             if not isinstance(result, str):
                 self.logger.warning(f"Reflection: unexpected result type {type(result).__name__}, coercing to str")
                 result = str(result)
 
-            result = self._RE_THINK.sub('', result).strip()
+            result = self._RE_THINK.sub('', result)       # complete <think>...</think>
+            result = self._RE_THINK_OPEN.sub('', result)  # truncated <think>... (no closing tag)
+            result = result.strip()
 
             # After stripping CoT, the result might be empty — treat as SILENCE
             if not result:

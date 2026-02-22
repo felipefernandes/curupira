@@ -102,6 +102,22 @@ else:
     except Exception as e:
         logger.error(f"Error parsing MCP_SERVERS_CONFIG: {e}")
 
+# Job Hunter Configuration
+JOB_HUNTER_URL = os.getenv("JOB_HUNTER_URL", "").rstrip("/")
+JOB_HUNTER_TOKEN = os.getenv("JOB_HUNTER_TOKEN", "")
+
+_jh_sources = os.getenv("JOB_HUNTER_SOURCES")
+_jh_keywords = os.getenv("JOB_HUNTER_KEYWORDS")
+_jh_cutoff = os.getenv("JOB_HUNTER_SCORE_CUTOFF")
+
+JOB_HUNTER_SOURCES = [s.strip() for s in _jh_sources.split(",") if s.strip()] if _jh_sources else None
+JOB_HUNTER_KEYWORDS = [k.strip() for k in _jh_keywords.split(",") if k.strip()] if _jh_keywords else None
+try:
+    JOB_HUNTER_SCORE_CUTOFF = float(_jh_cutoff) if _jh_cutoff else None
+except ValueError:
+    logger.error("JOB_HUNTER_SCORE_CUTOFF inválido. Usando valor padrão None.")
+    JOB_HUNTER_SCORE_CUTOFF = None
+
 # RSS Configuration
 RSS_FEEDS_DEFAULT: Dict[str, str] = {
     "G1": "https://g1.globo.com/rss/g1/",

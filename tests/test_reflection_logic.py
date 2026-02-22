@@ -42,10 +42,24 @@ async def test_reflection_filtering(mock_agent, model_output, expected_result):
          patch("core.config.GROQ_MODEL", "llama-test"), \
          patch("core.config.REFLECTION_ENABLED", True):
         
-        # Mock Client Response
-        mock_client = AsyncMock()
+        # Mock Client Response — use spec=str so .strip() returns the string itself
+        mock_content = MagicMock(spec=str)
+        mock_content.strip.return_value = model_output
+        mock_content.__str__ = lambda self: model_output
+        mock_content.upper.return_value = model_output.upper()
+        mock_content.replace.return_value = model_output
+        mock_content.rstrip.return_value = model_output
+
+        mock_message = MagicMock()
+        mock_message.content = model_output  # plain string
+
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+
         mock_response = MagicMock()
-        mock_response.choices[0].message.content = model_output
+        mock_response.choices = [mock_choice]
+
+        mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = mock_response
 
         # Mock groq.AsyncGroq

@@ -24,6 +24,9 @@ class AgentBrain:
     _RE_FUNC_PARENS = re.compile(r'<function=(\w+)\((.*?)\)></function>', re.DOTALL)  # <function=name(args)></function>
     _RE_FUNC_ANGLES = re.compile(r'<function=(\w+)>(.*?)</function>', re.DOTALL)      # <function=name>args</function>
     _RE_FUNC_COLON  = re.compile(r'<function=(\w+)":\s*(.*?)</function>', re.DOTALL)  # <function=name":args</function>
+
+    # Compiled pattern to strip CoT reasoning blocks (Qwen3, DeepSeek-R1, etc.)
+    _RE_THINK = re.compile(r'<think>.*?</think>', re.DOTALL)
     
     def __init__(self, provider: str, model_name: str = "default"):
         """Inicializa o agente com provider. API Key é obtida de config.
@@ -394,8 +397,14 @@ class AgentBrain:
                 self.logger.info(f"Reflection: SILENCE ({clean_result})")
                 return None
 
-            # Strip <think>...</think> blocks (Qwen3 and other CoT models leak reasoning)
-            result = re.sub(r'<think>.*?</think>', '', result, flags=re.DOTALL).strip()
+            # Strip <think>...</think> blocks produced by Qwen3, DeepSeek-R1 and similar CoT models.
+            # _RE_THINK is pre-compiled (class attribute) and removes all complete <think>…</think>
+            # pairs, including multi-line content. Incomplete tags (no closing tag) are left as-is.
+            if not isinstance(result, str):
+                self.logger.warning(f"Reflection: unexpected result type {type(result).__name__}, coercing to str")
+                result = str(result)
+
+            result = self._RE_THINK.sub('', result).strip()
 
             # After stripping CoT, the result might be empty — treat as SILENCE
             if not result:

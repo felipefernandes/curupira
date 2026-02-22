@@ -51,6 +51,11 @@ brain.register_skill(GetTimeSkill())
 # Skill: Save User Fact (long-term memory)
 brain.register_skill(SaveFactSkill(memory_manager))
 
+# Skill: Job Hunter
+from skills.job_hunter import JobHunterRunSearchSkill, JobHunterGetDefaultsSkill
+brain.register_skill(JobHunterRunSearchSkill())
+brain.register_skill(JobHunterGetDefaultsSkill())
+
 # Onboarding States
 WAITING_NAME = 1
 WAITING_SURNAME = 2

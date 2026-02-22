@@ -393,7 +393,15 @@ class AgentBrain:
             if clean_result in silence_triggers or len(clean_result) < 2:
                 self.logger.info(f"Reflection: SILENCE ({clean_result})")
                 return None
-            
+
+            # Strip <think>...</think> blocks (Qwen3 and other CoT models leak reasoning)
+            result = re.sub(r'<think>.*?</think>', '', result, flags=re.DOTALL).strip()
+
+            # After stripping CoT, the result might be empty — treat as SILENCE
+            if not result:
+                self.logger.info("Reflection: SILENCE (empty after <think> strip)")
+                return None
+
             return result
             
         except Exception as e:

@@ -47,6 +47,16 @@
 - [x] **Listagem:** Lista feeds pré-configurados via `RSS_FEEDS_JSON`.
 - [x] **Resiliência:** Timeout de 15s, User-Agent personalizado e Segurança (Whitelist).
 
+### 🧠 Memória de Longo Prazo (Facts)
+- [x] **Injeção de fatos no prompt:** Dados persistentes do usuário (cidade, preferências) injetados automaticamente. (Issue #88)
+- [x] **Save proativo:** Agente chama `save_user_fact` ao aprender dados relevantes sem intervenção.
+
+### 🧙 Persona & Comportamento
+- [x] **Persona Curupira:** System prompt estruturado com identidade, hardware-awareness e regras de comportamento. (Issue #68)
+- [x] **Temperatura configurável:** `GROQ_TEMPERATURE` e `GROQ_TEMPERATURE_REFLECTION` via `.env`.
+- [x] **Filtro de CoT:** Remove blocos `<think>` do output (Qwen3, DeepSeek-R1) antes de enviar ao usuário.
+- [x] **Typing indicator:** Status "Escrevendo..." no Telegram durante processamento e retries.
+
 ---
 
 ## 🔮 Backlog Priorizado (Q1 2026)

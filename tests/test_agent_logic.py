@@ -312,3 +312,71 @@ async def test_groq_generic_error_returns_fallback(agent, mock_groq_client):
     response = await agent.process("Hello", {})
 
     assert "problema" in response.lower() or "desculpe" in response.lower()
+
+
+# --- bot_full_name identity tests (PR #99) ---
+
+@pytest.mark.asyncio
+async def test_process_uses_bot_full_name_with_surname(agent, mock_groq_client):
+    """System prompt should include the full bot name when assistant_surname is set."""
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = "Sou o Curupira Prime."
+    mock_response.choices[0].message.tool_calls = None
+
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.return_value = mock_response
+
+    await agent.process("Qual o seu nome?", {
+        "user_name": "Felipe",
+        "assistant_surname": "Prime",
+    })
+
+    call_kwargs = mock_groq_client.chat.completions.create.call_args.kwargs
+    system_content = call_kwargs["messages"][0]["content"]
+    assert "Curupira Prime" in system_content, (
+        f"System prompt should contain 'Curupira Prime', got: {system_content[:300]}"
+    )
+    assert "Nunca diga que seu nome" in system_content
+
+
+@pytest.mark.asyncio
+async def test_process_uses_bot_name_without_surname(agent, mock_groq_client):
+    """When assistant_surname is absent, bot identity should fall back to 'Curupira'."""
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = "Sou o Curupira."
+    mock_response.choices[0].message.tool_calls = None
+
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.return_value = mock_response
+
+    await agent.process("Qual o seu nome?", {"user_name": "Felipe"})
+
+    call_kwargs = mock_groq_client.chat.completions.create.call_args.kwargs
+    system_content = call_kwargs["messages"][0]["content"]
+    # Should say "Curupira" but NOT "Curupira " with a trailing space
+    assert "Você é o Curupira," in system_content or 'é "Curupira"' in system_content, (
+        f"System prompt should contain plain 'Curupira' identity, got: {system_content[:300]}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_process_facts_section_labels_user(agent, mock_groq_client):
+    """FATOS section must state that the data describes the USER, not the bot."""
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock()]
+    mock_response.choices[0].message.content = "OK"
+    mock_response.choices[0].message.tool_calls = None
+
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.return_value = mock_response
+
+    await agent.process("Olá", {"user_name": "Felipe", "user_facts": "- city: São Paulo"})
+
+    call_kwargs = mock_groq_client.chat.completions.create.call_args.kwargs
+    system_content = call_kwargs["messages"][0]["content"]
+    assert "USUÁRIO" in system_content and "não você" in system_content, (
+        "FATOS section should clarify that facts describe the USER, not the bot"
+    )
+

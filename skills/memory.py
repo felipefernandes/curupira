@@ -87,16 +87,21 @@ class MemoryManager:
             await db.commit()
 
             # Migration: add recurrence columns if they don't exist yet
+            async with db.execute("PRAGMA table_info(reminders)") as cursor:
+                existing_cols = {row[1] for row in await cursor.fetchall()}
             for col, defn in [
                 ("recurrence", "TEXT DEFAULT NULL"),
                 ("is_task", "INTEGER DEFAULT 0"),
             ]:
-                try:
-                    await db.execute(f"ALTER TABLE reminders ADD COLUMN {col} {defn}")
-                    await db.commit()
-                    self.logger.info(f"Migrated reminders table: added column '{col}'.")
-                except Exception:
-                    pass  # Column already exists
+                if col not in existing_cols:
+                    try:
+                        await db.execute(f"ALTER TABLE reminders ADD COLUMN {col} {defn}")
+                        await db.commit()
+                        self.logger.info(f"Migrated reminders table: added column '{col}'.")
+                    except Exception as e:
+                        self.logger.error(
+                            f"Failed to migrate reminders table — could not add column '{col}': {e}"
+                        )
 
             self.logger.info("Database initialized.")
 

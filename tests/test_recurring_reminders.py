@@ -53,6 +53,32 @@ class TestNextOccurrence(unittest.TestCase):
         self.assertGreaterEqual(result.hour * 60 + result.minute, 19 * 60)
         self.assertLessEqual(result.hour * 60 + result.minute, 23 * 60)
 
+    def test_daily_random_fires_today_when_before_range(self):
+        """RANDOM range: from_time before range start → schedule fires today."""
+        from_time = _dt(8, 0)  # 08:00, well before range 19:00-23:00
+        result = ReminderManager._next_occurrence("DAILY@RANDOM:19:00-23:00", from_time)
+        self.assertEqual(result.date(), from_time.date())
+        total_min = result.hour * 60 + result.minute
+        self.assertGreaterEqual(total_min, 19 * 60)
+        self.assertLessEqual(total_min, 23 * 60)
+
+    def test_daily_random_fires_tomorrow_when_within_range(self):
+        """RANDOM range: from_time within the range → schedule fires tomorrow (no double-fire)."""
+        from_time = _dt(21, 0)  # 21:00, inside range 19:00-23:00
+        result = ReminderManager._next_occurrence("DAILY@RANDOM:19:00-23:00", from_time)
+        tomorrow = (from_time + timedelta(days=1)).date()
+        self.assertEqual(result.date(), tomorrow)
+        total_min = result.hour * 60 + result.minute
+        self.assertGreaterEqual(total_min, 19 * 60)
+        self.assertLessEqual(total_min, 23 * 60)
+
+    def test_daily_random_fires_tomorrow_when_past_range(self):
+        """RANDOM range: from_time past the range end → schedule fires tomorrow."""
+        from_time = _dt(23, 30)  # 23:30, past range 19:00-23:00
+        result = ReminderManager._next_occurrence("DAILY@RANDOM:19:00-23:00", from_time)
+        tomorrow = (from_time + timedelta(days=1)).date()
+        self.assertEqual(result.date(), tomorrow)
+
     def test_workdays_skips_weekend(self):
         """WORKDAYS@09:00 starting on a Saturday → next Monday."""
         # Find the next Saturday

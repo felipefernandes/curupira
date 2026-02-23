@@ -108,10 +108,19 @@ class ReminderManager:
             return base.replace(hour=h, minute=m, second=0, microsecond=0)
 
         if freq == "DAILY":
-            candidate = _make_candidate(from_time)
-            if candidate <= from_time:
-                candidate = _make_candidate(from_time + timedelta(days=1))
-            return candidate
+            if is_random:
+                # Fire today only if we haven't reached the range start yet.
+                # Once at or within the range, schedule tomorrow to avoid firing
+                # twice on the same day after a post-fire reschedule.
+                effective_start_min = min(sh * 60 + sm, eh * 60 + em)
+                from_min = from_time.hour * 60 + from_time.minute
+                base = from_time if from_min < effective_start_min else from_time + timedelta(days=1)
+                return _make_candidate(base)
+            else:
+                candidate = _make_candidate(from_time)
+                if candidate <= from_time:
+                    candidate = _make_candidate(from_time + timedelta(days=1))
+                return candidate
 
         if freq == "WORKDAYS":
             candidate = _make_candidate(from_time)

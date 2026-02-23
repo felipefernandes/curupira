@@ -15,54 +15,69 @@ class ReminderManager:
     async def add_reminder(self, user_id, message, delay_seconds, recurrence=None, is_task=False):
         """Saves a reminder to the database and returns its ID."""
         remind_at = datetime.now() + timedelta(seconds=delay_seconds)
-        async with aiosqlite.connect(self.db_path) as db:
-            cursor = await db.execute("""
-                INSERT INTO reminders (user_id, message, remind_at, created_at, status, recurrence, is_task)
-                VALUES (?, ?, ?, ?, 'PENDING', ?, ?)
-            """, (user_id, message, remind_at, datetime.now(), recurrence, 1 if is_task else 0))
-            await db.commit()
-            self.logger.info(f"Reminder saved for user {user_id} at {remind_at} (recurrence={recurrence}, is_task={is_task})")
-            return cursor.lastrowid
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                cursor = await db.execute("""
+                    INSERT INTO reminders (user_id, message, remind_at, created_at, status, recurrence, is_task)
+                    VALUES (?, ?, ?, ?, 'PENDING', ?, ?)
+                """, (user_id, message, remind_at, datetime.now(), recurrence, 1 if is_task else 0))
+                await db.commit()
+                self.logger.info(f"Reminder saved for user {user_id} at {remind_at} (recurrence={recurrence}, is_task={is_task})")
+                return cursor.lastrowid
+        except Exception as e:
+            self.logger.error(f"DB error saving reminder for user {user_id}: {e}")
+            raise
 
     async def get_active_reminders(self, user_id):
         """Returns a list of active (PENDING) reminders for a user."""
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("""
-                SELECT id, message, remind_at, recurrence, is_task FROM reminders
-                WHERE user_id = ? AND status = 'PENDING'
-                ORDER BY remind_at ASC
-            """, (user_id,)) as cursor:
-                rows = await cursor.fetchall()
-                return rows
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                async with db.execute("""
+                    SELECT id, message, remind_at, recurrence, is_task FROM reminders
+                    WHERE user_id = ? AND status = 'PENDING'
+                    ORDER BY remind_at ASC
+                """, (user_id,)) as cursor:
+                    rows = await cursor.fetchall()
+                    return rows
+        except Exception as e:
+            self.logger.error(f"DB error fetching active reminders for user {user_id}: {e}")
+            return []
 
     async def get_reminder_recurrence(self, reminder_id) -> Tuple[Optional[str], bool, Optional[datetime]]:
         """Returns (recurrence_str, is_task, remind_at) for a reminder."""
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute(
-                "SELECT recurrence, is_task, remind_at FROM reminders WHERE id = ?", (reminder_id,)
-            ) as cursor:
-                row = await cursor.fetchone()
-                if not row:
-                    return None, False, None
-                remind_at = None
-                if row[2]:
-                    if isinstance(row[2], str):
-                        try:
-                            remind_at = datetime.fromisoformat(row[2])
-                        except ValueError:
-                            pass
-                    elif isinstance(row[2], datetime):
-                        remind_at = row[2]
-                return row[0], bool(row[1]), remind_at
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                async with db.execute(
+                    "SELECT recurrence, is_task, remind_at FROM reminders WHERE id = ?", (reminder_id,)
+                ) as cursor:
+                    row = await cursor.fetchone()
+                    if not row:
+                        return None, False, None
+                    remind_at = None
+                    if row[2]:
+                        if isinstance(row[2], str):
+                            try:
+                                remind_at = datetime.fromisoformat(row[2])
+                            except ValueError:
+                                pass
+                        elif isinstance(row[2], datetime):
+                            remind_at = row[2]
+                    return row[0], bool(row[1]), remind_at
+        except Exception as e:
+            self.logger.error(f"DB error fetching recurrence for reminder {reminder_id}: {e}")
+            return None, False, None
 
     async def reset_recurring_reminder(self, reminder_id, next_time: datetime):
         """Updates remind_at for a recurring reminder (keeps status PENDING)."""
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute(
-                "UPDATE reminders SET remind_at = ? WHERE id = ?", (next_time, reminder_id)
-            )
-            await db.commit()
-            self.logger.info(f"Recurring reminder {reminder_id} rescheduled to {next_time}")
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute(
+                    "UPDATE reminders SET remind_at = ? WHERE id = ?", (next_time, reminder_id)
+                )
+                await db.commit()
+                self.logger.info(f"Recurring reminder {reminder_id} rescheduled to {next_time}")
+        except Exception as e:
+            self.logger.error(f"DB error rescheduling reminder {reminder_id}: {e}")
 
     @staticmethod
     def _next_occurrence(recurrence_str: str, from_time: Optional[datetime] = None) -> datetime:
@@ -88,14 +103,17 @@ class ReminderManager:
         freq = freq_parts[0].upper()
         dow_list = [d.strip().upper() for d in freq_parts[1].split(",")] if len(freq_parts) > 1 else []
 
-        is_random = time_part.upper().startswith("RANDOM:")
-        if is_random:
-            range_str = time_part[7:]
-            start_str, end_str = range_str.split("-")
-            sh, sm = map(int, start_str.split(":"))
-            eh, em = map(int, end_str.split(":"))
-        else:
-            h, m = map(int, time_part.split(":"))
+        try:
+            is_random = time_part.upper().startswith("RANDOM:")
+            if is_random:
+                range_str = time_part[7:]
+                start_str, end_str = range_str.split("-")
+                sh, sm = map(int, start_str.split(":"))
+                eh, em = map(int, end_str.split(":"))
+            else:
+                h, m = map(int, time_part.split(":"))
+        except (ValueError, IndexError):
+            return from_time + timedelta(hours=24)
 
         def _make_candidate(base: datetime) -> datetime:
             if is_random:
@@ -157,79 +175,100 @@ class ReminderManager:
 
     async def delete_reminder(self, reminder_id, user_id):
         """Marks a reminder as CANCELLED."""
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("""
-                UPDATE reminders SET status = 'CANCELLED'
-                WHERE id = ? AND user_id = ?
-            """, (reminder_id, user_id))
-            await db.commit()
-            self.logger.info(f"Reminder {reminder_id} cancelled.")
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute("""
+                    UPDATE reminders SET status = 'CANCELLED'
+                    WHERE id = ? AND user_id = ?
+                """, (reminder_id, user_id))
+                await db.commit()
+                self.logger.info(f"Reminder {reminder_id} cancelled.")
+        except Exception as e:
+            self.logger.error(f"DB error cancelling reminder {reminder_id}: {e}")
+            raise
 
     async def update_reminder(self, reminder_id, user_id, message=None, delay_seconds=None):
         """Updates a reminder's message and/or trigger time."""
         updates = []
         params = []
         new_remind_at = None
-        
+
         if message is not None:
             updates.append("message = ?")
             params.append(message)
-            
+
         if delay_seconds is not None:
             new_remind_at = datetime.now() + timedelta(seconds=delay_seconds)
             updates.append("remind_at = ?")
             params.append(new_remind_at)
-            
+
         if not updates:
             return None
 
         params.append(reminder_id)
         params.append(user_id)
-        
+
         query = f"UPDATE reminders SET {', '.join(updates)} WHERE id = ? AND user_id = ? AND status = 'PENDING'"
-        
-        async with aiosqlite.connect(self.db_path) as db:
-            cursor = await db.execute(query, tuple(params))
-            await db.commit()
-            
-            if cursor.rowcount > 0:
-                self.logger.info(f"Reminder {reminder_id} updated.")
-                return new_remind_at if delay_seconds is not None else True
-            return False
+
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                cursor = await db.execute(query, tuple(params))
+                await db.commit()
+
+                if cursor.rowcount > 0:
+                    self.logger.info(f"Reminder {reminder_id} updated.")
+                    return new_remind_at if delay_seconds is not None else True
+                return False
+        except Exception as e:
+            self.logger.error(f"DB error updating reminder {reminder_id}: {e}")
+            raise
 
     async def mark_as_sent(self, reminder_id):
         """Marks a reminder as SENT."""
-        async with aiosqlite.connect(self.db_path) as db:
-            await db.execute("UPDATE reminders SET status = 'SENT' WHERE id = ?", (reminder_id,))
-            await db.commit()
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                await db.execute("UPDATE reminders SET status = 'SENT' WHERE id = ?", (reminder_id,))
+                await db.commit()
+        except Exception as e:
+            self.logger.error(f"DB error marking reminder {reminder_id} as SENT: {e}")
 
     async def get_reminder_status(self, reminder_id):
         """Checks if a reminder is still PENDING."""
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT status FROM reminders WHERE id = ?", (reminder_id,)) as cursor:
-                row = await cursor.fetchone()
-                return row[0] if row else None
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                async with db.execute("SELECT status FROM reminders WHERE id = ?", (reminder_id,)) as cursor:
+                    row = await cursor.fetchone()
+                    return row[0] if row else None
+        except Exception as e:
+            self.logger.error(f"DB error fetching status for reminder {reminder_id}: {e}")
+            return None
 
     async def get_reminder_message(self, reminder_id):
         """Fetches the current message for a reminder."""
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("SELECT message FROM reminders WHERE id = ?", (reminder_id,)) as cursor:
-                row = await cursor.fetchone()
-                return row[0] if row else None
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                async with db.execute("SELECT message FROM reminders WHERE id = ?", (reminder_id,)) as cursor:
+                    row = await cursor.fetchone()
+                    return row[0] if row else None
+        except Exception as e:
+            self.logger.error(f"DB error fetching message for reminder {reminder_id}: {e}")
+            return None
 
 
     async def recover_reminders(self, job_queue):
         """Recovers pending reminders on startup and reschedules them."""
         self.logger.info("Recovering pending reminders...")
-        async with aiosqlite.connect(self.db_path) as db:
-            async with db.execute("""
-                SELECT id, user_id, message, remind_at, recurrence, is_task FROM reminders
-                WHERE status = 'PENDING'
-            """) as cursor:
-                rows = await cursor.fetchall()
+        try:
+            async with aiosqlite.connect(self.db_path) as db:
+                async with db.execute("""
+                    SELECT id, user_id, message, remind_at, recurrence, is_task FROM reminders
+                    WHERE status = 'PENDING'
+                """) as cursor:
+                    rows = await cursor.fetchall()
 
-                now = datetime.now()
-                for row in rows:
+            now = datetime.now()
+            for row in rows:
+                try:
                     reminder_id, user_id, message, remind_at_iso, recurrence, is_task = row
                     if isinstance(remind_at_iso, str):
                         remind_at = datetime.fromisoformat(remind_at_iso)
@@ -270,6 +309,10 @@ class ReminderManager:
                             name=f"reminder_{reminder_id}",
                         )
                         self.logger.warning(f"Reminder {reminder_id} was expired, sending immediately.")
+                except Exception as row_err:
+                    self.logger.error(f"Error recovering reminder row {row}: {row_err}")
+        except Exception as e:
+            self.logger.error(f"DB error during reminder recovery: {e}")
 
     # We need a static wrapper because JobQueue callbacks are rigid
     # Alternatively, we can import this function in bot.py

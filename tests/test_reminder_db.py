@@ -12,6 +12,7 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta
+from unittest.mock import MagicMock
 
 import aiosqlite
 
@@ -224,6 +225,87 @@ class TestReminderManagerDB(unittest.IsolatedAsyncioTestCase):
         await self.manager.recover_reminders(job_queue)
 
         job_queue.run_once.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# ReminderManager — DB error resilience
+# ---------------------------------------------------------------------------
+
+class TestReminderManagerDBErrors(unittest.IsolatedAsyncioTestCase):
+    """Tests that DB methods return safe defaults and log errors on DB failure."""
+
+    def _make_broken_manager(self):
+        """Returns a ReminderManager pointing at an invalid DB path."""
+        mgr = ReminderManager(db_path="/nonexistent/path/curupira.db")
+        mgr.logger = MagicMock()
+        return mgr
+
+    async def test_get_active_reminders_returns_empty_list_on_db_error(self):
+        """get_active_reminders returns [] when DB is unavailable."""
+        mgr = self._make_broken_manager()
+        result = await mgr.get_active_reminders(99)
+        self.assertEqual(result, [])
+        mgr.logger.error.assert_called_once()
+
+    async def test_get_reminder_recurrence_returns_none_tuple_on_db_error(self):
+        """get_reminder_recurrence returns (None, False, None) when DB is unavailable."""
+        mgr = self._make_broken_manager()
+        recurrence, is_task, remind_at = await mgr.get_reminder_recurrence(1)
+        self.assertIsNone(recurrence)
+        self.assertFalse(is_task)
+        self.assertIsNone(remind_at)
+        mgr.logger.error.assert_called_once()
+
+    async def test_get_reminder_status_returns_none_on_db_error(self):
+        """get_reminder_status returns None when DB is unavailable."""
+        mgr = self._make_broken_manager()
+        result = await mgr.get_reminder_status(1)
+        self.assertIsNone(result)
+        mgr.logger.error.assert_called_once()
+
+    async def test_get_reminder_message_returns_none_on_db_error(self):
+        """get_reminder_message returns None when DB is unavailable."""
+        mgr = self._make_broken_manager()
+        result = await mgr.get_reminder_message(1)
+        self.assertIsNone(result)
+        mgr.logger.error.assert_called_once()
+
+    async def test_mark_as_sent_logs_and_does_not_raise_on_db_error(self):
+        """mark_as_sent logs the error and does not raise when DB is unavailable."""
+        mgr = self._make_broken_manager()
+        try:
+            await mgr.mark_as_sent(1)
+        except Exception:
+            self.fail("mark_as_sent raised an exception on DB error")
+        mgr.logger.error.assert_called_once()
+
+    async def test_reset_recurring_reminder_logs_and_does_not_raise_on_db_error(self):
+        """reset_recurring_reminder logs the error and does not raise when DB is unavailable."""
+        mgr = self._make_broken_manager()
+        try:
+            await mgr.reset_recurring_reminder(1, datetime.now() + timedelta(days=1))
+        except Exception:
+            self.fail("reset_recurring_reminder raised an exception on DB error")
+        mgr.logger.error.assert_called_once()
+
+    async def test_recover_reminders_logs_and_does_not_raise_on_db_error(self):
+        """recover_reminders logs the error and does not raise when DB is unavailable."""
+        from unittest.mock import MagicMock
+        mgr = self._make_broken_manager()
+        job_queue = MagicMock()
+        try:
+            await mgr.recover_reminders(job_queue)
+        except Exception:
+            self.fail("recover_reminders raised an exception on DB error")
+        mgr.logger.error.assert_called_once()
+        job_queue.run_once.assert_not_called()
+
+    async def test_add_reminder_re_raises_on_db_error(self):
+        """add_reminder logs and re-raises on DB error (caller's try/except handles it)."""
+        mgr = self._make_broken_manager()
+        with self.assertRaises(Exception):
+            await mgr.add_reminder(99, "test", 60)
+        mgr.logger.error.assert_called_once()
 
 
 if __name__ == "__main__":

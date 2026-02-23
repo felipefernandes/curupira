@@ -159,6 +159,27 @@ class TestNextOccurrenceValidation(unittest.TestCase):
         self.assertEqual(result.hour, 10)
         self.assertEqual(result.minute, 0)
 
+    def test_invalid_time_format_non_numeric_returns_24h_fallback(self):
+        """DAILY@abc:xyz (non-numeric time) returns from_time + 24h instead of crashing."""
+        from_time = _dt(10, 0)
+        result = ReminderManager._next_occurrence("DAILY@abc:xyz", from_time)
+        expected = from_time + timedelta(hours=24)
+        self.assertAlmostEqual(result.timestamp(), expected.timestamp(), delta=1)
+
+    def test_invalid_random_range_no_dash_returns_24h_fallback(self):
+        """RANDOM range without '-' separator returns from_time + 24h instead of crashing."""
+        from_time = _dt(10, 0)
+        result = ReminderManager._next_occurrence("DAILY@RANDOM:19:00", from_time)
+        expected = from_time + timedelta(hours=24)
+        self.assertAlmostEqual(result.timestamp(), expected.timestamp(), delta=1)
+
+    def test_invalid_random_range_non_numeric_returns_24h_fallback(self):
+        """RANDOM range with non-numeric parts returns from_time + 24h instead of crashing."""
+        from_time = _dt(10, 0)
+        result = ReminderManager._next_occurrence("DAILY@RANDOM:aa:bb-cc:dd", from_time)
+        expected = from_time + timedelta(hours=24)
+        self.assertAlmostEqual(result.timestamp(), expected.timestamp(), delta=1)
+
 
 # ---------------------------------------------------------------------------
 # _parse_schedule

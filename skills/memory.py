@@ -31,7 +31,8 @@ class MemoryManager:
             
         # Check for legacy DB at root and migrate if needed
         legacy_db = pathlib.Path(__file__).parent.parent / "curupira.db"
-        if legacy_db.exists() and not (db_path or DB_FILE).exists():
+        target_path = pathlib.Path(db_path) if db_path else DB_FILE
+        if legacy_db.exists() and not target_path.exists():
             self.logger.warning(f"Migrating legacy database from {legacy_db} to {DB_FILE}")
             try:
                 shutil.move(str(legacy_db), str(DB_FILE))
@@ -84,6 +85,24 @@ class MemoryManager:
                 )
             """)
             await db.commit()
+
+            # Migration: add recurrence columns if they don't exist yet
+            async with db.execute("PRAGMA table_info(reminders)") as cursor:
+                existing_cols = {row[1] for row in await cursor.fetchall()}
+            for col, defn in [
+                ("recurrence", "TEXT DEFAULT NULL"),
+                ("is_task", "INTEGER DEFAULT 0"),
+            ]:
+                if col not in existing_cols:
+                    try:
+                        await db.execute(f"ALTER TABLE reminders ADD COLUMN {col} {defn}")
+                        await db.commit()
+                        self.logger.info(f"Migrated reminders table: added column '{col}'.")
+                    except Exception as e:
+                        self.logger.error(
+                            f"Failed to migrate reminders table — could not add column '{col}': {e}"
+                        )
+
             self.logger.info("Database initialized.")
 
     async def add_user(self, user_id, username, full_name):

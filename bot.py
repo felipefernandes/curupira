@@ -215,7 +215,10 @@ async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             task_error = True
             logging.error(f"Error executing task reminder {reminder_id}: {e}")
-            await context.bot.send_message(chat_id=job.chat_id, text=f"⚠️ Erro ao executar tarefa agendada: {message}")
+            try:
+                await context.bot.send_message(chat_id=job.chat_id, text=f"⚠️ Erro ao executar tarefa agendada: {message}")
+            except Exception as send_err:
+                logging.error(f"Failed to notify user of task error for reminder {reminder_id}: {send_err}")
     else:
         await context.bot.send_message(chat_id=job.chat_id, text=f"⏰ Lembrete: {message}")
 
@@ -232,7 +235,7 @@ async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
             name=f"reminder_{reminder_id}",
         )
         logging.info(f"Recurring reminder {reminder_id} rescheduled → {next_time}")
-    elif not task_error:
+    if not recurrence and not task_error:
         await reminder_manager.mark_as_sent(reminder_id)
 
 async def system_heartbeat(context: ContextTypes.DEFAULT_TYPE):

@@ -58,10 +58,13 @@ async def _execute_reminder_impl(context, reminder_manager, memory_manager, brai
             await context.bot.send_message(chat_id=job.chat_id, text=response_text)
         except Exception:
             task_error = True
-            await context.bot.send_message(
-                chat_id=job.chat_id,
-                text=f"⚠️ Erro ao executar tarefa agendada: {message}",
-            )
+            try:
+                await context.bot.send_message(
+                    chat_id=job.chat_id,
+                    text=f"⚠️ Erro ao executar tarefa agendada: {message}",
+                )
+            except Exception:
+                pass  # notification failure is logged in bot.py; here we just swallow it
     else:
         await context.bot.send_message(chat_id=job.chat_id, text=f"⏰ Lembrete: {message}")
 
@@ -77,7 +80,7 @@ async def _execute_reminder_impl(context, reminder_manager, memory_manager, brai
             data={"id": reminder_id, "msg": message},
             name=f"reminder_{reminder_id}",
         )
-    elif not task_error:
+    if not recurrence and not task_error:
         await reminder_manager.mark_as_sent(reminder_id)
 
 
@@ -321,6 +324,37 @@ class TestExecuteReminderCallback(unittest.IsolatedAsyncioTestCase):
 
         text = context.bot.send_message.call_args[1]["text"]
         self.assertIn("fallback msg", text)
+
+    async def test_get_facts_failure_sets_task_error_and_notifies(self):
+        """If get_facts raises, task_error is set, error notification is sent, and mark_as_sent is NOT called."""
+        context = _make_context(reminder_data={"id": 12, "msg": "busca vagas"})
+        mgr = _make_reminder_manager(message="busca vagas", is_task=True, recurrence=None)
+        mem_mgr = _make_memory_manager()
+        mem_mgr.get_facts = AsyncMock(side_effect=RuntimeError("DB unavailable"))
+        brain = MagicMock()
+
+        await _execute_reminder_impl(context, mgr, mem_mgr, brain)
+
+        context.bot.send_message.assert_awaited_once()
+        text = context.bot.send_message.call_args[1]["text"]
+        self.assertIn("⚠️", text)
+        mgr.mark_as_sent.assert_not_awaited()
+
+    async def test_task_error_notification_send_fails_silently(self):
+        """If brain fails AND error notification send also fails, no exception propagates."""
+        context = _make_context(reminder_data={"id": 13, "msg": "tarefa"})
+        mgr = _make_reminder_manager(message="tarefa", is_task=True, recurrence=None)
+        mem_mgr = _make_memory_manager()
+        brain = MagicMock()
+        brain.process = AsyncMock(side_effect=RuntimeError("crash"))
+        context.bot.send_message = AsyncMock(side_effect=RuntimeError("telegram down"))
+
+        try:
+            await _execute_reminder_impl(context, mgr, mem_mgr, brain)
+        except Exception:
+            self.fail("Exception propagated when both brain and send_message failed")
+
+        mgr.mark_as_sent.assert_not_awaited()
 
 
 if __name__ == "__main__":

@@ -287,8 +287,8 @@ async def system_heartbeat(context: ContextTypes.DEFAULT_TYPE):
             if config.AUTHORIZED_USER_ID != 0:
                 await context.bot.send_message(
                     chat_id=config.AUTHORIZED_USER_ID, 
-                    text=f"🧙‍♂️ *Curupira (Reflexão):*\n{msg}",
-                    parse_mode=ParseMode.MARKDOWN
+                    text=f"{msg}",
+                    parse_mode=ParseMode.HTML
                 )
         else:
             logging.info("🤫 Reflection: SILENCE")

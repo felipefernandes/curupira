@@ -1,6 +1,7 @@
 from .base import BaseSkill
 import httpx
 import logging
+import asyncio
 from typing import Any, Dict
 
 class WeatherSkill(BaseSkill):
@@ -73,7 +74,6 @@ class WeatherSkill(BaseSkill):
             except Exception as e:
                 self.logger.warning(f"Error fetching coordinates (attempt {attempt+1}/{retries}): {e}")
                 if attempt < retries - 1:
-                    import asyncio
                     await asyncio.sleep(backoff * (attempt + 1))
         
         self.logger.error(f"Failed to fetch coordinates for {city_name} after {retries} attempts.")
@@ -97,7 +97,6 @@ class WeatherSkill(BaseSkill):
             except Exception as e:
                 self.logger.warning(f"Error fetching forecast (attempt {attempt+1}/{retries}): {e}")
                 if attempt < retries - 1:
-                    import asyncio
                     await asyncio.sleep(backoff * (attempt + 1))
         
         self.logger.error(f"Failed to fetch forecast for lat:{lat}, lon:{lon} after {retries} attempts.")

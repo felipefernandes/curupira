@@ -292,6 +292,7 @@ async def system_heartbeat(context: ContextTypes.DEFAULT_TYPE):
                     text=f"{escaped_msg}",
                     parse_mode=ParseMode.HTML
                 )
+                await memory_manager.log_message(config.AUTHORIZED_USER_ID, "model", msg)
         else:
             logging.info("🤫 Reflection: SILENCE")
 

@@ -21,7 +21,11 @@ async def test_system_heartbeat_sends_escaped_proactive_message():
     mock_brain = AsyncMock()
     mock_brain.reflect.return_value = unsafe_message
 
+    # Mock memory manager
+    mock_memory_manager = AsyncMock()
+
     with patch('bot.brain', mock_brain), \
+         patch('bot.memory_manager', mock_memory_manager), \
          patch('bot.config.REFLECTION_ENABLED', True), \
          patch('bot.config.AUTHORIZED_USER_ID', 12345):
          
@@ -37,6 +41,9 @@ async def test_system_heartbeat_sends_escaped_proactive_message():
             text=expected_escaped_message,
             parse_mode=ParseMode.HTML
         )
+        
+        # Verify the message was correctly saved to memory
+        mock_memory_manager.log_message.assert_called_once_with(12345, "model", unsafe_message)
 
 @pytest.mark.asyncio
 async def test_system_heartbeat_silence():
@@ -48,12 +55,16 @@ async def test_system_heartbeat_silence():
     mock_brain = AsyncMock()
     mock_brain.reflect.return_value = None  # SILENCE
 
+    mock_memory_manager = AsyncMock()
+
     with patch('bot.brain', mock_brain), \
+         patch('bot.memory_manager', mock_memory_manager), \
          patch('bot.config.REFLECTION_ENABLED', True), \
          patch('bot.config.AUTHORIZED_USER_ID', 12345):
          
         await system_heartbeat(mock_context)
 
         mock_brain.reflect.assert_called_once()
-        # Ensure no message was sent
+        # Ensure no message was sent or logged
         mock_context.bot.send_message.assert_not_called()
+        mock_memory_manager.log_message.assert_not_called()

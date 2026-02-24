@@ -68,3 +68,31 @@ async def test_system_heartbeat_silence():
         # Ensure no message was sent or logged
         mock_context.bot.send_message.assert_not_called()
         mock_memory_manager.log_message.assert_not_called()
+
+@pytest.mark.asyncio
+async def test_system_heartbeat_memory_manager_exception(caplog):
+    """Test that an exception during memory logging does not crash the heartbeat."""
+    mock_context = MagicMock()
+    mock_context.bot = AsyncMock()
+    mock_context.bot.send_message = AsyncMock()
+    
+    mock_brain = AsyncMock()
+    mock_brain.reflect.return_value = "Test message"
+    
+    mock_memory_manager = AsyncMock()
+    mock_memory_manager.log_message.side_effect = Exception("DB Connection Error")
+
+    with patch('bot.brain', mock_brain), \
+         patch('bot.memory_manager', mock_memory_manager), \
+         patch('bot.config.REFLECTION_ENABLED', True), \
+         patch('bot.config.AUTHORIZED_USER_ID', 12345):
+         
+        # Execute heartbeat, should not raise
+        await system_heartbeat(mock_context)
+
+        mock_brain.reflect.assert_called_once()
+        mock_context.bot.send_message.assert_called_once()
+        mock_memory_manager.log_message.assert_called_once_with(12345, "model", "Test message")
+        
+        # Verify the error was logged
+        assert "Erro ao salvar reflexão no histórico: DB Connection Error" in caplog.text

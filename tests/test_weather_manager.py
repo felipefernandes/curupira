@@ -82,11 +82,9 @@ async def test_get_coordinates_total_failure(weather_skill):
         mock_get.side_effect = httpx.ConnectError("Connection Error")
         
         with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
-            lat, lon, name = await weather_skill.get_coordinates("Invalid City", retries=2, backoff=0.01)
+            with pytest.raises(Exception):
+                await weather_skill.get_coordinates("Invalid City", retries=2, backoff=0.01)
             
-            assert lat is None
-            assert lon is None
-            assert name is None
             assert mock_get.call_count == 2
             mock_sleep.assert_called_once()
 
@@ -130,9 +128,9 @@ async def test_get_forecast_total_failure(weather_skill):
         mock_get.side_effect = httpx.ConnectError("Connection Error")
         
         with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
-            current = await weather_skill.get_forecast(-23.5, -46.6, retries=2, backoff=0.01)
+            with pytest.raises(Exception):
+                await weather_skill.get_forecast(-23.5, -46.6, retries=2, backoff=0.01)
             
-            assert current is None
             assert mock_get.call_count == 2
             mock_sleep.assert_called_once()
 
@@ -149,7 +147,7 @@ async def test_execute_forecast_error(weather_skill):
         with patch.object(weather_skill, "get_forecast", return_value=None):
             res = await weather_skill.execute({}, "São Paulo")
             assert "error" in res
-            assert "Erro ao obter dados" in res["error"]
+            assert "Erro de formatação ou sem dados" in res["error"]
 
 @pytest.mark.asyncio
 async def test_execute_success(weather_skill):
@@ -159,3 +157,10 @@ async def test_execute_success(weather_skill):
             assert res["location"] == "São Paulo"
             assert res["temperature"] == 25.0
             assert res["rain_probability"] == 0
+
+@pytest.mark.asyncio
+async def test_execute_api_error(weather_skill):
+    with patch.object(weather_skill, "get_coordinates", side_effect=Exception("API failed")):
+        res = await weather_skill.execute({}, "São Paulo")
+        assert "error" in res
+        assert "Erro de comunicação com a API" in res["error"]

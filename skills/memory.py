@@ -161,14 +161,17 @@ class MemoryManager:
             """, (user_id, role, content, datetime.now()))
             await db.commit()
 
-    async def get_context(self, user_id, limit=10):
-        """Retrieves the last N messages for context injection."""
+    async def get_context(self, user_id, limit=20, minutes_ago=30):
+        """Retrieves the recent messages for context injection within a timeframe."""
+        from datetime import timedelta
+        cutoff_time = datetime.now() - timedelta(minutes=minutes_ago)
+        
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute("""
                 SELECT role, content FROM conversations 
-                WHERE user_id = ? 
+                WHERE user_id = ? AND timestamp >= ?
                 ORDER BY id DESC LIMIT ?
-            """, (user_id, limit)) as cursor:
+            """, (user_id, cutoff_time, limit)) as cursor:
                 rows = await cursor.fetchall()
                 # Reverse to correct chronological order
                 history = reversed(rows)

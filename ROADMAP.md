@@ -74,7 +74,7 @@ Foco em dar iniciativa ao bot, melhorias na injeção de contexto e aprimorament
 - [ ] **Grounding Dinâmico:** Injeção de contexto vital (Hora atual, Load, etc) pré-prompt. (Issue #70)
 - [ ] **Fluxo de RSS Claro:** Listagem individualizada com links vs resumos genéricos. (Issue #87)
 - [ ] **Persistência Proativa:** Mensagens proativas no histórico para continuidade. (Issue #85)
-- [ ] **Multi-turn/Streaming UX:** Suporte para conversação natural pré-tools e streaming responses. (Issue #81)
+- [x] **Multi-turn/Streaming UX:** Suporte para conversação natural pré-tools e streaming responses. (Issue #81)
 
 ### 🛠️ v0.11.0: Confiabilidade e Arquitetura Agêntica Avançada
 Foco na saúde do sistema e evolução das capacidades técnicas (MCP-Lite) usando ferramentas orientadas a sistema.

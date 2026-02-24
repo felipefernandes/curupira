@@ -59,21 +59,43 @@
 
 ---
 
-## 🔮 Backlog Priorizado (Q1 2026)
+### 🎯 Job Hunter
+- [x] **Busca de Vagas:** Integração com APIs externas de busca. (Issue #95)
+- [x] **Avaliação de IA:** Avaliação e scoring de vagas relevantes baseadas nas preferências do usuário.
+- [x] **Configuração flexível:** Opções para domínios, keywords e prompt override.
 
-### 🚀 Prioridade Alta (Core Assistant)
-Estas skills transformam o Curupira em um assistente pessoal proativo.
-- [ ] **Google Agenda:** Gestão completa de calendário (OAuth). (Issue #48)
-- [ ] **Compreensão de Áudio:** Transcrição e resposta a áudios. (Issue #60)
+---
 
+## 📦 Releases Planejados (Milestones)
 
-### 🛠️ Prioridade Média (Produtividade)
-Ferramentas de produtividade pessoal.
-- [ ] **Tempo de Transporte:** Rotas e trânsito (Maps). (Issue #61)
-- [ ] **Emails:** Leitura e envio. (Issue #50)
-- [ ] **Notion:** Segundo cérebro. (Issue #49)
+### 🚀 v0.10.0: O "Jarvis" Proativo e Contextual
+Foco em dar iniciativa ao bot, melhorias na injeção de contexto e aprimoramento contínuo da UX de conversação (Memory & Persona).
+- [ ] **Scoring de Memória (Facts):** Sistema de prioridade para fatos persistentes do usuário no prompt. (Issue #90)
+- [ ] **Grounding Dinâmico:** Injeção de contexto vital (Hora atual, Load, etc) pré-prompt. (Issue #70)
+- [ ] **Fluxo de RSS Claro:** Listagem individualizada com links vs resumos genéricos. (Issue #87)
+- [ ] **Persistência Proativa:** Mensagens proativas no histórico para continuidade. (Issue #85)
+- [ ] **Multi-turn/Streaming UX:** Suporte para conversação natural pré-tools e streaming responses. (Issue #81)
 
-### 🤓 Prioridade Baixa (DevOps & Tools)
-Monitoramento técnico e entretenimento.
-- [ ] **Monitoramento:** Vercel (#45), Analytics (#47), Logs (#53).
-- [ ] **Outros:** PDF (#46), Entretenimento (#59).
+### 🛠️ v0.11.0: Confiabilidade e Arquitetura Agêntica Avançada
+Foco na saúde do sistema e evolução das capacidades técnicas (MCP-Lite) usando ferramentas orientadas a sistema.
+- [ ] **Doctor (Health Checks):** Diagnóstico de integridade do ambiente (ZRAM, Chaves, Git). (Issue #72)
+- [ ] **Padronização MCP-Lite:** Isolar lógicas das skills para retorno JSON padronizado. (Issue #71)
+- [ ] **Skill de Terminal (Power User):** Execução segura de comandos shell locais. (Issue #42)
+- [ ] **Monitoramento de Logs:** Detecção de anomalias no sistema. (Issue #53)
+
+### 💼 v1.0.0: O Assistente Pessoal Completo ("Day-to-day Helper")
+Integrações essenciais para rotina e facilidades da vida pessoal.
+- [ ] **Compreensão de Áudio:** Ouvir e processar solicitações via voz. (Issue #60)
+- [ ] **Google Agenda:** Gestão completa e cruzamento de horários. (Issue #48)
+- [ ] **Tempo de Transporte:** Consultas de rotas e estimativa (Maps). (Issue #61)
+- [ ] **Compras Inteligentes:** Gerenciamento e auxílio em compras de casa/mantimentos. (Issue #62)
+
+### 📈 v1.1.0: Produtividade Profissional e Tools
+Ferramentas direcionadas para ganho de produtividade no trabalho e integrações corporativas.
+- [ ] **E-mails v1.0:** Leitura e envio de anexos (SMTP/Resend). (Issue #50)
+- [ ] **Sistema de Arquivos:** Operações de I/O por linguagem natural. (Issue #43)
+- [ ] **Leitor de Documentos (PDF):** Síntese estruturada de relatórios PDF. (Issue #46)
+- [ ] **Navegação Web Headless:** Acesso e extração de URLs sem API (BS4/Trafilatura). (Issue #44)
+- [ ] **Integração Notion:** Construção e input pro "segundo cérebro". (Issue #49)
+- [ ] **Entretenimento (Cinema/Teatro):** Busca de diversão local via APIs. (Issue #59)
+- [ ] **Vercel & Analytics:** Reports, logs e stats básicos (Dev/Prod). (Issues #45, #47)

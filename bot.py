@@ -128,8 +128,8 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     # --- ONBOARDING FLOW END ---
     
-    # 2. Retrieve Context
-    context_history = await memory_manager.get_context(user_id)
+    # 2. Retrieve Context (Session Memory: Max 20 msgs in the last 30 minutes)
+    context_history = await memory_manager.get_context(user_id, limit=20, minutes_ago=30)
     user_facts = await memory_manager.get_facts(user_id)
     assistant_surname = await memory_manager.get_fact_value(user_id, "assistant_surname") or ""
 

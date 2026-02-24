@@ -201,3 +201,82 @@ class TestMemoryManagerMigration:
             await mm.init_db()
         finally:
             os.unlink(db_path)
+
+# ---------------------------------------------------------------------------
+# MemoryManager get_context session memory (Issue #70)
+# ---------------------------------------------------------------------------
+
+from datetime import datetime, timedelta
+
+class TestGetContextSessionMemory:
+    @pytest.mark.asyncio
+    async def test_get_context_filters_by_minutes_ago(self):
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        try:
+            mm = MemoryManager(db_path=db_path)
+            await mm.init_db()
+            
+            await mm.add_user(user_id=1, username="test", full_name="Test User")
+            
+            now = datetime.now()
+            
+            async with aiosqlite.connect(db_path) as db:
+                # 1 hour ago (should be excluded)
+                await db.execute(
+                    "INSERT INTO conversations (user_id, role, content, timestamp) VALUES (?, ?, ?, ?)",
+                    (1, "user", "Old message", now - timedelta(hours=1))
+                )
+                # 10 minutes ago (should be included)
+                await db.execute(
+                    "INSERT INTO conversations (user_id, role, content, timestamp) VALUES (?, ?, ?, ?)",
+                    (1, "model", "Recent reply", now - timedelta(minutes=10))
+                )
+                # Just now (should be included)
+                await db.execute(
+                    "INSERT INTO conversations (user_id, role, content, timestamp) VALUES (?, ?, ?, ?)",
+                    (1, "user", "Hello now", now)
+                )
+                await db.commit()
+
+            # Retrieve with 30 minutes window
+            context = await mm.get_context(user_id=1, limit=10, minutes_ago=30)
+            
+            assert "Old message" not in context
+            assert "Recent reply" in context
+            assert "Hello now" in context
+            
+            # Verify chronological order
+            assert context.find("Recent reply") < context.find("Hello now")
+            
+        finally:
+            os.unlink(db_path)
+            
+    @pytest.mark.asyncio
+    async def test_get_context_respects_limit(self):
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        try:
+            mm = MemoryManager(db_path=db_path)
+            await mm.init_db()
+            await mm.add_user(user_id=1, username="test", full_name="Test User")
+            
+            now = datetime.now()
+            async with aiosqlite.connect(db_path) as db:
+                for i in range(5):
+                    await db.execute(
+                        "INSERT INTO conversations (user_id, role, content, timestamp) VALUES (?, ?, ?, ?)",
+                        (1, "user", f"Msg {i}", now)
+                    )
+                await db.commit()
+
+            # Retrieve with limit 2
+            context = await mm.get_context(user_id=1, limit=2, minutes_ago=30)
+            
+            assert "Msg 0" not in context
+            assert "Msg 1" not in context
+            assert "Msg 2" not in context
+            assert "Msg 3" in context
+            assert "Msg 4" in context
+        finally:
+            os.unlink(db_path)

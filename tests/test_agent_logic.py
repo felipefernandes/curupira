@@ -380,3 +380,113 @@ async def test_process_facts_section_labels_user(agent, mock_groq_client):
         "FATOS section should clarify that facts describe the USER, not the bot"
     )
 
+# --- on_intermediate_reply tests (Issue #81) ---
+
+@pytest.mark.asyncio
+async def test_groq_intermediate_reply_is_called(agent, mock_groq_client):
+    """Test that on_intermediate_reply is called when content is present alongside tool_calls in Groq."""
+    
+    mock_tool_call = MagicMock()
+    mock_tool_call.id = "call_abc"
+    mock_tool_call.function.name = "test_skill"
+    mock_tool_call.function.arguments = '{"arg": 1}'
+    
+    msg_with_tool_and_content = MagicMock()
+    msg_with_tool_and_content.role = "assistant"
+    msg_with_tool_and_content.content = "I am doing that now..."
+    msg_with_tool_and_content.tool_calls = [mock_tool_call]
+    
+    msg_final = MagicMock()
+    msg_final.role = "assistant"
+    msg_final.content = "Done!"
+    msg_final.tool_calls = None
+    
+    mock_response_1 = MagicMock()
+    mock_response_1.choices = [MagicMock(message=msg_with_tool_and_content)]
+    
+    mock_response_2 = MagicMock()
+    mock_response_2.choices = [MagicMock(message=msg_final)]
+    
+    mock_skill = AsyncMock()
+    mock_skill.name = "test_skill"
+    mock_skill.execute.return_value = {"status": "ok"}
+    agent.register_skill(mock_skill)
+    
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.side_effect = [mock_response_1, mock_response_2]
+    
+    mock_intermediate = AsyncMock()
+    
+    response = await agent.process("Do something", {}, on_intermediate_reply=mock_intermediate)
+    
+    assert response == "Done!"
+    mock_intermediate.assert_called_once_with("I am doing that now...")
+
+@pytest.mark.asyncio
+async def test_gemini_intermediate_reply_is_called(agent):
+    """Test that on_intermediate_reply is called when text is present alongside function_calls in Gemini."""
+    agent.provider = "gemini"
+    
+    mock_genai = MagicMock()
+    mock_types = MagicMock()
+    
+    class MockGenerateContentConfig:
+        def __init__(self, tools=None, temperature=None, max_output_tokens=None):
+            pass
+            
+    mock_types.GenerateContentConfig = MockGenerateContentConfig
+    mock_types.Part.from_text.return_value = MagicMock()
+    mock_types.Content.return_value = MagicMock()
+    
+    class MockGenerateContentResponse:
+        @classmethod
+        def from_function_response(cls, name, response):
+            return MagicMock()
+    
+    mock_types.Part.from_function_response = MagicMock()    
+    mock_genai.types = mock_types
+    
+    with patch.dict("sys.modules", {"google.genai": mock_genai}):
+        mock_genai_client = MagicMock()
+        mock_genai_client.aio.models.generate_content = AsyncMock()
+        
+        mock_response_1 = MagicMock()
+        mock_candidate_1 = MagicMock()
+        
+        mock_part_text = MagicMock()
+        mock_part_text.text = "Just a moment..."
+        mock_part_text.function_call = None
+        
+        mock_part_fn = MagicMock()
+        mock_part_fn.text = None
+        mock_part_fn.function_call = MagicMock()
+        mock_part_fn.function_call.name = "test_skill"
+        mock_part_fn.function_call.args = {"arg": 1}
+        
+        mock_candidate_1.content.parts = [mock_part_text, mock_part_fn]
+        mock_response_1.candidates = [mock_candidate_1]
+        
+        mock_response_2 = MagicMock()
+        mock_candidate_2 = MagicMock()
+        mock_final_part = MagicMock()
+        mock_final_part.text = "Done Gemini!"
+        mock_final_part.function_call = None
+        mock_candidate_2.content.parts = [mock_final_part]
+        mock_response_2.candidates = [mock_candidate_2]
+        
+        mock_genai_client.aio.models.generate_content.side_effect = [mock_response_1, mock_response_2]
+        
+        mock_skill = AsyncMock()
+        mock_skill.name = "test_skill"
+        mock_skill.execute.return_value = {"status": "ok"}
+        agent.register_skill(mock_skill)
+        
+        with patch.object(agent, "_get_gemini_client", return_value=mock_genai_client):
+            with patch.object(agent, "_get_gemini_tools", return_value=None):
+                mock_intermediate = AsyncMock()
+                response = await agent.process("Do Gemini", {}, on_intermediate_reply=mock_intermediate)
+        
+        assert response == "Done Gemini!"
+        mock_intermediate.assert_called_once_with("Just a moment...")
+
+

@@ -466,7 +466,7 @@ class AgentBrain:
             self.logger.error(f"Reflection Error: {e}")
             return None
 
-    async def process(self, user_msg: str, context: Dict[str, Any], chat_history: str = "") -> str:
+    async def process(self, user_msg: str, context: Dict[str, Any], chat_history: str = "", on_intermediate_reply=None) -> str:
         """
         Main Agent Loop (Async).
         Handles multi-turn reasoning and tool execution.
@@ -562,6 +562,12 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                     messages.append(msg)
                     
                     if msg.tool_calls:
+                        if msg.content and msg.content.strip() and on_intermediate_reply:
+                            try:
+                                await on_intermediate_reply(msg.content.strip())
+                            except Exception as cb_err:
+                                self.logger.error(f"Error in on_intermediate_reply (Groq): {cb_err}")
+
                         for tool_call in msg.tool_calls:
                             fn_name = tool_call.function.name
                             fn_args = {}
@@ -609,6 +615,13 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                                 fn_name = match.group(1)
                                 args_str = match.group(2)
                                 self.logger.warning(f"Detected Llama-3 XML tool call in content: {fn_name}")
+                                
+                                preamble = content[:match.start()].strip()
+                                if preamble and on_intermediate_reply:
+                                    try:
+                                        await on_intermediate_reply(preamble)
+                                    except Exception as cb_err:
+                                        self.logger.error(f"Error in on_intermediate_reply (Llama XML): {cb_err}")
                                 
                                 try:
                                     # Try to parse strict JSON first
@@ -737,6 +750,15 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
 
                      if not function_calls and not text_content:
                          return "Erro: Resposta vazia do modelo."
+
+                     if function_calls and text_content.strip() and on_intermediate_reply:
+                         try:
+                             clean_text = self._RE_THINK.sub('', text_content)
+                             clean_text = self._RE_THINK_OPEN.sub('', clean_text).strip()
+                             if clean_text:
+                                 await on_intermediate_reply(clean_text)
+                         except Exception as cb_err:
+                             self.logger.error(f"Error in on_intermediate_reply (Gemini): {cb_err}")
 
                      # Prioritize first function call found
                      part_with_fn = function_calls[0] if function_calls else None

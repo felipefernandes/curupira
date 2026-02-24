@@ -1,6 +1,7 @@
 from .base import BaseSkill
 import httpx
 import logging
+import asyncio
 from typing import Any, Dict
 
 class WeatherSkill(BaseSkill):
@@ -35,14 +36,17 @@ class WeatherSkill(BaseSkill):
         }
 
     async def execute(self, context: Dict[str, Any], city: str) -> Dict[str, Any]:
-        lat, lon, name = await self.get_coordinates(city)
-        
-        if not lat:
-            return {"error": f"Cidade '{city}' não encontrada."}
+        try:
+            lat, lon, name = await self.get_coordinates(city)
+            
+            if not lat or not lon or not name:
+                return {"error": f"Cidade '{city}' não encontrada."}
 
-        current = await self.get_forecast(lat, lon)
-        if not current:
-            return {"error": f"Erro ao obter dados meteorológicos para '{name}'."}
+            current = await self.get_forecast(lat, lon)
+            if current is None:
+                return {"error": f"Erro de formatação ou sem dados para '{name}'."}
+        except Exception as e:
+            return {"error": f"Erro de comunicação com a API: {e}"}
 
         # Return structured data for the LLM to process
         return {
@@ -53,34 +57,69 @@ class WeatherSkill(BaseSkill):
             "condition_code": current.get("weather_code")
         }
 
-    async def get_coordinates(self, city_name):
-        """Fetches lat/lon for a city name."""
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(self.geo_url, params={"name": city_name, "count": 1, "language": "pt", "format": "json"})
-                data = response.json()
-                
-                if "results" in data and data["results"]:
-                    place = data["results"][0]
-                    return place["latitude"], place["longitude"], place["name"]
-                return None, None, None
-        except Exception as e:
-            self.logger.error(f"Error fetching coordinates: {e}")
-            return None, None, None
+    async def get_coordinates(self, city_name, retries=3, backoff=2):
+        """Fetches lat/lon for a city name with retry logic.
+        
+        Args:
+            city_name (str): The name of the city.
+            retries (int): Número de tentativas em caso de falha.
+            backoff (int): Segundos de espera entre tentativas (fixo).
+        """
+        last_exception = None
+        for attempt in range(retries):
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(
+                        self.geo_url, 
+                        params={"name": city_name, "count": 1, "language": "pt", "format": "json"},
+                        timeout=5.0
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    
+                    if "results" in data and data["results"]:
+                        place = data["results"][0]
+                        return place["latitude"], place["longitude"], place["name"]
+                    return None, None, None
+            except Exception as e:
+                last_exception = e
+                self.logger.warning(f"Error fetching coordinates (attempt {attempt+1}/{retries}): {e}")
+                if attempt < retries - 1:
+                    await asyncio.sleep(backoff)
+        
+        self.logger.error(f"Failed to fetch coordinates for {city_name} (failed {retries}/{retries} attempts).")
+        raise last_exception if last_exception else Exception("Unknown error")
 
-    async def get_forecast(self, lat, lon):
-        """Fetches current weather for lat/lon."""
-        try:
-            params = {
-                "latitude": lat,
-                "longitude": lon,
-                "current": ["temperature_2m", "relative_humidity_2m", "precipitation_probability", "weather_code"],
-                "timezone": "auto"
-            }
-            async with httpx.AsyncClient() as client:
-                response = await client.get(self.weather_url, params=params)
-                data = response.json()
-                return data.get("current", {})
-        except Exception as e:
-            self.logger.error(f"Error fetching forecast: {e}")
-            return None
+    async def get_forecast(self, lat, lon, retries=3, backoff=2):
+        """Fetches current weather for lat/lon with retry logic.
+        
+        Args:
+            lat (float): Latitude.
+            lon (float): Longitude.
+            retries (int): Número de tentativas em caso de falha.
+            backoff (int): Segundos de espera entre tentativas (fixo).
+        """
+        params = {
+            "latitude": lat,
+            "longitude": lon,
+            "current": ["temperature_2m", "relative_humidity_2m", "precipitation_probability", "weather_code"],
+            "timezone": "auto"
+        }
+        last_exception = None
+        for attempt in range(retries):
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(self.weather_url, params=params, timeout=5.0)
+                    response.raise_for_status()
+                    data = response.json()
+                    if "current" in data:
+                        return data["current"]
+                    return None
+            except Exception as e:
+                last_exception = e
+                self.logger.warning(f"Error fetching forecast (attempt {attempt+1}/{retries}): {e}")
+                if attempt < retries - 1:
+                    await asyncio.sleep(backoff)
+        
+        self.logger.error(f"Failed to fetch forecast for lat:{lat}, lon:{lon} (failed {retries}/{retries} attempts).")
+        raise last_exception if last_exception else Exception("Unknown error")

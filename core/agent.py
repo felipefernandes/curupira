@@ -355,7 +355,12 @@ class AgentBrain:
         # Resolve greeting window from config
         greeting_start = config.REFLECTION_GREETING_HOUR_START
         greeting_end   = config.REFLECTION_GREETING_HOUR_END
-        current_hour   = context.get("hour", -1)
+        
+        try:
+            current_hour = int(context.get("hour", -1))
+        except (ValueError, TypeError):
+            current_hour = -1
+
         greeting_allowed = greeting_start <= current_hour < greeting_end
 
         if 5 <= current_hour < 12:
@@ -453,12 +458,14 @@ class AgentBrain:
             # Greeting deduplication: if the message contains a greeting,
             # only allow it once per calendar day (regardless of LLM decision).
             # -------------------------------------------------------------------
-            _GREETING_KEYWORDS = (
-                "bom dia", "boa tarde", "boa noite", 
-                "good morning", "good afternoon", "good evening", "good night", 
-                "bonjour", "buenos días", "buenas tardes", "buenas noches"
-            )
-            is_greeting = any(kw in result.lower() for kw in _GREETING_KEYWORDS)
+            # Use regex for performance instead of linear list search
+            if not hasattr(self, '_greeting_regex'):
+                self._greeting_regex = re.compile(
+                    r'\b(bom dia|boa tarde|boa noite|good morning|good afternoon|good evening|good night|bonjour|buenos días|buenas tardes|buenas noches)\b', 
+                    re.IGNORECASE
+                )
+            
+            is_greeting = bool(self._greeting_regex.search(result))
 
             if is_greeting:
                 today = datetime.now().date()

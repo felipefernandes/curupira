@@ -131,3 +131,58 @@ async def test_reflect_cross_provider(mock_agent):
             # CRITICAL: Verify AsyncGroq was init with GROQ_API_KEY, not self.api_key
             # The assert_called_once_with checks the arguments passed to constructor
             MockGroqLib.assert_called_once_with(api_key="groq_key_123")
+
+@pytest.mark.asyncio
+async def test_reflect_invalid_hour(mock_agent):
+    """Test reflect when context has an invalid hour (should default to -1)."""
+    with patch("core.config.AI_PROVIDER", "groq"), \
+         patch("core.config.GROQ_API_KEY", "valid_key"), \
+         patch("core.config.GROQ_MODEL", "llama-test"), \
+         patch("core.config.REFLECTION_ENABLED", True):
+        
+        mock_message = MagicMock()
+        mock_message.content = "Normal Output"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create.return_value = mock_response
+
+        with patch("groq.AsyncGroq", return_value=mock_client):
+            # Pass invalid string for hour to trigger ValueError
+            result = await mock_agent.reflect({"hour": "invalid_string_hour"})
+            assert result == "Normal Output"
+            
+            # Pass None for hour to trigger TypeError
+            result = await mock_agent.reflect({"hour": None})
+            assert result == "Normal Output"
+
+@pytest.mark.asyncio
+async def test_reflect_greeting_regex_compilation(mock_agent):
+    """Test reflect regex compilation and caching for greetings."""
+    with patch("core.config.AI_PROVIDER", "groq"), \
+         patch("core.config.GROQ_API_KEY", "valid_key"), \
+         patch("core.config.GROQ_MODEL", "llama-test"), \
+         patch("core.config.REFLECTION_ENABLED", True):
+        
+        mock_message = MagicMock()
+        mock_message.content = "Bom dia usuário!"
+        mock_choice = MagicMock()
+        mock_choice.message = mock_message
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create.return_value = mock_response
+
+        with patch("groq.AsyncGroq", return_value=mock_client):
+            assert not hasattr(mock_agent, "_greeting_regex")
+            
+            # First call: should compile regex and detect greeting
+            result = await mock_agent.reflect({"hour": 9})
+            assert result == "Bom dia usuário!"
+            assert hasattr(mock_agent, "_greeting_regex")
+            
+            # Second call on same date: should trigger SILENCE because greeting was already sent
+            result2 = await mock_agent.reflect({"hour": 10})
+            assert result2 is None

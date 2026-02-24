@@ -355,17 +355,29 @@ class AgentBrain:
         # Resolve greeting window from config
         greeting_start = config.REFLECTION_GREETING_HOUR_START
         greeting_end   = config.REFLECTION_GREETING_HOUR_END
-        current_hour   = context.get("hour", -1)
+        
+        try:
+            current_hour = int(context.get("hour", -1))
+        except (ValueError, TypeError):
+            current_hour = -1
+
         greeting_allowed = greeting_start <= current_hour < greeting_end
+
+        if 5 <= current_hour < 12:
+            period_greeting = "Bom dia"
+        elif 12 <= current_hour < 18:
+            period_greeting = "Boa tarde"
+        else:
+            period_greeting = "Boa noite"
 
         # Construct Prompt
         # /no_think instructs Qwen3 to skip chain-of-thought output
         greeting_rule = (
             f"3. If the current hour is between {greeting_start}:00 and {greeting_end}:00 "
-            "AND you have NOT greeted the user yet today -> Say 'Bom dia' naturally."
+            f"AND you have NOT greeted the user yet today -> Greet the user with a natural and friendly '{period_greeting}' (e.g., 'Olá! {period_greeting}', '{period_greeting}!'). Use the user's name if known."
             if greeting_allowed
             else
-            "3. Greetings (Bom dia, Good morning, etc.) are FORBIDDEN right now — "
+            "3. Greetings (Bom dia, Boa tarde, Boa noite, etc.) are FORBIDDEN right now — "
             f"they are only allowed between {greeting_start}:00 and {greeting_end}:00."
         )
         system_prompt = (
@@ -443,11 +455,17 @@ class AgentBrain:
                 return None
 
             # -------------------------------------------------------------------
-            # Greeting deduplication: if the message contains a morning greeting,
+            # Greeting deduplication: if the message contains a greeting,
             # only allow it once per calendar day (regardless of LLM decision).
             # -------------------------------------------------------------------
-            _GREETING_KEYWORDS = ("bom dia", "good morning", "bonjour", "buenos días")
-            is_greeting = any(kw in result.lower() for kw in _GREETING_KEYWORDS)
+            # Use regex for performance instead of linear list search
+            if not hasattr(self, '_greeting_regex'):
+                self._greeting_regex = re.compile(
+                    r'\b(bom dia|boa tarde|boa noite|good morning|good afternoon|good evening|good night|bonjour|buenos días|buenas tardes|buenas noches)\b', 
+                    re.IGNORECASE
+                )
+            
+            is_greeting = bool(self._greeting_regex.search(result))
 
             if is_greeting:
                 today = datetime.now().date()

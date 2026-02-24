@@ -285,10 +285,12 @@ async def system_heartbeat(context: ContextTypes.DEFAULT_TYPE):
             logging.info(f"🔔 Proactive Reflection Triggered: {msg}")
             # Send to authorized user
             if config.AUTHORIZED_USER_ID != 0:
+                import html
+                escaped_msg = html.escape(msg)
                 await context.bot.send_message(
                     chat_id=config.AUTHORIZED_USER_ID, 
-                    text=f"🧙‍♂️ *Curupira (Reflexão):*\n{msg}",
-                    parse_mode=ParseMode.MARKDOWN
+                    text=f"{escaped_msg}",
+                    parse_mode=ParseMode.HTML
                 )
         else:
             logging.info("🤫 Reflection: SILENCE")

@@ -292,6 +292,10 @@ async def system_heartbeat(context: ContextTypes.DEFAULT_TYPE):
                     text=f"{escaped_msg}",
                     parse_mode=ParseMode.HTML
                 )
+                try:
+                    await memory_manager.log_message(config.AUTHORIZED_USER_ID, "model", msg)
+                except Exception as e:
+                    logging.error(f"Erro ao salvar reflexão no histórico: {e}")
         else:
             logging.info("🤫 Reflection: SILENCE")
 

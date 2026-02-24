@@ -22,7 +22,7 @@ class AgentBrain:
 
     # Compiled patterns for Llama-3 malformed tool call recovery
     _RE_FUNC_PARENS = re.compile(r'<function=(\w+)\((.*?)\)></function>', re.DOTALL)  # <function=name(args)></function>
-    _RE_FUNC_ANGLES = re.compile(r'<function=(\w+)>(.*?)</function>', re.DOTALL)      # <function=name>args</function>
+    _RE_FUNC_ANGLES = re.compile(r'<function=([a-zA-Z0-9_]+)>(\{.*?\})</function>', re.DOTALL)      # <function=name>{"args":...}</function>
     _RE_FUNC_COLON  = re.compile(r'<function=(\w+)":\s*(.*?)</function>', re.DOTALL)  # <function=name":args</function>
 
     # Compiled patterns to strip CoT reasoning blocks (Qwen3, DeepSeek-R1, etc.)
@@ -466,7 +466,7 @@ class AgentBrain:
             self.logger.error(f"Reflection Error: {e}")
             return None
 
-    async def process(self, user_msg: str, context: Dict[str, Any], chat_history: str = "") -> str:
+    async def process(self, user_msg: str, context: Dict[str, Any], chat_history: str = "", on_intermediate_reply=None) -> str:
         """
         Main Agent Loop (Async).
         Handles multi-turn reasoning and tool execution.
@@ -562,6 +562,15 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                     messages.append(msg)
                     
                     if msg.tool_calls:
+                        # Check and dispatch preamble text for multi-turn conversational feel
+                        if on_intermediate_reply and msg.content:
+                            clean_content = msg.content.strip()
+                            if clean_content:
+                                try:
+                                    await on_intermediate_reply(clean_content)
+                                except Exception as cb_err:
+                                    self.logger.error(f"Error in on_intermediate_reply (Groq): {cb_err}")
+
                         for tool_call in msg.tool_calls:
                             fn_name = tool_call.function.name
                             fn_args = {}
@@ -609,6 +618,13 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                                 fn_name = match.group(1)
                                 args_str = match.group(2)
                                 self.logger.warning(f"Detected Llama-3 XML tool call in content: {fn_name}")
+                                
+                                preamble = content[:match.start()].strip()
+                                if preamble and on_intermediate_reply:
+                                    try:
+                                        await on_intermediate_reply(preamble)
+                                    except Exception as cb_err:
+                                        self.logger.error(f"Error in on_intermediate_reply (Llama XML): {cb_err}")
                                 
                                 try:
                                     # Try to parse strict JSON first
@@ -726,17 +742,24 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                      
                      text_parts = []
                      function_calls = []
+                     text_content = ""
                      
                      for part in response.candidates[0].content.parts:
                          if part.function_call:
                              function_calls.append(part)
-                         if part.text:
-                             text_parts.append(part.text)
-                     
-                     text_content = "".join(text_parts)
-
-                     if not function_calls and not text_content:
-                         return "Erro: Resposta vazia do modelo."
+                         elif part.text:
+                             text_content += part.text
+                    
+                     # If tools are called, send any preamble text to the user immediately
+                     if function_calls and on_intermediate_reply:
+                         if text_content and text_content.strip():
+                             try:
+                                 clean_text = self._RE_THINK.sub('', text_content)
+                                 clean_text = self._RE_THINK_OPEN.sub('', clean_text).strip()
+                                 if clean_text:
+                                     await on_intermediate_reply(clean_text)
+                             except Exception as cb_err:
+                                 self.logger.error(f"Error in on_intermediate_reply (Gemini): {cb_err}")
 
                      # Prioritize first function call found
                      part_with_fn = function_calls[0] if function_calls else None

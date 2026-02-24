@@ -151,9 +151,26 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except asyncio.CancelledError:
             pass
 
+    async def intermediate_reply(text: str):
+        """Callback to send preamble text before tool execution."""
+        if text and text.strip():
+            try:
+                await update.message.reply_text(text.strip(), parse_mode=ParseMode.HTML)
+            except Exception as e:
+                logging.error(f"Erro no intermediate_reply (HTML): {e}")
+                try:
+                    await update.message.reply_text(text.strip())
+                except Exception as inner_e:
+                    logging.error(f"Erro no intermediate_reply (Fallback): {inner_e}")
+
     typing_task = asyncio.create_task(keep_typing())
     try:
-        response_text = await brain.process(user_msg, agent_context, chat_history=context_history)
+        response_text = await brain.process(
+            user_msg, 
+            agent_context, 
+            chat_history=context_history, 
+            on_intermediate_reply=intermediate_reply
+        )
     except Exception as e:
         logging.error(f"Brain Error: {e}")
         response_text = "Ocorreu um erro interno no meu cérebro. Tente novamente."

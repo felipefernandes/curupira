@@ -26,10 +26,7 @@ class AgentBrain:
     _RE_FUNC_COLON  = re.compile(r'<function=(\w+)":\s*(.*?)</function>', re.DOTALL)  # <function=name":args</function>
 
     # Compiled patterns to strip CoT reasoning blocks (Qwen3, DeepSeek-R1, etc.)
-    # _RE_THINK: complete pair <think>...</think>
-    # _RE_THINK_OPEN: truncated tag with no closing </think> (model cut off by max_tokens)
-    _RE_THINK = re.compile(r'<think>.*?</think>', re.DOTALL)
-    _RE_THINK_OPEN = re.compile(r'<think>.*', re.DOTALL)
+    _RE_THINK_BLOCK = re.compile(r'<think>(?:.*?</think>|.*$)', re.DOTALL)
     
     def __init__(self, provider: str, model_name: str = "default"):
         """Inicializa o agente com provider. API Key é obtida de config.
@@ -65,6 +62,13 @@ class AgentBrain:
         self.register_skill(IntrospectionSkill(self))
         self.register_skill(RssReadSkill())
         self.register_skill(RssListSkill())
+
+    @staticmethod
+    def _sanitize_text(text: str) -> str:
+        """Sanitiza texto da LLM, prevenindo injeção de caracteres maliciosos de controle (Performance / Clean code)."""
+        if not text:
+            return ""
+        return "".join(c for c in text if c.isprintable() or c in "\n\r\t")
 
     def register_skill(self, skill: BaseSkill):
         """Registers a skill to be used by the agent."""
@@ -440,8 +444,7 @@ class AgentBrain:
                 self.logger.warning(f"Reflection: unexpected result type {type(result).__name__}, coercing to str")
                 result = str(result)
 
-            result = self._RE_THINK.sub('', result)       # complete <think>...</think>
-            result = self._RE_THINK_OPEN.sub('', result)  # truncated <think>... (no closing tag)
+            result = self._RE_THINK_BLOCK.sub('', result)  # strip <think>...</think> blocks from CoT models
             result = result.strip()
 
             # Re-check for silence after stripping CoT — model may output <think>...</think>SILENCE
@@ -581,13 +584,13 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                     
                     if msg.tool_calls:
                         # Check and dispatch preamble text for multi-turn conversational feel
-                        if on_intermediate_reply and msg.content:
-                            clean_content = msg.content.strip()
+                        if on_intermediate_reply is not None and msg.content:
+                            clean_content = self._sanitize_text(msg.content.strip())
                             if clean_content:
                                 try:
                                     await on_intermediate_reply(clean_content)
                                 except Exception as cb_err:
-                                    self.logger.error(f"Error in on_intermediate_reply (Groq): {cb_err}")
+                                    self.logger.warning(f"Error in on_intermediate_reply (Groq): {cb_err}")
 
                         for tool_call in msg.tool_calls:
                             fn_name = tool_call.function.name
@@ -769,15 +772,14 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                              text_content += part.text
                     
                      # If tools are called, send any preamble text to the user immediately
-                     if function_calls and on_intermediate_reply:
-                         if text_content and text_content.strip():
+                     if function_calls and text_content.strip() and on_intermediate_reply is not None:
+                         clean_text = self._RE_THINK_BLOCK.sub('', text_content)
+                         clean_text = self._sanitize_text(clean_text.strip())
+                         if clean_text:
                              try:
-                                 clean_text = self._RE_THINK.sub('', text_content)
-                                 clean_text = self._RE_THINK_OPEN.sub('', clean_text).strip()
-                                 if clean_text:
-                                     await on_intermediate_reply(clean_text)
+                                 await on_intermediate_reply(clean_text)
                              except Exception as cb_err:
-                                 self.logger.error(f"Error in on_intermediate_reply (Gemini): {cb_err}")
+                                 self.logger.warning(f"Error in on_intermediate_reply (Gemini): {cb_err}")
 
                      # Prioritize first function call found
                      part_with_fn = function_calls[0] if function_calls else None

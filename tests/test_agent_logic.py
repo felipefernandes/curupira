@@ -262,6 +262,31 @@ class TestParseFailedGeneration:
         assert AgentBrain._parse_failed_generation(None) is None
 
 
+class TestSanitizeText:
+    """Tests for AgentBrain._sanitize_text."""
+
+    def test_sanitize_empty_string(self):
+        """Testa o tratamento de strings vazias ou nulas."""
+        assert AgentBrain._sanitize_text("") == ""
+        assert AgentBrain._sanitize_text(None) == ""
+
+    def test_sanitize_normal_text(self):
+        """Testa o retorno inalterado de textos comuns."""
+        assert AgentBrain._sanitize_text("Olá Curupira! Como você está?") == "Olá Curupira! Como você está?"
+
+    def test_sanitize_with_newlines(self):
+        """Testa a preservação de quebras de linha e tabs."""
+        text = "Linha 1\nLinha 2\r\n\tTexto tabulado"
+        assert AgentBrain._sanitize_text(text) == text
+
+    def test_sanitize_removes_control_chars(self):
+        """Testa a remoção de caracteres de controle invisíveis ou maliciosos."""
+        text_with_null = "Texto\x00Com\x1b[31mLixo"
+        # \x1b (ESC) e \x00 (NUL) não são imprimíveis nem \n, \r, \t
+        sanitized = AgentBrain._sanitize_text(text_with_null)
+        assert sanitized == "TextoCom[31mLixo"
+
+
 @pytest.mark.asyncio
 async def test_groq_failed_generation_recovery(agent, mock_groq_client):
     """Test that a Groq 400 with failed_generation recovers and retries."""

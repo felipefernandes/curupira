@@ -16,7 +16,7 @@ def weather_skill():
 def test_weather_skill_properties(weather_skill):
     assert weather_skill.name == "get_weather"
     assert weather_skill.display_name == "🌦️ Previsão do Tempo"
-    assert weather_skill.description == "Obtém a previsão do tempo atual para uma cidade específica."
+    assert weather_skill.description == "Obtém a previsão do tempo atual para uma cidade."
     assert "city" in weather_skill.parameters["required"]
 
 @pytest.mark.asyncio
@@ -138,7 +138,7 @@ async def test_get_forecast_total_failure(weather_skill):
 async def test_execute_city_not_found(weather_skill):
     with patch.object(weather_skill, "get_coordinates", return_value=(None, None, None)):
         res = await weather_skill.execute({}, "Nowhere")
-        assert "error" in res
+        assert res["status"] == "error"
         assert "não encontrada" in res["error"]
 
 @pytest.mark.asyncio
@@ -146,7 +146,7 @@ async def test_execute_forecast_error(weather_skill):
     with patch.object(weather_skill, "get_coordinates", return_value=(-23.5, -46.6, "São Paulo")):
         with patch.object(weather_skill, "get_forecast", return_value=None):
             res = await weather_skill.execute({}, "São Paulo")
-            assert "error" in res
+            assert res["status"] == "error"
             assert "Erro de formatação ou sem dados" in res["error"]
 
 @pytest.mark.asyncio
@@ -154,13 +154,14 @@ async def test_execute_success(weather_skill):
     with patch.object(weather_skill, "get_coordinates", return_value=(-23.5, -46.6, "São Paulo")):
         with patch.object(weather_skill, "get_forecast", return_value={"temperature_2m": 25.0, "precipitation_probability": 0}):
             res = await weather_skill.execute({}, "São Paulo")
-            assert res["location"] == "São Paulo"
-            assert res["temperature"] == 25.0
-            assert res["rain_probability"] == 0
+            assert res["status"] == "success"
+            assert res["data"]["location"] == "São Paulo"
+            assert res["data"]["temperature"] == 25.0
+            assert res["data"]["rain_probability"] == 0
 
 @pytest.mark.asyncio
 async def test_execute_api_error(weather_skill):
     with patch.object(weather_skill, "get_coordinates", side_effect=Exception("API failed")):
         res = await weather_skill.execute({}, "São Paulo")
-        assert "error" in res
+        assert res["status"] == "error"
         assert "Erro de comunicação com a API" in res["error"]

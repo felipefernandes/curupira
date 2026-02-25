@@ -65,8 +65,8 @@ class TestJobHunterRunSearchSkill(unittest.IsolatedAsyncioTestCase):
         result = await self.skill.execute({})
 
         self.assertEqual(result["status"], "success")
-        self.assertEqual(result["fetched"], 10)
-        self.assertEqual(result["approved"], 2)
+        self.assertEqual(result["data"]["fetched"], 10)
+        self.assertEqual(result["data"]["approved"], 2)
         # Body should be empty (no overrides)
         _, call_kwargs = mock_post.call_args
         self.assertEqual(call_kwargs["json"], {})
@@ -267,8 +267,8 @@ class TestJobHunterGetDefaultsSkill(unittest.IsolatedAsyncioTestCase):
 
         result = await self.skill.execute({})
 
-        self.assertEqual(result["sources"], ["gupy.io"])
-        self.assertEqual(result["score_cutoff"], 7.0)
+        self.assertEqual(result["data"]["sources"], ["gupy.io"])
+        self.assertEqual(result["data"]["score_cutoff"], 7.0)
         mock_get.assert_called_once()
         call_args = mock_get.call_args
         self.assertIn("/api/config_endpoint", call_args[0][0])

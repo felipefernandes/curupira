@@ -41,12 +41,7 @@ class JobHunterRunSearchSkill(BaseSkill):
 
     @property
     def description(self) -> str:
-        return (
-            "Executa uma busca de vagas de emprego. "
-            "Avalia cada vaga com IA e notifica no Telegram as aprovadas. "
-            "Todos os parâmetros são opcionais — se omitidos, usa os defaults do servidor "
-            "ou as configurações pessoais do bot."
-        )
+        return "Busca, avalia via IA e notifica vagas de emprego baseadas nas configurações atuais."
 
     @property
     def parameters(self) -> Dict[str, Any]:
@@ -92,7 +87,7 @@ class JobHunterRunSearchSkill(BaseSkill):
     async def execute(self, context: Dict[str, Any], **kwargs) -> Any:
         err = _check_config()
         if err:
-            return {"error": err}
+            return self.error(err)
 
         sources: Optional[List[str]] = kwargs.get("sources") or config.JOB_HUNTER_SOURCES
         keywords: Optional[List[str]] = kwargs.get("keywords") or config.JOB_HUNTER_KEYWORDS
@@ -100,9 +95,9 @@ class JobHunterRunSearchSkill(BaseSkill):
         score_cutoff: Optional[float] = kwargs.get("score_cutoff") or config.JOB_HUNTER_SCORE_CUTOFF
 
         if sources and not all(isinstance(s, str) for s in sources):
-            return {"error": "Fontes (sources) devem ser uma lista de strings."}
+            return self.error("Fontes (sources) devem ser uma lista de strings.")
         if keywords and not all(isinstance(k, str) for k in keywords):
-            return {"error": "Palavras-chave (keywords) devem ser uma lista de strings."}
+            return self.error("Palavras-chave (keywords) devem ser uma lista de strings.")
 
         body: Dict[str, Any] = {}
         if sources:
@@ -133,13 +128,13 @@ class JobHunterRunSearchSkill(BaseSkill):
                 f"Job Hunter: busca concluída — fetched={result.get('fetched')}, "
                 f"approved={result.get('approved')}"
             )
-            return result
+            return self.success(result)
         except asyncio.TimeoutError:
-            return {"error": "Timeout ao executar a busca de vagas (>95s)."}
+            return self.error("Timeout ao executar a busca de vagas (>95s).")
         except requests.HTTPError as e:
-            return {"error": f"Erro HTTP {e.response.status_code}: {e.response.text}"}
+            return self.error(f"Erro HTTP {e.response.status_code}: {e.response.text}")
         except requests.RequestException as e:
-            return {"error": f"Erro de conexão com o servidor de vagas: {e}"}
+            return self.error(f"Erro de conexão com o servidor de vagas: {e}")
 
 
 class JobHunterGetDefaultsSkill(BaseSkill):
@@ -155,11 +150,7 @@ class JobHunterGetDefaultsSkill(BaseSkill):
 
     @property
     def description(self) -> str:
-        return (
-            "Retorna as configurações padrão do servidor de busca de vagas: "
-            "fontes, palavras-chave, prompt de avaliação e score de corte. "
-            "Use para mostrar ao usuário o que o servidor usa por padrão."
-        )
+        return "Retorna as configurações padrão do servidor de busca de vagas."
 
     @property
     def parameters(self) -> Dict[str, Any]:
@@ -172,7 +163,7 @@ class JobHunterGetDefaultsSkill(BaseSkill):
     async def execute(self, context: Dict[str, Any], **kwargs) -> Any:
         err = _check_config()
         if err:
-            return {"error": err}
+            return self.error(err)
 
         logger.info("Job Hunter: buscando configurações padrão do servidor.")
 
@@ -187,10 +178,10 @@ class JobHunterGetDefaultsSkill(BaseSkill):
                 timeout=20,
             )
             response.raise_for_status()
-            return response.json()
+            return self.success(response.json())
         except asyncio.TimeoutError:
-            return {"error": "Timeout ao buscar configurações do servidor (>20s)."}
+            return self.error("Timeout ao buscar configurações do servidor (>20s).")
         except requests.HTTPError as e:
-            return {"error": f"Erro HTTP {e.response.status_code}: {e.response.text}"}
+            return self.error(f"Erro HTTP {e.response.status_code}: {e.response.text}")
         except requests.RequestException as e:
-            return {"error": f"Erro de conexão com o servidor de vagas: {e}"}
+            return self.error(f"Erro de conexão com o servidor de vagas: {e}")

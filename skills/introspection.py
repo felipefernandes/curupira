@@ -32,11 +32,7 @@ class IntrospectionSkill(BaseSkill):
 
     @property
     def description(self) -> str:
-        return (
-            "Lists available skills and their capabilities. "
-            "Call without arguments to see all skills, or pass "
-            "skill_name to get detailed parameters for a specific skill."
-        )
+        return "Lista as capacidades e parâmetros das ferramentas do sistema."
 
     @property
     def parameters(self) -> Dict[str, Any]:
@@ -64,9 +60,17 @@ class IntrospectionSkill(BaseSkill):
         skill_name: Optional[str] = kwargs.get("skill_name")
 
         if skill_name:
-            return self._describe_skill(skill_name)
+            if skill_name not in self._agent.skills or skill_name == self.name:
+                available = [
+                    s.name for s in self._agent.skills.values()
+                    if s.name != self.name
+                ]
+                return self.error(f"Skill '{skill_name}' não encontrada. Available: {', '.join(available)}")
+            
+            desc = self._describe_skill(skill_name)
+            return self.success(desc)
         else:
-            return self._list_all_skills()
+            return self.success(self._list_all_skills())
 
     def _list_all_skills(self) -> Dict[str, Any]:
         """Returns a summary of all registered skills."""
@@ -89,16 +93,6 @@ class IntrospectionSkill(BaseSkill):
     def _describe_skill(self, skill_name: str) -> Dict[str, Any]:
         """Returns detailed info for a specific skill."""
         skill = self._agent.skills.get(skill_name)
-
-        if not skill:
-            available = [
-                s.name for s in self._agent.skills.values()
-                if s.name != self.name
-            ]
-            return {
-                "error": f"Skill '{skill_name}' não encontrada.",
-                "available_skills": available
-            }
 
         params = skill.parameters
         param_details = []

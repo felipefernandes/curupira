@@ -49,8 +49,8 @@ class TestSaveFactSkill:
         """Deve salvar o fato e retornar status ok."""
         result = await skill.execute(valid_context, key="city", value="São Paulo")
 
-        assert result["status"] == "ok"
-        assert result["saved"] == {"city": "São Paulo"}
+        assert result["status"] == "success"
+        assert result["data"] == {"key": "city", "value": "São Paulo"}
         mock_memory.save_fact.assert_awaited_once_with(12345, "city", "São Paulo")
 
     @pytest.mark.asyncio
@@ -58,7 +58,7 @@ class TestSaveFactSkill:
         """Deve retornar erro quando user_id não está no contexto."""
         result = await skill.execute({}, key="city", value="São Paulo")
 
-        assert "error" in result
+        assert result["status"] == "error"
         assert "user_id" in result["error"]
         mock_memory.save_fact.assert_not_awaited()
 
@@ -67,7 +67,7 @@ class TestSaveFactSkill:
         """Deve retornar erro quando key é vazio."""
         result = await skill.execute(valid_context, key="", value="São Paulo")
 
-        assert "error" in result
+        assert result["status"] == "error"
         assert "key" in result["error"]
         mock_memory.save_fact.assert_not_awaited()
 
@@ -76,7 +76,7 @@ class TestSaveFactSkill:
         """Deve retornar erro quando value é vazio."""
         result = await skill.execute(valid_context, key="city", value="")
 
-        assert "error" in result
+        assert result["status"] == "error"
         assert "value" in result["error"]
         mock_memory.save_fact.assert_not_awaited()
 
@@ -85,11 +85,13 @@ class TestSaveFactSkill:
         """Deve fazer strip de espaços em key e value."""
         result = await skill.execute(valid_context, key="  city  ", value="  São Paulo  ")
 
-        assert result["status"] == "ok"
+        assert result["status"] == "success"
         mock_memory.save_fact.assert_awaited_once_with(12345, "city", "São Paulo")
 
-    def test_skill_name(self, skill):
+    def test_skill_metadata(self, skill):
         assert skill.name == "save_user_fact"
+        assert "Salvar Fato" in skill.display_name
+        assert "Persiste um fato" in skill.description
 
     def test_skill_parameters_has_required_fields(self, skill):
         params = skill.parameters

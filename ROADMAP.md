@@ -70,15 +70,15 @@
 
 ### 🚀 v0.10.0: O "Jarvis" Proativo e Contextual
 Foco em dar iniciativa ao bot, melhorias na injeção de contexto e aprimoramento contínuo da UX de conversação (Memory & Persona).
-- [ ] **Scoring de Memória (Facts):** Sistema de prioridade para fatos persistentes do usuário no prompt. (Issue #90)
+(Issue #90)
 - [x] **Grounding Dinâmico:** Injeção de contexto vital (Hora atual, Load, etc) pré-prompt. (Issue #70)
-- [ ] **Persistência Proativa:** Mensagens proativas no histórico para continuidade. (Issue #85)
+- [x] **Persistência Proativa:** Mensagens proativas no histórico para continuidade. (Issue #85)
 - [x] **Multi-turn/Streaming UX:** Suporte para conversação natural pré-tools e streaming responses. (Issue #81)
 
 ### 🛠️ v0.11.0: Confiabilidade e Arquitetura Agêntica Avançada
 Foco na saúde do sistema e evolução das capacidades técnicas (MCP-Lite) usando ferramentas orientadas a sistema.
 - [ ] **Doctor (Health Checks):** Diagnóstico de integridade do ambiente (ZRAM, Chaves, Git). (Issue #72)
-- [ ] **Padronização MCP-Lite:** Isolar lógicas das skills para retorno JSON padronizado. (Issue #71)
+- [x] **Padronização MCP-Lite:** Isolar lógicas das skills para retorno JSON padronizado. (Issue #71)
 - [ ] **Skill de Terminal (Power User):** Execução segura de comandos shell locais. (Issue #42)
 - [ ] **Monitoramento de Logs:** Detecção de anomalias no sistema. (Issue #53)
 
@@ -98,3 +98,7 @@ Ferramentas direcionadas para ganho de produtividade no trabalho e integrações
 - [ ] **Integração Notion:** Construção e input pro "segundo cérebro". (Issue #49)
 - [ ] **Entretenimento (Cinema/Teatro):** Busca de diversão local via APIs. (Issue #59)
 - [ ] **Vercel & Analytics:** Reports, logs e stats básicos (Dev/Prod). (Issues #45, #47)
+
+
+### v1.1.1:
+- [ ] **Scoring de Memória (Facts):** Sistema de prioridade para fatos persistentes do usuário no prompt. 

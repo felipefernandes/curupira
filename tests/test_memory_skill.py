@@ -88,8 +88,10 @@ class TestSaveFactSkill:
         assert result["status"] == "success"
         mock_memory.save_fact.assert_awaited_once_with(12345, "city", "São Paulo")
 
-    def test_skill_name(self, skill):
+    def test_skill_metadata(self, skill):
         assert skill.name == "save_user_fact"
+        assert "Salvar Fato" in skill.display_name
+        assert "Persiste um fato" in skill.description
 
     def test_skill_parameters_has_required_fields(self, skill):
         params = skill.parameters

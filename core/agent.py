@@ -590,7 +590,7 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                                 try:
                                     await on_intermediate_reply(clean_content)
                                 except Exception as cb_err:
-                                    self.logger.error(f"Error in on_intermediate_reply (Groq): {cb_err}")
+                                    self.logger.warning(f"Error in on_intermediate_reply (Groq): {cb_err}")
 
                         for tool_call in msg.tool_calls:
                             fn_name = tool_call.function.name
@@ -779,7 +779,7 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                              try:
                                  await on_intermediate_reply(clean_text)
                              except Exception as cb_err:
-                                 self.logger.error(f"Error in on_intermediate_reply (Gemini): {cb_err}")
+                                 self.logger.warning(f"Error in on_intermediate_reply (Gemini): {cb_err}")
 
                      # Prioritize first function call found
                      part_with_fn = function_calls[0] if function_calls else None

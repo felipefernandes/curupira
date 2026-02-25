@@ -198,12 +198,7 @@ class SaveFactSkill(BaseSkill):
 
     @property
     def description(self) -> str:
-        return (
-            "Persiste um fato importante sobre o usuário no banco de dados de longo prazo. "
-            "Use quando o usuário revelar cidade, preferência, nome ou qualquer dado que "
-            "deva ser lembrado em conversas futuras. "
-            "Exemplos de key: 'city', 'wake_up_time', 'preferred_language'."
-        )
+        return "Persiste um fato importante sobre o usuário no banco de longo prazo (ex: nome, idades, rotinas ou preferências)."
 
     @property
     def parameters(self) -> Dict[str, Any]:
@@ -228,11 +223,11 @@ class SaveFactSkill(BaseSkill):
         value = kwargs.get("value", "").strip()
 
         if not user_id:
-            return {"error": "user_id ausente no contexto. Não foi possível salvar o fato."}
+            return self.error("user_id ausente no contexto. Não foi possível salvar o fato.")
         if not key:
-            return {"error": "O campo 'key' é obrigatório e não pode ser vazio."}
+            return self.error("O campo 'key' é obrigatório e não pode ser vazio.")
         if not value:
-            return {"error": "O campo 'value' é obrigatório e não pode ser vazio."}
+            return self.error("O campo 'value' é obrigatório e não pode ser vazio.")
 
         await self._memory.save_fact(user_id, key, value)
-        return {"status": "ok", "saved": {key: value}}
+        return self.success({"key": key, "value": value}, message=f"Fato salvo com sucesso: {key}")

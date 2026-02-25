@@ -71,7 +71,7 @@ async def test_get_gemini_client_new(agent):
 @pytest.mark.asyncio
 async def test_get_gemini_client_import_error(agent):
     """Should handle ImportError gracefully."""
-    with patch.dict(sys.modules, {"google.genai": None}):
+    with patch.dict(sys.modules, {"google": None, "google.genai": None}):
         client = agent._get_gemini_client()
         assert client is None
 

@@ -30,10 +30,7 @@ class RssReadSkill(BaseSkill):
 
     @property
     def description(self) -> str:
-        return (
-            "Reads the latest entries from a specific RSS/Atom feed URL. "
-            "Use this to get news or updates from a website."
-        )
+        return "Busca as últimas notícias/entradas de um feed RSS configurado."
 
     @property
     def parameters(self) -> Dict[str, Any]:
@@ -63,10 +60,10 @@ class RssReadSkill(BaseSkill):
 
         # Input Validation
         if not feed_identifier:
-            return {"error": "Nome do feed não fornecido.", "reason": "Input Validation: Empty identifier."}
+            return self.error("Nome do feed não fornecido.")
 
         if limit < 1:
-            return {"error": "Limite inválido.", "reason": "Input Validation: Limit must be >= 1."}
+            return self.error("Limite inválido.")
 
         # 1. Resolve URL from Config (Security: Whitelist Only)
         url = None
@@ -85,10 +82,7 @@ class RssReadSkill(BaseSkill):
         
         if not url:
             available_feeds = ", ".join(config.RSS_FEEDS.keys())
-            return {
-                "error": f"Feed não configurado: '{feed_identifier}'. Opções disponíveis: {available_feeds}",
-                "reason": "Security: Apenas feeds listados no 'config.py' são permitidos para evitar SSRF."
-            }
+            return self.error(f"Feed não configurado: '{feed_identifier}'. Opções disponíveis: {available_feeds}")
 
         logger.info(f"Fetching RSS feed: {url} (limit={limit})")
 
@@ -98,12 +92,12 @@ class RssReadSkill(BaseSkill):
                 timeout=15,
             )
         except asyncio.TimeoutError:
-            return {"error": f"Timeout ao buscar o feed: {url}"}
+            return self.error(f"Timeout ao buscar o feed: {url}")
 
         if feed.bozo and not feed.entries:
             bozo_reason = str(getattr(feed, "bozo_exception", "unknown"))
             logger.warning(f"Feed inválido ou inacessível: {url} — {bozo_reason}")
-            return {"error": f"Não foi possível ler o feed: {url}", "reason": bozo_reason}
+            return self.error(f"Não foi possível ler o feed: {url} ({bozo_reason})")
 
         entries: List[Dict[str, str]] = []
         for entry in feed.entries[:limit]:
@@ -113,11 +107,11 @@ class RssReadSkill(BaseSkill):
                 "published": entry.get("published", ""),
             })
 
-        return {
+        return self.success({
             "feed_title": feed.feed.get("title", url),
             "total_available": len(feed.entries),
             "entries": entries,
-        }
+        })
 
 
 class RssListSkill(BaseSkill):
@@ -133,10 +127,7 @@ class RssListSkill(BaseSkill):
 
     @property
     def description(self) -> str:
-        return (
-            "Lists the names and URLs of pre-configured RSS feeds. "
-            "Use this when the user wants to know available news sources."
-        )
+        return "Lista os nomes e URLs dos feeds RSS pré-configurados."
 
     @property
     def parameters(self) -> Dict[str, Any]:
@@ -150,14 +141,14 @@ class RssListSkill(BaseSkill):
         feeds = config.RSS_FEEDS
 
         if not feeds:
-            return {"message": "Nenhum feed RSS configurado.", "feeds": []}
+            return self.success({"feeds": []}, message="Nenhum feed RSS configurado.")
 
         feeds_list = [
             {"name": name, "url": url}
             for name, url in feeds.items()
         ]
 
-        return {
+        return self.success({
             "total": len(feeds_list),
             "feeds": feeds_list,
-        }
+        })

@@ -339,10 +339,9 @@ class AddReminderSkill(BaseSkill):
     @property
     def description(self) -> str:
         return (
-            "Agendar um lembrete ou tarefa recorrente. "
-            "Use para lembretes únicos ('amanhã às 9h') ou recorrentes ('todo dia às 8h', 'toda manhã', 'toda segunda às 10h'). "
-            "Para tarefas automáticas que executam skills (ex: 'manda o boletim do tempo toda manhã'), use is_task=true. "
-            "Se o usuário pedir múltiplos horários (ex: '8h e 18h'), chame esta skill uma vez para cada horário."
+            "Agenda um lembrete ou tarefa recorrente. "
+            "Exemplos válidos de when: 'amanhã 9h', 'todo dia às 8h', 'toda segunda às 10h'. "
+            "Se for is_task=true, o bot assumirá que 'message' é uma tarefa/'skill' automática."
         )
 
     @property
@@ -499,7 +498,7 @@ class AddReminderSkill(BaseSkill):
         """
         user_id = context.get('user_id')
         if not user_id:
-            return {"error": "User ID not found in context."}
+            return self.error("User ID not found in context.")
 
         try:
             now = datetime.now()
@@ -513,12 +512,12 @@ class AddReminderSkill(BaseSkill):
                 target_time, recurrence = self._parse_schedule(when)
 
             if not target_time:
-                return {"error": f"Não entendi a data/hora: '{when}'. Tente algo como '10 minutos', '14:00' ou 'todo dia às 9h'."}
+                return self.error(f"Não entendi a data/hora: '{when}'. Tente algo como '10 minutos', '14:00' ou 'todo dia às 9h'.")
 
             # Block past dates for one-shot reminders (allow 1 min grace period)
             if not recurrence and target_time < now - timedelta(minutes=1):
                 friendly = target_time.strftime('%d/%m %H:%M')
-                return {"error": f"O horário {friendly} já passou. Por favor, escolha um horário futuro."}
+                return self.error(f"O horário {friendly} já passou. Por favor, escolha um horário futuro.")
 
             delay_seconds = max((target_time - now).total_seconds(), 0)
 
@@ -558,18 +557,16 @@ class AddReminderSkill(BaseSkill):
             else:
                 info_msg = f"Lembrete criado para {target_str}: '{message}'."
 
-            return {
-                "status": "success",
+            return self.success({
                 "reminder_id": r_id,
                 "message": message,
                 "target_time": target_str,
                 "recurrence": recurrence,
                 "is_task": is_task,
-                "info": info_msg,
-            }
+            }, message=info_msg)
         except Exception as e:
             self.manager.logger.error(f"Error adding reminder: {e}")
-            return {"error": str(e)}
+            return self.error(str(e))
 
 class ListRemindersSkill(BaseSkill):
     def __init__(self, manager: ReminderManager):
@@ -639,16 +636,15 @@ class ListRemindersSkill(BaseSkill):
         """Lists pending reminders for the user."""
         user_id = context.get('user_id')
         if not user_id:
-            return {"error": "User ID missing"}
+            return self.error("User ID missing")
 
         try:
             reminders = await self.manager.get_active_reminders(user_id)
             if not reminders:
-                return {
+                return self.success({
                     "reminders": [],
-                    "count": 0,
-                    "info": "Nenhum lembrete pendente encontrado. A lista está vazia."
-                }
+                    "count": 0
+                }, message="Nenhum lembrete pendente encontrado. A lista está vazia.")
 
             formatted_reminders = []
 
@@ -693,14 +689,13 @@ class ListRemindersSkill(BaseSkill):
                     lines.append(f"* [ID {r['id']}] {r['message']} (próximo: {r['at']}{rec_str}{task_str})")
                 summary = "\n".join(lines)
 
-            return {
+            return self.success({
                 "reminders": formatted_reminders,
                 "count": len(formatted_reminders),
-                "summary": summary
-            }
+            }, summary)
         except Exception as e:
             self.manager.logger.error(f"Error listing reminders: {e}")
-            return {"error": str(e)}
+            return self.error(str(e))
 
 class DeleteReminderSkill(BaseSkill):
     def __init__(self, manager: ReminderManager):
@@ -739,7 +734,7 @@ class DeleteReminderSkill(BaseSkill):
             Dict indicating success or failure.
         """
         user_id = context.get('user_id')
-        if not user_id: return {"error": "User ID missing"}
+        if not user_id: return self.error("User ID missing")
         
         try:
             # Type safety
@@ -759,11 +754,11 @@ class DeleteReminderSkill(BaseSkill):
                 except Exception as je:
                     self.manager.logger.warning(f"Could not remove job from queue: {je}")
                     
-            return {"status": "success", "deleted_id": rid, "info": f"Lembrete {rid} cancelado."}
+            return self.success({"deleted_id": rid}, message=f"Lembrete {rid} cancelado.")
         except ValueError:
-            return {"error": "Invalid reminder_id format"}
+            return self.error("Invalid reminder_id format")
         except Exception as e:
-            return {"error": str(e)}
+            return self.error(str(e))
 
 class UpdateReminderSkill(BaseSkill):
     def __init__(self, manager: ReminderManager):
@@ -806,7 +801,7 @@ class UpdateReminderSkill(BaseSkill):
              Dict with update status.
          """
          user_id = context.get('user_id')
-         if not user_id: return {"error": "User ID missing"}
+         if not user_id: return self.error("User ID missing")
          
          try:
              rid = int(reminder_id)
@@ -817,7 +812,7 @@ class UpdateReminderSkill(BaseSkill):
              result = await self.manager.update_reminder(rid, user_id, new_message, delay_seconds)
              
              if not result:
-                 return {"error": "Reminder not found or update failed (maybe it's not pending?)"}
+                 return self.error("Reminder not found or update failed (maybe it's not pending?)")
                  
              # Reschedule if needed
              if delay_seconds is not None:
@@ -847,8 +842,8 @@ class UpdateReminderSkill(BaseSkill):
                      except Exception as je:
                          self.manager.logger.warning(f"Error rescheduling job: {je}")
                          
-             return {"status": "success", "updated_id": rid, "info": "Lembrete atualizado."}
+             return self.success({"updated_id": rid}, message="Lembrete atualizado.")
          except ValueError:
-             return {"error": "Invalid input format (integers required for ID/minutes)"}
+             return self.error("Invalid input format (integers required for ID/minutes)")
          except Exception as e:
-             return {"error": str(e)}
+             return self.error(str(e))

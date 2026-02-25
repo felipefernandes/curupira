@@ -22,7 +22,7 @@ class AgentBrain:
 
     # Compiled patterns for Llama-3 malformed tool call recovery
     _RE_FUNC_PARENS = re.compile(r'<function=(\w+)\((.*?)\)></function>', re.DOTALL)  # <function=name(args)></function>
-    _RE_FUNC_ANGLES = re.compile(r'<function=(\w+)>(.*?)</function>', re.DOTALL)      # <function=name>args</function>
+    _RE_FUNC_ANGLES = re.compile(r'<function=([a-zA-Z0-9_]+)>(\{.*?\})</function>', re.DOTALL)      # <function=name>{"args":...}</function>
     _RE_FUNC_COLON  = re.compile(r'<function=(\w+)":\s*(.*?)</function>', re.DOTALL)  # <function=name":args</function>
 
     # Compiled patterns to strip CoT reasoning blocks (Qwen3, DeepSeek-R1, etc.)
@@ -355,17 +355,29 @@ class AgentBrain:
         # Resolve greeting window from config
         greeting_start = config.REFLECTION_GREETING_HOUR_START
         greeting_end   = config.REFLECTION_GREETING_HOUR_END
-        current_hour   = context.get("hour", -1)
+        
+        try:
+            current_hour = int(context.get("hour", -1))
+        except (ValueError, TypeError):
+            current_hour = -1
+
         greeting_allowed = greeting_start <= current_hour < greeting_end
+
+        if 5 <= current_hour < 12:
+            period_greeting = "Bom dia"
+        elif 12 <= current_hour < 18:
+            period_greeting = "Boa tarde"
+        else:
+            period_greeting = "Boa noite"
 
         # Construct Prompt
         # /no_think instructs Qwen3 to skip chain-of-thought output
         greeting_rule = (
             f"3. If the current hour is between {greeting_start}:00 and {greeting_end}:00 "
-            "AND you have NOT greeted the user yet today -> Say 'Bom dia' naturally."
+            f"AND you have NOT greeted the user yet today -> Greet the user with a natural and friendly '{period_greeting}' (e.g., 'Olá! {period_greeting}', '{period_greeting}!'). Use the user's name if known."
             if greeting_allowed
             else
-            "3. Greetings (Bom dia, Good morning, etc.) are FORBIDDEN right now — "
+            "3. Greetings (Bom dia, Boa tarde, Boa noite, etc.) are FORBIDDEN right now — "
             f"they are only allowed between {greeting_start}:00 and {greeting_end}:00."
         )
         system_prompt = (
@@ -443,11 +455,17 @@ class AgentBrain:
                 return None
 
             # -------------------------------------------------------------------
-            # Greeting deduplication: if the message contains a morning greeting,
+            # Greeting deduplication: if the message contains a greeting,
             # only allow it once per calendar day (regardless of LLM decision).
             # -------------------------------------------------------------------
-            _GREETING_KEYWORDS = ("bom dia", "good morning", "bonjour", "buenos días")
-            is_greeting = any(kw in result.lower() for kw in _GREETING_KEYWORDS)
+            # Use regex for performance instead of linear list search
+            if not hasattr(self, '_greeting_regex'):
+                self._greeting_regex = re.compile(
+                    r'\b(bom dia|boa tarde|boa noite|good morning|good afternoon|good evening|good night|bonjour|buenos días|buenas tardes|buenas noches)\b', 
+                    re.IGNORECASE
+                )
+            
+            is_greeting = bool(self._greeting_regex.search(result))
 
             if is_greeting:
                 today = datetime.now().date()
@@ -562,11 +580,14 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                     messages.append(msg)
                     
                     if msg.tool_calls:
-                        if msg.content and msg.content.strip() and on_intermediate_reply:
-                            try:
-                                await on_intermediate_reply(msg.content.strip())
-                            except Exception as cb_err:
-                                self.logger.error(f"Error in on_intermediate_reply (Groq): {cb_err}")
+                        # Check and dispatch preamble text for multi-turn conversational feel
+                        if on_intermediate_reply and msg.content:
+                            clean_content = msg.content.strip()
+                            if clean_content:
+                                try:
+                                    await on_intermediate_reply(clean_content)
+                                except Exception as cb_err:
+                                    self.logger.error(f"Error in on_intermediate_reply (Groq): {cb_err}")
 
                         for tool_call in msg.tool_calls:
                             fn_name = tool_call.function.name
@@ -739,17 +760,24 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                      
                      text_parts = []
                      function_calls = []
+                     text_content = ""
                      
                      for part in response.candidates[0].content.parts:
                          if part.function_call:
                              function_calls.append(part)
-                         if part.text:
-                             text_parts.append(part.text)
-                     
-                     text_content = "".join(text_parts)
-
-                     if not function_calls and not text_content:
-                         return "Erro: Resposta vazia do modelo."
+                         elif part.text:
+                             text_content += part.text
+                    
+                     # If tools are called, send any preamble text to the user immediately
+                     if function_calls and on_intermediate_reply:
+                         if text_content and text_content.strip():
+                             try:
+                                 clean_text = self._RE_THINK.sub('', text_content)
+                                 clean_text = self._RE_THINK_OPEN.sub('', clean_text).strip()
+                                 if clean_text:
+                                     await on_intermediate_reply(clean_text)
+                             except Exception as cb_err:
+                                 self.logger.error(f"Error in on_intermediate_reply (Gemini): {cb_err}")
 
                      if function_calls and text_content.strip() and on_intermediate_reply:
                          try:

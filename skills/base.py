@@ -47,3 +47,37 @@ class BaseSkill(ABC):
             Any: The result of the execution, which will be serialized back to the LLM.
         """
         pass
+
+    def success(self, data: Any, message: str = None) -> Dict[str, Any]:
+        """
+        Formats a successful skill execution into a standard MCP-Lite JSON output.
+        
+        Args:
+            data: The main payload or results of the skill execution.
+            message: Optional display message or operational context.
+            
+        Returns:
+            Dict[str, Any]: A structured success response.
+        """
+        response = {
+            "status": "success",
+            "data": data
+        }
+        if message:
+            response["message"] = message
+        return response
+
+    def error(self, error_message: str) -> Dict[str, Any]:
+        """
+        Formats a failed skill execution into a standard MCP-Lite JSON output.
+        
+        Args:
+            error_message: The description of what went wrong.
+            
+        Returns:
+            Dict[str, Any]: A structured error response.
+        """
+        return {
+            "status": "error",
+            "error": error_message
+        }

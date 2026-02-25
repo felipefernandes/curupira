@@ -59,3 +59,40 @@ class TestPreprocessTimeString:
     def test_unrelated_string_unchanged(self, skill):
         result = skill._preprocess_time_string("em 30 minutos")
         assert "30" in result
+
+class TestRemindersMetadata:
+    def test_add_reminder_metadata(self):
+        manager = MagicMock(spec=ReminderManager)
+        skill = AddReminderSkill(manager)
+        assert skill.name == "add_reminder"
+        assert "Criar" in skill.display_name
+        assert "lembrete" in skill.description.lower()
+        assert "message" in skill.parameters["properties"]
+
+    def test_list_reminders_metadata(self):
+        from skills.reminders import ListRemindersSkill
+        manager = MagicMock(spec=ReminderManager)
+        skill = ListRemindersSkill(manager)
+        assert skill.name == "list_reminders"
+        assert "Listar" in skill.display_name
+        assert "listar os lembretes" in skill.description.lower()
+        assert skill.parameters["type"] == "object"
+
+    def test_delete_reminder_metadata(self):
+        from skills.reminders import DeleteReminderSkill
+        manager = MagicMock(spec=ReminderManager)
+        skill = DeleteReminderSkill(manager)
+        assert skill.name == "delete_reminder"
+        assert "Deletar" in skill.display_name
+        assert "cancelar" in skill.description.lower()
+        assert "reminder_id" in skill.parameters["properties"]
+
+    def test_update_reminder_metadata(self):
+        from skills.reminders import UpdateReminderSkill
+        manager = MagicMock(spec=ReminderManager)
+        skill = UpdateReminderSkill(manager)
+        assert skill.name == "update_reminder"
+        assert "Atualizar" in skill.display_name
+        assert "atualiza" in skill.description.lower()
+        assert "reminder_id" in skill.parameters["properties"]
+

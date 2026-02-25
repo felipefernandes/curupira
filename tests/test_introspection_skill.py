@@ -68,7 +68,7 @@ class TestIntrospectionSkill:
         """Test skill name, description, display_name, and parameters."""
         assert self.skill.name == "describe_capabilities"
         assert self.skill.display_name == "🔍 Minhas Capacidades"
-        assert "capabilities" in self.skill.description.lower()
+        assert "capacidades" in self.skill.description.lower()
         assert self.skill.parameters["type"] == "object"
         assert "skill_name" in self.skill.parameters["properties"]
 
@@ -77,14 +77,17 @@ class TestIntrospectionSkill:
         """Test listing all skills (no args)."""
         result = await self.skill.execute({})
 
-        assert result["total"] == 2  # Excludes itself
-        skill_names = [s["name"] for s in result["skills"]]
+        assert result["status"] == "success"
+        data = result["data"]
+        
+        assert data["total"] == 2  # Excludes itself
+        skill_names = [s["name"] for s in data["skills"]]
         assert "get_weather" in skill_names
         assert "github_list_issues" in skill_names
         assert "describe_capabilities" not in skill_names  # Self excluded
 
         # Verify display_name is present
-        for s in result["skills"]:
+        for s in data["skills"]:
             assert "display_name" in s
 
     @pytest.mark.asyncio
@@ -92,27 +95,33 @@ class TestIntrospectionSkill:
         """Test describing a specific skill."""
         result = await self.skill.execute({}, skill_name="get_weather")
 
-        assert result["name"] == "get_weather"
-        assert result["display_name"] == "🌦️ Previsão do Tempo"
-        assert "weather" in result["description"].lower()
-        assert len(result["parameters"]) == 1
-        assert result["parameters"][0]["name"] == "city"
-        assert result["parameters"][0]["required"] is True
+        assert result["status"] == "success"
+        data = result["data"]
+
+        assert data["name"] == "get_weather"
+        assert data["display_name"] == "🌦️ Previsão do Tempo"
+        assert "weather" in data["description"].lower()
+        assert len(data["parameters"]) == 1
+        assert data["parameters"][0]["name"] == "city"
+        assert data["parameters"][0]["required"] is True
 
     @pytest.mark.asyncio
     async def test_describe_skill_with_multiple_params(self):
         """Test describing a skill with multiple parameters."""
         result = await self.skill.execute({}, skill_name="github_list_issues")
 
-        assert result["name"] == "github_list_issues"
-        assert len(result["parameters"]) == 2
+        assert result["status"] == "success"
+        data = result["data"]
+
+        assert data["name"] == "github_list_issues"
+        assert len(data["parameters"]) == 2
         
-        param_names = [p["name"] for p in result["parameters"]]
+        param_names = [p["name"] for p in data["parameters"]]
         assert "repo_name" in param_names
         assert "state" in param_names
 
         # Check required flag
-        for p in result["parameters"]:
+        for p in data["parameters"]:
             if p["name"] == "repo_name":
                 assert p["required"] is True
             elif p["name"] == "state":
@@ -123,8 +132,7 @@ class TestIntrospectionSkill:
         """Test error handling for non-existent skill."""
         result = await self.skill.execute({}, skill_name="fly")
 
-        assert "error" in result
+        assert result["status"] == "error"
         assert "fly" in result["error"]
-        assert "available_skills" in result
-        assert "get_weather" in result["available_skills"]
-        assert "describe_capabilities" not in result["available_skills"]  # Self excluded
+        assert "get_weather" in result["error"]
+        assert "describe_capabilities" not in result["error"]  # Self excluded

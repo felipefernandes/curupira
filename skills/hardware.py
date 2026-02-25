@@ -56,6 +56,9 @@ class HardwareMonitoringSkill(BaseSkill):
                 summary += f"🌡️ **Temp:** {metrics['temp']}°C"
                 
             return self.success(metrics, summary)
+        except psutil.Error as pe:
+            self.logger.error(f"Erro psutil monitorando hardware: {pe}")
+            return self.error(f"Falha de sistema ao checar recursos (psutil): {pe}")
         except Exception as e:
             self.logger.error(f"Error monitoring hardware: {e}")
             return self.error(str(e))

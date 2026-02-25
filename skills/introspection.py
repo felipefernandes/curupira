@@ -32,11 +32,7 @@ class IntrospectionSkill(BaseSkill):
 
     @property
     def description(self) -> str:
-        return (
-            "Lists available skills and their capabilities. "
-            "Call without arguments to see all skills, or pass "
-            "skill_name to get detailed parameters for a specific skill."
-        )
+        return "Lista as capacidades e parâmetros das ferramentas do sistema."
 
     @property
     def parameters(self) -> Dict[str, Any]:
@@ -64,9 +60,12 @@ class IntrospectionSkill(BaseSkill):
         skill_name: Optional[str] = kwargs.get("skill_name")
 
         if skill_name:
-            return self._describe_skill(skill_name)
+            desc = self._describe_skill(skill_name)
+            if "error" in desc:
+                return self.error(f"{desc['error']} Available: {', '.join(desc['available_skills'])}")
+            return self.success(desc)
         else:
-            return self._list_all_skills()
+            return self.success(self._list_all_skills())
 
     def _list_all_skills(self) -> Dict[str, Any]:
         """Returns a summary of all registered skills."""
@@ -95,10 +94,7 @@ class IntrospectionSkill(BaseSkill):
                 s.name for s in self._agent.skills.values()
                 if s.name != self.name
             ]
-            return {
-                "error": f"Skill '{skill_name}' não encontrada.",
-                "available_skills": available
-            }
+            return {"error": f"Skill '{skill_name}' não encontrada.", "available_skills": available}
 
         params = skill.parameters
         param_details = []

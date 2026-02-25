@@ -41,4 +41,4 @@ debug_output.*
 test_debug*.*
 
 .claude/settings.local.json
-cov.*
+cov*.*

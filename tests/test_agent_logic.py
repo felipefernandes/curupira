@@ -92,13 +92,14 @@ async def test_execute_tool_call_success(agent):
     """Test successful tool execution"""
     mock_skill = AsyncMock()
     mock_skill.name = "test_skill"
-    mock_skill.execute.return_value = {"status": "ok"}
+    mock_skill.execute.return_value = {"status": "success", "data": {"status": "ok"}}
     
     agent.register_skill(mock_skill)
     
     result = await agent._execute_tool_call("test_skill", {"arg": 1}, {})
     
-    assert '"status": "ok"' in result
+    assert '"status": "success"' in result
+    assert '"data": {"status": "ok"}' in result
     mock_skill.execute.assert_called_with({}, arg=1)
 
 @pytest.mark.asyncio
@@ -197,7 +198,7 @@ async def test_process_message_tool_execution(agent, mock_groq_client):
     # Mock skill
     mock_skill = AsyncMock()
     mock_skill.name = "test_skill"
-    mock_skill.execute.return_value = {"status": "ok"}
+    mock_skill.execute.return_value = {"data": {"status": "ok"}, "status": "success"}
     agent.register_skill(mock_skill)
     
     agent.client = mock_groq_client
@@ -291,7 +292,7 @@ async def test_groq_failed_generation_recovery(agent, mock_groq_client):
     mock_skill.name = "rss_read"
     mock_skill.description = "Read RSS"
     mock_skill.parameters = {"type": "object", "properties": {}, "required": []}
-    mock_skill.execute.return_value = {"entries": []}
+    mock_skill.execute.return_value = {"status": "success", "data": {"entries": []}}
     agent.register_skill(mock_skill)
 
     response = await agent.process("Read news", {})

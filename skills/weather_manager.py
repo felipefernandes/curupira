@@ -20,7 +20,7 @@ class WeatherSkill(BaseSkill):
 
     @property
     def description(self) -> str:
-        return "Obtém a previsão do tempo atual para uma cidade específica."
+        return "Obtém a previsão do tempo atual para uma cidade."
 
     @property
     def parameters(self) -> Dict[str, Any]:
@@ -40,22 +40,22 @@ class WeatherSkill(BaseSkill):
             lat, lon, name = await self.get_coordinates(city)
             
             if not lat or not lon or not name:
-                return {"error": f"Cidade '{city}' não encontrada."}
+                return self.error(f"Cidade '{city}' não encontrada.")
 
             current = await self.get_forecast(lat, lon)
             if current is None:
-                return {"error": f"Erro de formatação ou sem dados para '{name}'."}
+                return self.error(f"Erro de formatação ou sem dados para '{name}'.")
         except Exception as e:
-            return {"error": f"Erro de comunicação com a API: {e}"}
+            return self.error(f"Erro de comunicação com a API: {e}")
 
         # Return structured data for the LLM to process
-        return {
+        return self.success({
             "location": name,
             "temperature": current.get("temperature_2m"),
             "humidity": current.get("relative_humidity_2m"),
             "rain_probability": current.get("precipitation_probability", 0),
             "condition_code": current.get("weather_code")
-        }
+        })
 
     async def get_coordinates(self, city_name, retries=3, backoff=2):
         """Fetches lat/lon for a city name with retry logic.

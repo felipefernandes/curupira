@@ -275,11 +275,11 @@ class TestAddReminderSkillRecurring(unittest.IsolatedAsyncioTestCase):
         result = await skill.execute(ctx, message="tomar remédio", when="todo dia às 8h")
 
         self.assertEqual(result["status"], "success")
-        self.assertIsNotNone(result["recurrence"])
-        self.assertTrue(result["recurrence"].startswith("DAILY@08"))
+        self.assertIsNotNone(result["data"]["recurrence"])
+        self.assertTrue(result["data"]["recurrence"].startswith("DAILY@08"))
         # Verify recurrence was passed to add_reminder
         _, call_kwargs = manager.add_reminder.call_args
-        self.assertEqual(call_kwargs["recurrence"], result["recurrence"])
+        self.assertEqual(call_kwargs["recurrence"], result["data"]["recurrence"])
 
     async def test_is_task_flag_persisted(self):
         skill, manager = self._make_skill()
@@ -287,7 +287,7 @@ class TestAddReminderSkillRecurring(unittest.IsolatedAsyncioTestCase):
 
         result = await skill.execute(ctx, message="busca vagas agora", when="todo dia às 9h", is_task=True)
 
-        self.assertEqual(result["is_task"], True)
+        self.assertEqual(result["data"]["is_task"], True)
         _, call_kwargs = manager.add_reminder.call_args
         self.assertEqual(call_kwargs["is_task"], True)
 
@@ -297,7 +297,7 @@ class TestAddReminderSkillRecurring(unittest.IsolatedAsyncioTestCase):
 
         result = await skill.execute(ctx, message="comprar leite", when="amanhã às 10h")
 
-        self.assertIsNone(result.get("recurrence"))
+        self.assertIsNone(result["data"].get("recurrence"))
         _, call_kwargs = manager.add_reminder.call_args
         self.assertIsNone(call_kwargs["recurrence"])
 
@@ -307,7 +307,7 @@ class TestAddReminderSkillRecurring(unittest.IsolatedAsyncioTestCase):
 
         result = await skill.execute(ctx, message="tomar remédio", when="toda manhã às 8h")
 
-        self.assertIn("recorrente", result["info"].lower())
+        self.assertIn("recorrente", result["message"].lower())
 
     async def test_multiple_time_hint_single_call(self):
         """A single call with one time slot creates exactly one reminder."""
@@ -338,8 +338,8 @@ class TestListRemindersSkillRecurrence(unittest.IsolatedAsyncioTestCase):
 
         result = await skill.execute({"user_id": FAKE_USER_ID})
 
-        self.assertIn("🔁", result["summary"])
-        self.assertIn("Todo dia", result["summary"])
+        self.assertIn("🔁", result["message"])
+        self.assertIn("Todo dia", result["message"])
 
     async def test_list_shows_task_indicator(self):
         remind_at = (datetime.now() + timedelta(days=1)).isoformat()
@@ -348,7 +348,7 @@ class TestListRemindersSkillRecurrence(unittest.IsolatedAsyncioTestCase):
 
         result = await skill.execute({"user_id": FAKE_USER_ID})
 
-        self.assertIn("Tarefa automática", result["summary"])
+        self.assertIn("Tarefa automática", result["message"])
 
     async def test_list_one_shot_no_recurrence_symbol(self):
         remind_at = (datetime.now() + timedelta(hours=2)).isoformat()
@@ -357,8 +357,8 @@ class TestListRemindersSkillRecurrence(unittest.IsolatedAsyncioTestCase):
 
         result = await skill.execute({"user_id": FAKE_USER_ID})
 
-        self.assertNotIn("🔁", result["summary"])
-        self.assertNotIn("Tarefa automática", result["summary"])
+        self.assertNotIn("🔁", result["message"])
+        self.assertNotIn("Tarefa automática", result["message"])
 
     async def test_recurrence_weekly_label(self):
         remind_at = (datetime.now() + timedelta(days=2)).isoformat()
@@ -367,7 +367,7 @@ class TestListRemindersSkillRecurrence(unittest.IsolatedAsyncioTestCase):
 
         result = await skill.execute({"user_id": FAKE_USER_ID})
 
-        self.assertIn("Seg", result["summary"])
+        self.assertIn("Seg", result["message"])
 
 
 if __name__ == "__main__":

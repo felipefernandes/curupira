@@ -11,12 +11,12 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
     async def test_execute_validation(self):
         # Test Empty Input
         res_empty = await self.skill.execute({}, feed_identifier="")
-        self.assertIn("error", res_empty)
+        self.assertEqual(res_empty["status"], "error")
         self.assertIn("Nome do feed", res_empty["error"])
 
         # Test Invalid Limit
         res_limit = await self.skill.execute({}, feed_identifier="TestFeed", limit=0)
-        self.assertIn("error", res_limit)
+        self.assertEqual(res_limit["status"], "error")
         self.assertIn("Limite", res_limit["error"])
 
     async def test_execute_string_limit_conversion(self):
@@ -51,8 +51,8 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
         # Verify URL was resolved
         args, _ = mock_parse.call_args
         self.assertEqual(args[0], "http://example.com/feed")
-        self.assertEqual(result['total_available'], 1)
-        self.assertEqual(result['entries'][0]['title'], "Test Entry")
+        self.assertEqual(result['data']['total_available'], 1)
+        self.assertEqual(result['data']['entries'][0]['title'], "Test Entry")
 
     @patch('core.config.RSS_FEEDS', {"TestFeed": "http://example.com/feed"})
     @patch('skills.rss.feedparser.parse')
@@ -84,7 +84,7 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
         
         result = await self.skill.execute({}, feed_identifier="TestFeed")
         
-        entry = result['entries'][0]
+        entry = result['data']['entries'][0]
         self.assertEqual(entry['title'], "Sem título")
         self.assertEqual(entry['link'], "")
         
@@ -101,8 +101,8 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
         # Default limit should be 5
         result = await self.skill.execute({}, feed_identifier="TestFeed")
         
-        self.assertEqual(len(result['entries']), 5)
-        self.assertEqual(result['entries'][0]['title'], "Entry 0")
+        self.assertEqual(len(result['data']['entries']), 5)
+        self.assertEqual(result['data']['entries'][0]['title'], "Entry 0")
 
     @patch('skills.rss.feedparser.parse')
     async def test_execute_with_url_blocked(self, mock_parse):
@@ -111,8 +111,7 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
         result = await self.skill.execute({}, feed_identifier=url)
         
         # Verify it was BLOCKED (not parsed)
-        self.assertIn("error", result)
-        self.assertIn("Security", result.get("reason", ""))
+        self.assertEqual(result["status"], "error")
         # Verify available feeds are listed
         self.assertIn("Opções disponíveis", result["error"])
         mock_parse.assert_not_called()
@@ -129,7 +128,7 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
         # Use a VALID name so it passes security check
         result = await self.skill.execute({}, feed_identifier="TestFeed")
         
-        self.assertIn("error", result)
+        self.assertEqual(result["status"], "error")
         self.assertIn("Connection Refused", str(result))
 
     @patch('core.config.RSS_FEEDS', {"TestFeed": "http://example.com/feed"})
@@ -150,7 +149,7 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
         
         result = await self.skill.execute({}, feed_identifier="TestFeed")
         
-        self.assertIn("error", result)
+        self.assertEqual(result["status"], "error")
         self.assertIn("Timeout", result["error"])
 
 
@@ -165,15 +164,15 @@ class TestRssListSkill(unittest.IsolatedAsyncioTestCase):
     @patch('core.config.RSS_FEEDS', {"G1": "http://g1.com", "Tech": "http://tech.com"})
     async def test_list_feeds(self):
         result = await self.skill.execute({})
-        self.assertEqual(result['total'], 2)
-        names = [f['name'] for f in result['feeds']]
+        self.assertEqual(result['data']['total'], 2)
+        names = [f['name'] for f in result['data']['feeds']]
         self.assertIn("G1", names)
         self.assertIn("Tech", names)
 
     @patch('core.config.RSS_FEEDS', {})
     async def test_list_feeds_empty(self):
         result = await self.skill.execute({})
-        self.assertEqual(result['feeds'], [])
+        self.assertEqual(result['data']['feeds'], [])
         self.assertIn("message", result)
 
 if __name__ == '__main__':

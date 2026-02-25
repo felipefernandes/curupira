@@ -22,7 +22,7 @@ class HardwareMonitoringSkill(BaseSkill):
 
     @property
     def description(self) -> str:
-        return "Returns current system hardware status (CPU, RAM, Disk, Temperature)."
+        return "Retorna o status atual do hardware local (CPU, RAM, Disco, Temperatura)."
 
     @property
     def parameters(self) -> Dict[str, Any]:
@@ -34,10 +34,7 @@ class HardwareMonitoringSkill(BaseSkill):
         Runs blocking psutil calls in a separate thread to avoid freezing the bot.
         """
         if psutil is None:
-            return {
-                "summary": "❌ Erro: Biblioteca `psutil` não instalada no servidor.",
-                "error": "psutil module not found"
-            }
+            return self.error("Biblioteca `psutil` não instalada no servidor.")
 
         try:
             # Run blocking I/O in thread
@@ -58,13 +55,10 @@ class HardwareMonitoringSkill(BaseSkill):
             if metrics['temp'] != "N/A":
                 summary += f"🌡️ **Temp:** {metrics['temp']}°C"
                 
-            return {
-                "metrics": metrics,
-                "summary": summary
-            }
+            return self.success(metrics, summary)
         except Exception as e:
             self.logger.error(f"Error monitoring hardware: {e}")
-            return {"error": str(e)}
+            return self.error(str(e))
 
     def _get_metrics(self) -> Dict[str, Any]:
         """Blocking helper function to fetch metrics via psutil."""

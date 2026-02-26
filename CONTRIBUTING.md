@@ -29,7 +29,8 @@ O CurupiraBOT utiliza uma agente de IA chamada **Iara** para realizar revisões 
 
 - **Commits:** Use [Conventional Commits](https://www.conventionalcommits.org/) (ex: `feat:`, `fix:`, `docs:`).
 - **Código:** Siga a PEP 8 para Python.
-- **Testes:** Adicione testes unitários/integração para novas funcionalidades em `tests/`.
+- **Skills:** Toda nova habilidade deve seguir o **[Framework de Criação de Skills](docs/SKILLS_FRAMEWORK.md)**.
+- **Testes:** Adicione testes unitários/integração para novas funcionalidades em `tests/`. Consulte o **[Guia de Instalação](docs/INSTALL.md)** para rodar a bateria de testes.
 
 ## 🏗️ Estrutura & Padrões (OpenSpec)
 
@@ -38,7 +39,7 @@ Este projeto utiliza uma metodologia leve de especificações chamada **OpenSpec
 1.  **Mudanças Grandes?**
     *   Evite mudar código diretamente.
     *   Crie uma proposta em `openspec/changes/nova-feature/`.
-    *   Consulte `openspec/project.md` e `openspec/AGENTS.md` para entender a arquitetura.
+    *   Consulte `openspec/project.md`, `openspec/AGENTS.md` e o **[Skills Framework](docs/SKILLS_FRAMEWORK.md)** para entender a arquitetura.
 
 ## 🗺️ Roadmap
 

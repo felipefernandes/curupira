@@ -28,8 +28,9 @@ curupira/
 ├── bot.py              # Núcleo do sistema (Core)
 ├── config.py           # Validação de ambiente
 ├── ROADMAP.md          # Objetivos e Fases do Projeto
-├── openspec/           # Documentação e contexto do projeto
-│   └── project.md      # Contexto geral (Persona, Tech Stack)
+├── docs/               # Documentação técnica detalhada
+│   ├── INSTALL.md      # Guia de instalação completo
+│   └── SKILLS_FRAMEWORK.md # Guia oficial para criação de novas skills
 └── skills/             # Pasta modular para automações
     └── system.py       # Monitoramento de hardware
 ```
@@ -87,6 +88,7 @@ curupira/
 * NÃO instale bibliotecas pesadas de Data Science localmente (Pandas/Numpy) para economizar RAM.
 * NÃO utilize bases de dados complexas (preferir JSON ou SQLite para persistência mínima).
 * SEMPRE priorize funções async para não travar o loop de eventos no Pi 3B.
+* TODA nova funcionalidade de automação deve seguir o **[Skills Framework](docs/SKILLS_FRAMEWORK.md)**.
 
 8. Fluxo de Contribuição (Revisão Automatizada)
 

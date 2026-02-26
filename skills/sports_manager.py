@@ -576,13 +576,44 @@ class SportsManagerSkill(BaseSkill):
             if not results_data.get("results"):
                 return {
                     "team_name": team_full_name,
+                    "team_id": team_id,
                     "matches": [],
+                    "matches_count": 0,
                     "message": f"Nenhum resultado recente encontrado para {team_full_name}.",
                 }
 
-            # 3. Processar e formatar resultados
+            # 3. Filtrar apenas jogos com placar (completed)
+            # A API pode retornar jogos agendados/adiados sem placar
+            # Usa OR: basta um dos scores existir para considerar finalizado
+            completed_events = [
+                event
+                for event in results_data["results"]
+                if (event.get("intHomeScore") not in (None, ""))
+                or (event.get("intAwayScore") not in (None, ""))
+            ]
+
+            if not completed_events:
+                return {
+                    "team_name": team_full_name,
+                    "team_id": team_id,
+                    "matches": [],
+                    "matches_count": 0,
+                    "message": (
+                        f"Nenhum jogo finalizado encontrado para {team_full_name}. "
+                        f"A API retornou {len(results_data['results'])} jogo(s), "
+                        f"mas todos estão agendados ou sem placar."
+                    ),
+                }
+
+            # Ordenar por data decrescente (mais recente primeiro)
+            completed_events.sort(
+                key=lambda e: e.get("dateEvent", ""),
+                reverse=True,
+            )
+
+            # 4. Processar e formatar resultados
             matches = []
-            for event in results_data["results"][:limit]:
+            for event in completed_events[:limit]:
                 match_info = {
                     "date": event.get("dateEvent"),
                     "home_team": event.get("strHomeTeam"),

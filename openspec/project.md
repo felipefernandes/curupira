@@ -22,7 +22,7 @@ O Curupira nasce do **Manifesto Curupira**, buscando democratizar a Inteligênci
 
 ### Architecture Patterns
 - **Agêntica (AgentBrain):** Núcleo de decisão (`AgentBrain`) que gerencia a execução de habilidades (`skills/`) via Function Calling.
-- **Modular:** Herança de `BaseSkill` para padronização e fácil extensão de novas capacidades.
+- **Modular:** Herança de `BaseSkill` para padronização. Toda nova habilidade deve seguir rigorosamente o **[Skills Framework (MCP-Lite)](../docs/SKILLS_FRAMEWORK.md)** para garantir eficiência e isolamento.
 - **Multi-Provider:** Suporte nativo e transparente a múltiplos provedores de LLM (Groq, Google GenAI).
 - **Segurança por Design:** Whitelist estrita de `USER_ID` para execução de comandos e sanitização de inputs/outputs.
 - **Configuração:** Segredos e variáveis de ambiente gerenciados via `.env` e validados em `config.py`.

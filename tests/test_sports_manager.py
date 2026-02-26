@@ -1,6 +1,7 @@
 import pytest
 import httpx
 from unittest.mock import AsyncMock, patch, MagicMock
+from datetime import datetime
 import sys
 import os
 import asyncio
@@ -197,18 +198,17 @@ async def test_execute_missing_action(sports_skill):
 
 @pytest.mark.asyncio
 async def test_execute_unsupported_action(sports_skill):
-    """Testa erro para action não implementada (MVP)."""
+    """Testa erro para action não reconhecida."""
     context = {"user_id": 123}
     result = await sports_skill.execute(
         context,
-        action="get_schedule",  # Não implementado na Fase 1
+        action="get_transfers",
         sport="football",
         team_name="Flamengo"
     )
 
     assert result["status"] == "error"
-    assert "não implementada" in result["error"]
-    assert "get_schedule" in result["error"]
+    assert "não reconhecida" in result["error"]
 
 
 @pytest.mark.asyncio
@@ -300,7 +300,7 @@ async def test_execute_unsupported_sport(sports_skill):
     )
 
     assert result["status"] == "error"
-    assert "não implementado" in result["error"]
+    assert "não suportado" in result["error"]
 
 
 @pytest.mark.asyncio
@@ -772,3 +772,573 @@ async def test_execute_with_preferences(sports_skill, mock_memory_manager):
 
                 assert result["status"] == "success"
                 assert "Palmeiras" in str(result["data"])
+
+
+# ==================== TESTES DE _resolve_team_info ====================
+
+
+@pytest.mark.asyncio
+async def test_resolve_team_info_caches_result(sports_skill):
+    """Testa que _resolve_team_info cacheia resultado (24h TTL)."""
+    mock_response = MagicMock()
+    mock_response.json.return_value = {
+        "teams": [{"idTeam": "133604", "strTeam": "Flamengo", "idLeague": "4351"}]
+    }
+    mock_response.raise_for_status.return_value = None
+
+    with patch("core.config.THESPORTSDB_KEY", "test_key"):
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_response
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                # Primeira chamada: API call
+                team1 = await sports_skill._resolve_team_info("Flamengo")
+                assert team1["idTeam"] == "133604"
+
+                # Segunda chamada: cache hit (sem API call)
+                team2 = await sports_skill._resolve_team_info("Flamengo")
+                assert team2["idTeam"] == "133604"
+
+                # Apenas 1 API call (segunda veio do cache)
+                assert mock_get.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_resolve_team_info_not_found(sports_skill):
+    """Testa erro quando time não encontrado no _resolve_team_info."""
+    mock_response = MagicMock()
+    mock_response.json.return_value = {"teams": None}
+    mock_response.raise_for_status.return_value = None
+
+    with patch("core.config.THESPORTSDB_KEY", "test_key"):
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_response
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                with pytest.raises(ValueError, match="não encontrado"):
+                    await sports_skill._resolve_team_info("TimeInexistente")
+
+
+# ==================== TESTES DE _determine_season ====================
+
+
+def test_determine_season_brazilian_league(sports_skill):
+    """Testa formato de season para liga brasileira (ano único)."""
+    season = sports_skill._determine_season("Brasileirão Série A")
+    # Deve retornar formato ano único
+    assert "-" not in season
+    assert len(season) == 4  # "2026"
+
+
+def test_determine_season_european_league(sports_skill):
+    """Testa formato de season para liga europeia (dois anos)."""
+    season = sports_skill._determine_season("Premier League")
+    # Deve retornar formato dois anos
+    assert "-" in season
+    assert len(season) == 9  # "2025-2026"
+
+
+def test_determine_season_alternate_brazilian(sports_skill):
+    """Testa formato alternativo para liga brasileira."""
+    season = sports_skill._determine_season("Brasileirão Série A", alternate=True)
+    # Alternate de brasileiro = formato europeu
+    assert "-" in season
+
+
+def test_determine_season_alternate_european(sports_skill):
+    """Testa formato alternativo para liga europeia."""
+    season = sports_skill._determine_season("Premier League", alternate=True)
+    # Alternate de europeu = formato brasileiro (ano único)
+    assert "-" not in season
+
+
+def test_determine_season_none_league(sports_skill):
+    """Testa season com league_name None (default europeu)."""
+    season = sports_skill._determine_season(None)
+    assert "-" in season  # Default é formato europeu
+
+
+def test_determine_season_brazilian_month_before_july(sports_skill):
+    """Testa season brasileira com month < 7 no alternate."""
+    with patch("skills.sports_manager.datetime") as mock_datetime:
+        mock_datetime.now.return_value = datetime(2026, 3, 15)  # Março
+        season = sports_skill._determine_season("Brasileirão", alternate=True)
+        assert "-" in season
+        assert season == "2025-2026"
+
+
+def test_determine_season_european_month_before_july(sports_skill):
+    """Testa season europeia com month < 7."""
+    with patch("skills.sports_manager.datetime") as mock_datetime:
+        mock_datetime.now.return_value = datetime(2026, 3, 15)  # Março
+        season = sports_skill._determine_season("Premier League")
+        assert "-" in season
+        assert season == "2025-2026"
+
+
+# ==================== TESTES DE get_schedule ====================
+
+
+@pytest.mark.asyncio
+async def test_fetch_football_schedule_success(sports_skill):
+    """Testa busca de próximos jogos bem-sucedida."""
+    search_response = MagicMock()
+    search_response.json.return_value = {
+        "teams": [{"idTeam": "134141", "strTeam": "Botafogo"}]
+    }
+    search_response.raise_for_status.return_value = None
+
+    schedule_response = MagicMock()
+    schedule_response.json.return_value = {
+        "events": [
+            {
+                "dateEvent": "2026-03-05",
+                "strTime": "21:00:00",
+                "strHomeTeam": "Botafogo",
+                "strAwayTeam": "Flamengo",
+                "strLeague": "Brasileirão Série A",
+                "intRound": "5",
+                "strVenue": "Estádio Nilton Santos",
+            }
+        ]
+    }
+    schedule_response.raise_for_status.return_value = None
+
+    with patch("core.config.THESPORTSDB_KEY", "test_key"):
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.side_effect = [search_response, schedule_response]
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await sports_skill._fetch_football_schedule("Botafogo")
+
+                assert result["team_name"] == "Botafogo"
+                assert result["matches_count"] == 1
+                assert result["upcoming_matches"][0]["date"] == "2026-03-05"
+                assert result["upcoming_matches"][0]["venue"] == "Estádio Nilton Santos"
+                assert result["free_tier_limited"] is True
+                assert result["note"] is not None
+
+
+@pytest.mark.asyncio
+async def test_fetch_football_schedule_no_upcoming(sports_skill):
+    """Testa quando não há próximos jogos."""
+    search_response = MagicMock()
+    search_response.json.return_value = {
+        "teams": [{"idTeam": "134141", "strTeam": "Botafogo"}]
+    }
+    search_response.raise_for_status.return_value = None
+
+    schedule_response = MagicMock()
+    schedule_response.json.return_value = {"events": None}
+    schedule_response.raise_for_status.return_value = None
+
+    with patch("core.config.THESPORTSDB_KEY", "test_key"):
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.side_effect = [search_response, schedule_response]
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await sports_skill._fetch_football_schedule("Botafogo")
+
+                assert result["matches_count"] == 0
+                assert result["upcoming_matches"] == []
+                assert "Nenhum" in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_football_schedule_sorted_asc(sports_skill):
+    """Testa que próximos jogos são ordenados por data ascendente."""
+    search_response = MagicMock()
+    search_response.json.return_value = {
+        "teams": [{"idTeam": "134141", "strTeam": "Botafogo"}]
+    }
+    search_response.raise_for_status.return_value = None
+
+    schedule_response = MagicMock()
+    schedule_response.json.return_value = {
+        "events": [
+            {
+                "dateEvent": "2026-03-10",
+                "strTime": "20:00:00",
+                "strHomeTeam": "Botafogo",
+                "strAwayTeam": "Vasco",
+                "strLeague": "Carioca",
+                "intRound": "8",
+                "strVenue": "Maracanã",
+            },
+            {
+                "dateEvent": "2026-03-05",
+                "strTime": "21:00:00",
+                "strHomeTeam": "Flamengo",
+                "strAwayTeam": "Botafogo",
+                "strLeague": "Brasileirão",
+                "intRound": "5",
+                "strVenue": "Maracanã",
+            },
+        ]
+    }
+    schedule_response.raise_for_status.return_value = None
+
+    with patch("core.config.THESPORTSDB_KEY", "test_key"):
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.side_effect = [search_response, schedule_response]
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await sports_skill._fetch_football_schedule("Botafogo")
+
+                assert result["matches_count"] == 2
+                # Mais próximo primeiro
+                assert result["upcoming_matches"][0]["date"] == "2026-03-05"
+                assert result["upcoming_matches"][1]["date"] == "2026-03-10"
+                assert result["free_tier_limited"] is False
+
+
+@pytest.mark.asyncio
+async def test_execute_get_schedule_routes_correctly(sports_skill):
+    """Testa que execute() roteia get_schedule corretamente."""
+    with patch("core.config.THESPORTSDB_KEY", "123"):
+        # Preencher cache para schedule
+        cached_data = {
+            "team_name": "Botafogo",
+            "matches_count": 1,
+            "upcoming_matches": [{"date": "2026-03-05"}],
+        }
+        cache_key = sports_skill._make_cache_key("get_schedule", "football", "Botafogo")
+        sports_skill.cache.set(cache_key, cached_data, "schedule")
+
+        context = {"user_id": 123}
+        result = await sports_skill.execute(
+            context,
+            action="get_schedule",
+            sport="football",
+            team_name="Botafogo"
+        )
+
+        assert result["status"] == "success"
+        assert result["data"]["team_name"] == "Botafogo"
+        assert "upcoming_matches" in result["data"]
+
+
+# ==================== TESTES DE get_standings ====================
+
+
+@pytest.mark.asyncio
+async def test_fetch_football_standings_via_team(sports_skill):
+    """Testa busca de classificação via nome do time."""
+    search_response = MagicMock()
+    search_response.json.return_value = {
+        "teams": [{
+            "idTeam": "134141",
+            "strTeam": "Botafogo",
+            "idLeague": "4351",
+            "strLeague": "Brasileirão Série A",
+        }]
+    }
+    search_response.raise_for_status.return_value = None
+
+    standings_response = MagicMock()
+    standings_response.json.return_value = {
+        "table": [
+            {
+                "intRank": "1",
+                "strTeam": "Botafogo",
+                "idTeam": "134141",
+                "intPlayed": "10",
+                "intWin": "8",
+                "intDraw": "1",
+                "intLoss": "1",
+                "intGoalsFor": "22",
+                "intGoalsAgainst": "8",
+                "intGoalDifference": "14",
+                "intPoints": "25",
+            },
+            {
+                "intRank": "2",
+                "strTeam": "Flamengo",
+                "idTeam": "133604",
+                "intPlayed": "10",
+                "intWin": "7",
+                "intDraw": "2",
+                "intLoss": "1",
+                "intGoalsFor": "20",
+                "intGoalsAgainst": "10",
+                "intGoalDifference": "10",
+                "intPoints": "23",
+            },
+        ]
+    }
+    standings_response.raise_for_status.return_value = None
+
+    with patch("core.config.THESPORTSDB_KEY", "test_key"):
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.side_effect = [search_response, standings_response]
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await sports_skill._fetch_football_standings("Botafogo", None)
+
+                assert result["league"] == "Brasileirão Série A"
+                assert result["entries_count"] == 2
+                assert result["standings"][0]["position"] == "1"
+                assert result["standings"][0]["team_name"] == "Botafogo"
+                assert result["standings"][0]["points"] == "25"
+
+
+@pytest.mark.asyncio
+async def test_fetch_football_standings_via_league(sports_skill):
+    """Testa busca de classificação via nome da liga (sem team_name)."""
+    teams_response = MagicMock()
+    teams_response.json.return_value = {
+        "teams": [{"idLeague": "4351", "strTeam": "Botafogo"}]
+    }
+    teams_response.raise_for_status.return_value = None
+
+    standings_response = MagicMock()
+    standings_response.json.return_value = {
+        "table": [
+            {
+                "intRank": "1",
+                "strTeam": "Botafogo",
+                "idTeam": "134141",
+                "intPlayed": "10",
+                "intWin": "8",
+                "intDraw": "1",
+                "intLoss": "1",
+                "intGoalsFor": "22",
+                "intGoalsAgainst": "8",
+                "intGoalDifference": "14",
+                "intPoints": "25",
+            },
+        ]
+    }
+    standings_response.raise_for_status.return_value = None
+
+    with patch("core.config.THESPORTSDB_KEY", "test_key"):
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.side_effect = [teams_response, standings_response]
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await sports_skill._fetch_football_standings(
+                    None, "Brasileirão Série A"
+                )
+
+                assert result["league"] == "Brasileirão Série A"
+                assert result["entries_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_fetch_football_standings_league_not_found(sports_skill):
+    """Testa erro quando liga não encontrada."""
+    teams_response = MagicMock()
+    teams_response.json.return_value = {"teams": None}
+    teams_response.raise_for_status.return_value = None
+
+    with patch("core.config.THESPORTSDB_KEY", "test_key"):
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = teams_response
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                with pytest.raises(ValueError, match="não encontrada"):
+                    await sports_skill._fetch_football_standings(
+                        None, "Liga Inexistente"
+                    )
+
+
+@pytest.mark.asyncio
+async def test_fetch_football_standings_no_table(sports_skill):
+    """Testa quando tabela não encontrada (retorna vazio com mensagem)."""
+    search_response = MagicMock()
+    search_response.json.return_value = {
+        "teams": [{
+            "idTeam": "134141",
+            "strTeam": "Botafogo",
+            "idLeague": "4351",
+            "strLeague": "Brasileirão Série A",
+        }]
+    }
+    search_response.raise_for_status.return_value = None
+
+    empty_response = MagicMock()
+    empty_response.json.return_value = {"table": None}
+    empty_response.raise_for_status.return_value = None
+
+    with patch("core.config.THESPORTSDB_KEY", "test_key"):
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            # search + 2x lookuptable (normal + fallback)
+            mock_get.side_effect = [search_response, empty_response, empty_response]
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await sports_skill._fetch_football_standings("Botafogo", None)
+
+                assert result["entries_count"] == 0
+                assert result["standings"] == []
+                assert "não encontrada" in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_football_standings_season_fallback(sports_skill):
+    """Testa fallback de formato de season."""
+    search_response = MagicMock()
+    search_response.json.return_value = {
+        "teams": [{
+            "idTeam": "134141",
+            "strTeam": "Botafogo",
+            "idLeague": "4351",
+            "strLeague": "Brasileirão Série A",
+        }]
+    }
+    search_response.raise_for_status.return_value = None
+
+    empty_response = MagicMock()
+    empty_response.json.return_value = {"table": None}
+    empty_response.raise_for_status.return_value = None
+
+    standings_response = MagicMock()
+    standings_response.json.return_value = {
+        "table": [
+            {
+                "intRank": "1",
+                "strTeam": "Botafogo",
+                "idTeam": "134141",
+                "intPlayed": "5",
+                "intWin": "4",
+                "intDraw": "1",
+                "intLoss": "0",
+                "intGoalsFor": "10",
+                "intGoalsAgainst": "3",
+                "intGoalDifference": "7",
+                "intPoints": "13",
+            },
+        ]
+    }
+    standings_response.raise_for_status.return_value = None
+
+    with patch("core.config.THESPORTSDB_KEY", "test_key"):
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            # search + empty (first season) + success (fallback season)
+            mock_get.side_effect = [search_response, empty_response, standings_response]
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await sports_skill._fetch_football_standings("Botafogo", None)
+
+                # Fallback funcionou
+                assert result["entries_count"] == 1
+                assert result["standings"][0]["team_name"] == "Botafogo"
+
+
+@pytest.mark.asyncio
+async def test_fetch_football_standings_free_tier_note(sports_skill):
+    """Testa nota de free tier quando <= 5 posições."""
+    search_response = MagicMock()
+    search_response.json.return_value = {
+        "teams": [{
+            "idTeam": "134141",
+            "strTeam": "Botafogo",
+            "idLeague": "4351",
+            "strLeague": "Brasileirão Série A",
+        }]
+    }
+    search_response.raise_for_status.return_value = None
+
+    # 5 posições = limite free tier
+    standings_response = MagicMock()
+    table_entries = [
+        {
+            "intRank": str(i),
+            "strTeam": f"Time {i}",
+            "idTeam": str(i),
+            "intPlayed": "10",
+            "intWin": str(10 - i),
+            "intDraw": "0",
+            "intLoss": str(i),
+            "intGoalsFor": str(20 - i),
+            "intGoalsAgainst": str(i * 2),
+            "intGoalDifference": str(20 - i * 3),
+            "intPoints": str((10 - i) * 3),
+        }
+        for i in range(1, 6)
+    ]
+    standings_response.json.return_value = {"table": table_entries}
+    standings_response.raise_for_status.return_value = None
+
+    with patch("core.config.THESPORTSDB_KEY", "test_key"):
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.side_effect = [search_response, standings_response]
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await sports_skill._fetch_football_standings("Botafogo", None)
+
+                assert result["free_tier_limited"] is True
+                assert "5 posições" in result["note"]
+
+
+@pytest.mark.asyncio
+async def test_execute_get_standings_routes_correctly(sports_skill):
+    """Testa que execute() roteia get_standings corretamente."""
+    with patch("core.config.THESPORTSDB_KEY", "123"):
+        # Preencher cache para standings
+        cached_data = {
+            "league": "Brasileirão Série A",
+            "entries_count": 5,
+            "standings": [{"position": "1", "team_name": "Botafogo"}],
+        }
+        cache_key = sports_skill._make_cache_key(
+            "get_standings", "football", "Botafogo"
+        )
+        sports_skill.cache.set(cache_key, cached_data, "standings")
+
+        context = {"user_id": 123}
+        result = await sports_skill.execute(
+            context,
+            action="get_standings",
+            sport="football",
+            team_name="Botafogo"
+        )
+
+        assert result["status"] == "success"
+        assert "standings" in result["data"]
+
+
+@pytest.mark.asyncio
+async def test_execute_get_standings_without_team_but_with_league(sports_skill):
+    """Testa get_standings sem team_name mas com league (válido)."""
+    with patch("core.config.THESPORTSDB_KEY", "123"):
+        cached_data = {
+            "league": "Premier League",
+            "entries_count": 5,
+            "standings": [{"position": "1"}],
+        }
+        cache_key = sports_skill._make_cache_key(
+            "get_standings", "football", league="Premier League"
+        )
+        sports_skill.cache.set(cache_key, cached_data, "standings")
+
+        context = {"user_id": 123}
+        result = await sports_skill.execute(
+            context,
+            action="get_standings",
+            sport="football",
+            league="Premier League"
+        )
+
+        assert result["status"] == "success"
+
+
+@pytest.mark.asyncio
+async def test_fetch_football_standings_cannot_determine_league(sports_skill):
+    """Testa erro quando não consegue determinar league_id."""
+    with patch("core.config.THESPORTSDB_KEY", "test_key"):
+        with pytest.raises(ValueError, match="determinar a liga"):
+            await sports_skill._fetch_football_standings(None, None)
+
+
+# ==================== TESTES DE shutdown ====================
+
+
+@pytest.mark.asyncio
+async def test_shutdown_closes_http_client(sports_skill):
+    """Testa que shutdown() fecha o HTTP client."""
+    # Simular que o client foi criado
+    mock_client = AsyncMock()
+    sports_skill._http_client = mock_client
+
+    await sports_skill.shutdown()
+
+    # Verifica que aclose() foi chamado
+    mock_client.aclose.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_without_http_client(sports_skill):
+    """Testa que shutdown() não falha sem HTTP client."""
+    sports_skill._http_client = None
+
+    # Não deve levantar exception
+    await sports_skill.shutdown()

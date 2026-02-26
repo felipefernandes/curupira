@@ -584,11 +584,12 @@ class SportsManagerSkill(BaseSkill):
 
             # 3. Filtrar apenas jogos com placar (completed)
             # A API pode retornar jogos agendados/adiados sem placar
+            # Usa OR: basta um dos scores existir para considerar finalizado
             completed_events = [
                 event
                 for event in results_data["results"]
-                if event.get("intHomeScore") is not None
-                and event.get("intHomeScore") != ""
+                if (event.get("intHomeScore") not in (None, ""))
+                or (event.get("intAwayScore") not in (None, ""))
             ]
 
             if not completed_events:

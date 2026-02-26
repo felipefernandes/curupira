@@ -434,6 +434,7 @@ async def test_fetch_thesportsdb_results_filters_scheduled_matches(sports_skill)
     search_response.raise_for_status.return_value = None
 
     # API retorna mix de jogos finalizados e agendados
+    # Inclui caso edge: away_score presente mas home_score ausente
     results_response = MagicMock()
     results_response.json.return_value = {
         "results": [
@@ -464,6 +465,15 @@ async def test_fetch_thesportsdb_results_filters_scheduled_matches(sports_skill)
                 "strLeague": "Copa do Brasil",
                 "strStatus": "Postponed",
             },
+            {
+                "dateEvent": "2024-02-26",
+                "strHomeTeam": "Flamengo",
+                "strAwayTeam": "Grêmio",
+                "intHomeScore": None,
+                "intAwayScore": "3",
+                "strLeague": "Copa do Brasil",
+                "strStatus": "Match Finished",
+            },
         ]
     }
     results_response.raise_for_status.return_value = None
@@ -475,11 +485,12 @@ async def test_fetch_thesportsdb_results_filters_scheduled_matches(sports_skill)
             with patch("asyncio.sleep", new_callable=AsyncMock):
                 result = await sports_skill._fetch_thesportsdb_results("Flamengo", 5)
 
-                # Apenas o jogo finalizado (com placar) deve aparecer
-                assert result["matches_count"] == 1
-                assert result["matches"][0]["home_team"] == "Flamengo"
-                assert result["matches"][0]["away_team"] == "Palmeiras"
-                assert result["matches"][0]["home_score"] == "2"
+                # Jogos com pelo menos 1 score devem aparecer (2 de 4)
+                assert result["matches_count"] == 2
+                # Ordenado por data desc: 26 fev > 25 fev
+                assert result["matches"][0]["date"] == "2024-02-26"
+                assert result["matches"][1]["date"] == "2024-02-25"
+                assert result["matches"][1]["home_score"] == "2"
 
 
 @pytest.mark.asyncio

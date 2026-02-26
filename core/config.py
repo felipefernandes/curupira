@@ -156,3 +156,21 @@ REFLECTION_MODEL = os.getenv("REFLECTION_MODEL", "llama-3.3-70b-versatile") # De
 # Override via env vars: REFLECTION_GREETING_HOUR_START / REFLECTION_GREETING_HOUR_END
 REFLECTION_GREETING_HOUR_START = int(os.getenv("REFLECTION_GREETING_HOUR_START", "7"))
 REFLECTION_GREETING_HOUR_END   = int(os.getenv("REFLECTION_GREETING_HOUR_END",   "9"))
+
+# Sports APIs Configuration
+THESPORTSDB_KEY = os.getenv("THESPORTSDB_KEY", "")
+API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY", "")
+PANDASCORE_KEY = os.getenv("PANDASCORE_KEY", "")
+
+if not THESPORTSDB_KEY:
+    logger.warning("THESPORTSDB_KEY não configurada - cadastre-se gratuitamente em thesportsdb.com")
+
+if API_FOOTBALL_KEY:
+    logger.info("API-Football configurada (100 req/dia)")
+else:
+    logger.info("API-Football não configurada - usando apenas TheSportsDB")
+
+if PANDASCORE_KEY:
+    logger.info("PandaScore configurada para eSports (1000 req/mês)")
+else:
+    logger.info("PandaScore não configurada - eSports não disponíveis")

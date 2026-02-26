@@ -1,8 +1,8 @@
 """
 Sports Manager Skill - Curupira Bot
 
-Fornece resultados esportivos de esportes tradicionais e eSports com cache inteligente.
-Fase 1 MVP: Suporte a TheSportsDB para futebol com action=get_results.
+Fornece resultados esportivos, calendário e classificação via TheSportsDB.
+Suporta futebol com actions: get_results, get_schedule, get_standings.
 
 Alinhamento ao Manifesto Curupira:
 - Eficiência: Cache com TTL diferenciado, connection pooling
@@ -139,8 +139,10 @@ class SportsCache:
 class SportsManagerSkill(BaseSkill):
     """
     Skill principal para resultados esportivos.
-    Fase 1 MVP: TheSportsDB apenas, action=get_results para futebol.
+    TheSportsDB para futebol: get_results, get_schedule, get_standings.
     """
+
+    SUPPORTED_ACTIONS = {"get_results", "get_schedule", "get_standings"}
 
     def __init__(self, memory_manager):
         """
@@ -286,16 +288,16 @@ class SportsManagerSkill(BaseSkill):
         if not action:
             return self.error("Parâmetro 'action' é obrigatório.")
 
-        # Fase 1 MVP: Apenas get_results suportado
-        if action != "get_results":
+        if action not in self.SUPPORTED_ACTIONS:
             return self.error(
-                f"Ação '{action}' não implementada na versão atual (MVP). "
-                f"Apenas 'get_results' está disponível."
+                f"Ação '{action}' não reconhecida. "
+                f"Ações disponíveis: {', '.join(sorted(self.SUPPORTED_ACTIONS))}"
             )
 
         # Resolução de preferências (override > user facts)
         sport = kwargs.get("sport")
         team_name = kwargs.get("team_name")
+        league = kwargs.get("league")
         limit = min(kwargs.get("limit", 5), 10)
 
         if not sport:
@@ -314,7 +316,8 @@ class SportsManagerSkill(BaseSkill):
                 "e use save_user_fact para persistir sports_favorite_sport."
             )
 
-        if not team_name:
+        # team_name obrigatório para results/schedule, opcional para standings se league fornecido
+        if not team_name and not (action == "get_standings" and league):
             return self.error(
                 "Time não especificado e sem preferência salva. "
                 "Pergunte ao usuário: 'Qual time você torce?' "
@@ -322,15 +325,16 @@ class SportsManagerSkill(BaseSkill):
             )
 
         # Validação e sanitização de team_name (segurança + clean code)
-        try:
-            team_name = self._validate_and_sanitize_team_name(team_name)
-        except ValueError as e:
-            return self.error(str(e))
+        if team_name:
+            try:
+                team_name = self._validate_and_sanitize_team_name(team_name)
+            except ValueError as e:
+                return self.error(str(e))
 
-        # Fase 1 MVP: Apenas futebol suportado
+        # Apenas futebol suportado
         if sport != "football":
             return self.error(
-                f"Esporte '{sport}' não implementado na versão atual (MVP). "
+                f"Esporte '{sport}' não suportado na versão atual. "
                 f"Apenas 'football' está disponível."
             )
 
@@ -341,8 +345,18 @@ class SportsManagerSkill(BaseSkill):
                 "Configure a chave da API no arquivo .env (cadastro gratuito em thesportsdb.com)."
             )
 
+        # Determinar cache_key e cache_type por action
+        if action == "get_results":
+            cache_key = self._make_cache_key(action, sport, team_name, limit=limit)
+            cache_type = "recent_results"
+        elif action == "get_schedule":
+            cache_key = self._make_cache_key(action, sport, team_name)
+            cache_type = "schedule"
+        else:  # get_standings
+            cache_key = self._make_cache_key(action, sport, team_name, league=league)
+            cache_type = "standings"
+
         # Verificar cache
-        cache_key = self._make_cache_key(action, sport, team_name, limit=limit)
         cached = self.cache.get(cache_key)
         if cached:
             self.logger.info(f"Cache hit: {cache_key}")
@@ -352,15 +366,19 @@ class SportsManagerSkill(BaseSkill):
 
         # Executar busca
         try:
-            data = await self._handle_get_results(context, sport, team_name, limit)
+            if action == "get_results":
+                data = await self._handle_get_results(context, sport, team_name, limit)
+            elif action == "get_schedule":
+                data = await self._handle_get_schedule(context, sport, team_name)
+            else:  # get_standings
+                data = await self._handle_get_standings(context, sport, team_name, league)
 
             # Armazenar no cache
-            self.cache.set(cache_key, data, "recent_results")
+            self.cache.set(cache_key, data, cache_type)
 
             return self.success(data)
 
         except ValueError as e:
-            # Erros de configuração ou validação
             return self.error(str(e))
         except Exception as e:
             self.logger.error(f"Erro inesperado na Sports Skill: {e}", exc_info=True)
@@ -506,70 +524,108 @@ class SportsManagerSkill(BaseSkill):
         self._last_thesportsdb_call = time.time()
         return data
 
+    # ==================== RESOLUÇÃO DE TIME E SEASON ====================
+
+    async def _resolve_team_info(self, team_name: str) -> Dict[str, Any]:
+        """
+        Resolve nome do time para dict completo via TheSportsDB.
+        Usa cache team_metadata (24h TTL) para evitar chamadas repetidas.
+        """
+        cache_key = f"team_meta:{team_name.lower().strip()}"
+        cached = self.cache.get(cache_key)
+        if cached:
+            return cached
+
+        endpoint = f"searchteams.php?t={team_name}"
+        data = await self._fetch_thesportsdb(endpoint)
+
+        if not data.get("teams"):
+            raise ValueError(f"Time '{team_name}' não encontrado.")
+
+        team = data["teams"][0]
+        self.cache.set(cache_key, team, "team_metadata")
+        return team
+
+    def _determine_season(
+        self, league_name: Optional[str] = None, alternate: bool = False
+    ) -> str:
+        """
+        Determina string de season para TheSportsDB lookuptable.
+
+        Ligas brasileiras usam formato ano único ("2026").
+        Ligas europeias usam formato cruzado ("2025-2026").
+        """
+        now = datetime.now()
+        year = now.year
+        month = now.month
+
+        brazilian_keywords = [
+            "brasileir", "serie", "carioca", "paulist", "copa do brasil",
+            "paranaense", "gaucho", "mineiro", "baiano",
+        ]
+        is_brazilian = False
+        if league_name:
+            lower_league = league_name.lower()
+            is_brazilian = any(kw in lower_league for kw in brazilian_keywords)
+
+        if is_brazilian and not alternate:
+            return str(year)
+        elif is_brazilian and alternate:
+            if month >= 7:
+                return f"{year}-{year + 1}"
+            else:
+                return f"{year - 1}-{year}"
+        elif not alternate:
+            # Europeia / default
+            if month >= 7:
+                return f"{year}-{year + 1}"
+            else:
+                return f"{year - 1}-{year}"
+        else:
+            # Alternate europeia: tenta formato brasileiro
+            return str(year)
+
+    # ==================== HANDLERS POR ACTION ====================
+
     async def _handle_get_results(
         self, context: Dict[str, Any], sport: str, team_name: str, limit: int
     ) -> Dict[str, Any]:
-        """
-        Handler para action=get_results.
-
-        Args:
-            context: Contexto do bot
-            sport: Esporte
-            team_name: Nome do time
-            limit: Número máximo de resultados
-
-        Returns:
-            Dict com resultados dos jogos
-        """
+        """Handler para action=get_results."""
         if sport == "football":
-            return await self._fetch_football_results(team_name, limit)
+            return await self._fetch_thesportsdb_results(team_name, limit)
         else:
-            # Fase futura: eSports
             raise ValueError(f"Esporte '{sport}' não suportado na versão atual.")
 
-    async def _fetch_football_results(
-        self, team_name: str, limit: int
+    async def _handle_get_schedule(
+        self, context: Dict[str, Any], sport: str, team_name: str
     ) -> Dict[str, Any]:
-        """
-        Busca resultados de futebol para um time.
-        Fase 1 MVP: Apenas TheSportsDB.
+        """Handler para action=get_schedule."""
+        if sport == "football":
+            return await self._fetch_football_schedule(team_name)
+        else:
+            raise ValueError(f"Esporte '{sport}' não suportado na versão atual.")
 
-        Args:
-            team_name: Nome do time
-            limit: Número máximo de resultados
+    async def _handle_get_standings(
+        self, context: Dict[str, Any], sport: str,
+        team_name: Optional[str], league: Optional[str]
+    ) -> Dict[str, Any]:
+        """Handler para action=get_standings."""
+        if sport == "football":
+            return await self._fetch_football_standings(team_name, league)
+        else:
+            raise ValueError(f"Esporte '{sport}' não suportado na versão atual.")
 
-        Returns:
-            Dict com informações dos jogos
-        """
-        # Fase 1 MVP: Apenas TheSportsDB
-        return await self._fetch_thesportsdb_results(team_name, limit)
+    # ==================== FETCH: RESULTADOS ====================
 
     async def _fetch_thesportsdb_results(
         self, team_name: str, limit: int
     ) -> Dict[str, Any]:
-        """
-        Busca resultados no TheSportsDB.
-
-        Args:
-            team_name: Nome do time
-            limit: Número máximo de resultados
-
-        Returns:
-            Dict formatado com resultados
-        """
+        """Busca últimos resultados de um time no TheSportsDB."""
         try:
-            # 1. Buscar ID do time
-            search_endpoint = f"searchteams.php?t={team_name}"
-            search_data = await self._fetch_thesportsdb(search_endpoint)
-
-            if not search_data.get("teams"):
-                raise ValueError(f"Time '{team_name}' não encontrado.")
-
-            team = search_data["teams"][0]
+            team = await self._resolve_team_info(team_name)
             team_id = team["idTeam"]
             team_full_name = team["strTeam"]
 
-            # 2. Buscar últimos jogos do time
             results_endpoint = f"eventslast.php?id={team_id}"
             results_data = await self._fetch_thesportsdb(results_endpoint)
 
@@ -582,8 +638,7 @@ class SportsManagerSkill(BaseSkill):
                     "message": f"Nenhum resultado recente encontrado para {team_full_name}.",
                 }
 
-            # 3. Filtrar apenas jogos com placar (completed)
-            # A API pode retornar jogos agendados/adiados sem placar
+            # Filtrar apenas jogos com placar (completed)
             # Usa OR: basta um dos scores existir para considerar finalizado
             completed_events = [
                 event
@@ -611,10 +666,9 @@ class SportsManagerSkill(BaseSkill):
                 reverse=True,
             )
 
-            # 4. Processar e formatar resultados
             matches = []
             for event in completed_events[:limit]:
-                match_info = {
+                matches.append({
                     "date": event.get("dateEvent"),
                     "home_team": event.get("strHomeTeam"),
                     "away_team": event.get("strAwayTeam"),
@@ -622,8 +676,7 @@ class SportsManagerSkill(BaseSkill):
                     "away_score": event.get("intAwayScore"),
                     "league": event.get("strLeague"),
                     "status": event.get("strStatus"),
-                }
-                matches.append(match_info)
+                })
 
             return {
                 "team_name": team_full_name,
@@ -635,6 +688,140 @@ class SportsManagerSkill(BaseSkill):
         except Exception as e:
             self.logger.error(f"Erro ao buscar resultados no TheSportsDB: {e}")
             raise
+
+    # ==================== FETCH: SCHEDULE ====================
+
+    async def _fetch_football_schedule(self, team_name: str) -> Dict[str, Any]:
+        """Busca próximos jogos de um time no TheSportsDB."""
+        team = await self._resolve_team_info(team_name)
+        team_id = team["idTeam"]
+        team_full_name = team["strTeam"]
+
+        endpoint = f"eventsnext.php?id={team_id}"
+        data = await self._fetch_thesportsdb(endpoint)
+
+        events = data.get("events") or []
+
+        if not events:
+            return {
+                "team_name": team_full_name,
+                "team_id": team_id,
+                "upcoming_matches": [],
+                "matches_count": 0,
+                "message": f"Nenhum próximo jogo encontrado para {team_full_name}.",
+            }
+
+        # Ordenar por data ascendente (mais próximo primeiro)
+        events.sort(key=lambda e: e.get("dateEvent", ""))
+
+        upcoming = []
+        for event in events:
+            upcoming.append({
+                "date": event.get("dateEvent"),
+                "time": event.get("strTime"),
+                "home_team": event.get("strHomeTeam"),
+                "away_team": event.get("strAwayTeam"),
+                "league": event.get("strLeague"),
+                "round": event.get("intRound"),
+                "venue": event.get("strVenue"),
+            })
+
+        return {
+            "team_name": team_full_name,
+            "team_id": team_id,
+            "matches_count": len(upcoming),
+            "upcoming_matches": upcoming,
+            "free_tier_limited": len(events) <= 1,
+            "note": (
+                "Plano gratuito da API retorna apenas 1 próximo jogo."
+                if len(events) <= 1 else None
+            ),
+        }
+
+    # ==================== FETCH: STANDINGS ====================
+
+    async def _fetch_football_standings(
+        self, team_name: Optional[str], league: Optional[str]
+    ) -> Dict[str, Any]:
+        """Busca classificação de uma liga no TheSportsDB."""
+        league_id = None
+        league_name = league
+
+        # Resolver league_id via team ou via nome da liga
+        if team_name:
+            team_info = await self._resolve_team_info(team_name)
+            league_id = team_info.get("idLeague")
+            if not league_name:
+                league_name = team_info.get("strLeague")
+
+        if not league_id and league:
+            endpoint = f"search_all_teams.php?l={league}"
+            data = await self._fetch_thesportsdb(endpoint)
+            teams = data.get("teams") or []
+            if teams:
+                league_id = teams[0].get("idLeague")
+            else:
+                raise ValueError(f"Liga '{league}' não encontrada no TheSportsDB.")
+
+        if not league_id:
+            raise ValueError(
+                "Não foi possível determinar a liga. "
+                "Forneça o nome do time ou da liga."
+            )
+
+        # Determinar season e buscar tabela
+        season = self._determine_season(league_name)
+        endpoint = f"lookuptable.php?l={league_id}&s={season}"
+        data = await self._fetch_thesportsdb(endpoint)
+
+        table = data.get("table") or []
+
+        # Fallback: tentar formato de season alternativo
+        if not table:
+            alt_season = self._determine_season(league_name, alternate=True)
+            if alt_season != season:
+                endpoint = f"lookuptable.php?l={league_id}&s={alt_season}"
+                data = await self._fetch_thesportsdb(endpoint)
+                table = data.get("table") or []
+                if table:
+                    season = alt_season
+
+        if not table:
+            return {
+                "league": league_name,
+                "season": season,
+                "standings": [],
+                "entries_count": 0,
+                "message": f"Classificação não encontrada para {league_name} ({season}).",
+            }
+
+        standings = []
+        for entry in table:
+            standings.append({
+                "position": entry.get("intRank"),
+                "team_name": entry.get("strTeam"),
+                "team_id": entry.get("idTeam"),
+                "played": entry.get("intPlayed"),
+                "wins": entry.get("intWin"),
+                "draws": entry.get("intDraw"),
+                "losses": entry.get("intLoss"),
+                "goals_for": entry.get("intGoalsFor"),
+                "goals_against": entry.get("intGoalsAgainst"),
+                "goal_difference": entry.get("intGoalDifference"),
+                "points": entry.get("intPoints"),
+            })
+
+        return {
+            "league": league_name,
+            "season": season,
+            "entries_count": len(standings),
+            "standings": standings,
+            "free_tier_limited": len(standings) <= 5,
+            "note": (
+                "Plano gratuito da API retorna apenas 5 posições da tabela."
+                if len(standings) <= 5 else None
+            ),
+        }
 
     async def shutdown(self):
         """Fecha o cliente HTTP ao desligar o bot."""

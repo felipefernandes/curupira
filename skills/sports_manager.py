@@ -50,6 +50,7 @@ class SportsCache:
     def get(self, key: str) -> Optional[Dict[str, Any]]:
         """
         Retorna dado do cache se não expirado, senão None.
+        Move a chave para o final (true LRU behavior).
 
         Args:
             key: Chave do cache
@@ -68,6 +69,8 @@ class SportsCache:
             del self._cache[key]
             return None
 
+        # Move para o final (marca como recentemente acessada - true LRU)
+        self._cache.move_to_end(key)
         return entry["data"]
 
     def set(self, key: str, data: Dict[str, Any], cache_type: str = "recent_results"):
@@ -95,17 +98,18 @@ class SportsCache:
 
     def _evict_oldest(self):
         """
-        Remove 20% das entradas mais antigas (LRU otimizado com OrderedDict).
-        Complexidade: O(n) onde n = evict_count (melhor que O(n log n) do sorted).
+        Remove 20% das entradas menos recentemente usadas (true LRU com OrderedDict).
+        Complexidade: O(k) onde k = evict_count (melhor que O(n log n) do sorted).
         """
         if not self._cache:
             return
 
         evict_count = max(1, self._max_size // 5)
 
-        # OrderedDict mantém ordem de inserção, então removemos do início (FIFO)
+        # OrderedDict + move_to_end() implementa true LRU
+        # Entradas no início = menos recentemente acessadas
         for _ in range(min(evict_count, len(self._cache))):
-            self._cache.popitem(last=False)  # Remove do início (mais antiga)
+            self._cache.popitem(last=False)  # Remove do início (LRU)
 
         self.logger.info(f"Cache eviction: removidas {evict_count} entradas antigas")
 

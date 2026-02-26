@@ -128,6 +128,26 @@ def test_cache_eviction_lru(sports_cache):
     assert sports_cache.get("key_10") is not None
 
 
+def test_cache_true_lru_behavior(sports_cache):
+    """Testa que get() move entrada para o final (true LRU)."""
+    # Adicionar 3 entradas
+    sports_cache.set("key_0", {"data": 0}, "recent_results")
+    sports_cache.set("key_1", {"data": 1}, "recent_results")
+    sports_cache.set("key_2", {"data": 2}, "recent_results")
+
+    # Acessar key_0 (deve mover para o final)
+    assert sports_cache.get("key_0") == {"data": 0}
+
+    # Adicionar mais entradas até forçar eviction (max_size=10)
+    for i in range(3, 11):
+        sports_cache.set(f"key_{i}", {"data": i}, "recent_results")
+
+    # Após eviction, key_1 deve ter sido removida (era a mais antiga)
+    # mas key_0 deve existir (foi acessada e movida para o final)
+    assert sports_cache.get("key_1") is None  # Removida (mais antiga não acessada)
+    assert sports_cache.get("key_0") is not None  # Preservada (foi acessada)
+
+
 def test_cache_invalidate_pattern(sports_cache):
     """Testa invalidação de cache por padrão."""
     sports_cache.set("flamengo:2024", {"data": 1}, "recent_results")

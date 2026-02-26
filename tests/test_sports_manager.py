@@ -308,14 +308,15 @@ async def test_fetch_thesportsdb_success(sports_skill):
     mock_response.json.return_value = {"teams": [{"idTeam": "123"}]}
     mock_response.raise_for_status.return_value = None
 
-    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
-        mock_get.return_value = mock_response
+    with patch("core.config.THESPORTSDB_KEY", "test_api_key_123"):
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_response
 
-        with patch("asyncio.sleep", new_callable=AsyncMock):  # Mock sleep para rate limiting
-            result = await sports_skill._fetch_thesportsdb("searchteams.php?t=Flamengo")
+            with patch("asyncio.sleep", new_callable=AsyncMock):  # Mock sleep para rate limiting
+                result = await sports_skill._fetch_thesportsdb("searchteams.php?t=Flamengo")
 
-            assert result == {"teams": [{"idTeam": "123"}]}
-            mock_get.assert_called_once()
+                assert result == {"teams": [{"idTeam": "123"}]}
+                mock_get.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -325,18 +326,19 @@ async def test_fetch_thesportsdb_rate_limiting(sports_skill):
     mock_response.json.return_value = {"data": "test"}
     mock_response.raise_for_status.return_value = None
 
-    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
-        mock_get.return_value = mock_response
+    with patch("core.config.THESPORTSDB_KEY", "test_api_key_123"):
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_response
 
-        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
-            # Primeira chamada
-            await sports_skill._fetch_thesportsdb("endpoint1")
+            with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+                # Primeira chamada
+                await sports_skill._fetch_thesportsdb("endpoint1")
 
-            # Segunda chamada imediatamente depois
-            await sports_skill._fetch_thesportsdb("endpoint2")
+                # Segunda chamada imediatamente depois
+                await sports_skill._fetch_thesportsdb("endpoint2")
 
-            # Sleep deve ter sido chamado na segunda requisição
-            assert mock_sleep.call_count >= 1
+                # Sleep deve ter sido chamado na segunda requisição
+                assert mock_sleep.call_count >= 1
 
 
 @pytest.mark.asyncio
@@ -346,12 +348,13 @@ async def test_fetch_thesportsdb_results_team_not_found(sports_skill):
     mock_response.json.return_value = {"teams": None}
     mock_response.raise_for_status.return_value = None
 
-    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
-        mock_get.return_value = mock_response
+    with patch("core.config.THESPORTSDB_KEY", "test_api_key_123"):
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.return_value = mock_response
 
-        with patch("asyncio.sleep", new_callable=AsyncMock):
-            with pytest.raises(ValueError, match="não encontrado"):
-                await sports_skill._fetch_thesportsdb_results("NonExistentTeam", 5)
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                with pytest.raises(ValueError, match="não encontrado"):
+                    await sports_skill._fetch_thesportsdb_results("NonExistentTeam", 5)
 
 
 @pytest.mark.asyncio
@@ -384,17 +387,18 @@ async def test_fetch_thesportsdb_results_success(sports_skill):
     }
     results_response.raise_for_status.return_value = None
 
-    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
-        mock_get.side_effect = [search_response, results_response]
+    with patch("core.config.THESPORTSDB_KEY", "test_api_key_123"):
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.side_effect = [search_response, results_response]
 
-        with patch("asyncio.sleep", new_callable=AsyncMock):
-            result = await sports_skill._fetch_thesportsdb_results("Flamengo", 5)
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await sports_skill._fetch_thesportsdb_results("Flamengo", 5)
 
-            assert result["team_name"] == "Flamengo"
-            assert result["team_id"] == "133604"
-            assert result["matches_count"] == 1
-            assert len(result["matches"]) == 1
-            assert result["matches"][0]["home_team"] == "Flamengo"
+                assert result["team_name"] == "Flamengo"
+                assert result["team_id"] == "133604"
+                assert result["matches_count"] == 1
+                assert len(result["matches"]) == 1
+                assert result["matches"][0]["home_team"] == "Flamengo"
 
 
 # ==================== TESTES DE RETRY LOGIC ====================

@@ -15,6 +15,7 @@ import asyncio
 import logging
 from datetime import datetime
 from typing import Any, Dict, Optional
+from collections import OrderedDict
 import httpx
 
 from skills.base import BaseSkill
@@ -42,7 +43,7 @@ class SportsCache:
         Args:
             max_size: Número máximo de entradas (~500KB com 100 entradas)
         """
-        self._cache: Dict[str, Dict[str, Any]] = {}
+        self._cache: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self._max_size = max_size
         self.logger = logging.getLogger("SportsCache")
 
@@ -82,6 +83,10 @@ class SportsCache:
         if len(self._cache) >= self._max_size:
             self._evict_oldest()
 
+        # Remove chave existente para reinseri-la no final (LRU behavior)
+        if key in self._cache:
+            del self._cache[key]
+
         self._cache[key] = {
             "data": data,
             "timestamp": time.time(),
@@ -89,17 +94,18 @@ class SportsCache:
         }
 
     def _evict_oldest(self):
-        """Remove 20% das entradas mais antigas (LRU simplificado)."""
+        """
+        Remove 20% das entradas mais antigas (LRU otimizado com OrderedDict).
+        Complexidade: O(n) onde n = evict_count (melhor que O(n log n) do sorted).
+        """
         if not self._cache:
             return
 
-        sorted_keys = sorted(
-            self._cache.keys(), key=lambda k: self._cache[k]["timestamp"]
-        )
-
         evict_count = max(1, self._max_size // 5)
-        for key in sorted_keys[:evict_count]:
-            del self._cache[key]
+
+        # OrderedDict mantém ordem de inserção, então removemos do início (FIFO)
+        for _ in range(min(evict_count, len(self._cache))):
+            self._cache.popitem(last=False)  # Remove do início (mais antiga)
 
         self.logger.info(f"Cache eviction: removidas {evict_count} entradas antigas")
 
@@ -217,6 +223,46 @@ class SportsManagerSkill(BaseSkill):
             "required": ["action"],
         }
 
+    def _validate_and_sanitize_team_name(self, team_name: str) -> str:
+        """
+        Valida e sanitiza o nome do time para evitar injeção de caracteres especiais.
+
+        Args:
+            team_name: Nome do time fornecido pelo usuário
+
+        Returns:
+            Nome do time sanitizado
+
+        Raises:
+            ValueError: Se o nome for inválido
+        """
+        import re
+
+        # Validação de tipo e conteúdo
+        if not isinstance(team_name, str) or not team_name.strip():
+            raise ValueError("Nome do time inválido. Forneça um nome válido.")
+
+        # Sanitização: remove espaços extras
+        team_name = team_name.strip()
+
+        # Validação de comprimento
+        if len(team_name) < 2:
+            raise ValueError(
+                "Nome do time muito curto. Forneça pelo menos 2 caracteres."
+            )
+        if len(team_name) > 100:
+            raise ValueError("Nome do time muito longo. Máximo 100 caracteres.")
+
+        # Sanitização de segurança: aceita apenas alfanuméricos, espaços, hífens e acentos
+        # Padrão: letras (incluindo acentuadas), números, espaços, hífens, pontos
+        if not re.match(r"^[\w\s\-\.]+$", team_name, re.UNICODE):
+            raise ValueError(
+                "Nome do time contém caracteres não permitidos. "
+                "Use apenas letras, números, espaços, hífens e pontos."
+            )
+
+        return team_name
+
     async def execute(self, context: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         """
         Ponto de entrada principal da skill.
@@ -271,16 +317,11 @@ class SportsManagerSkill(BaseSkill):
                 "e use save_user_fact para persistir sports_favorite_team."
             )
 
-        # Validação robusta de team_name (segurança)
-        if not isinstance(team_name, str) or not team_name.strip():
-            return self.error("Nome do time inválido. Forneça um nome válido.")
-
-        # Sanitização básica do team_name (remover caracteres especiais perigosos)
-        team_name = team_name.strip()
-        if len(team_name) < 2:
-            return self.error("Nome do time muito curto. Forneça pelo menos 2 caracteres.")
-        if len(team_name) > 100:
-            return self.error("Nome do time muito longo. Máximo 100 caracteres.")
+        # Validação e sanitização de team_name (segurança + clean code)
+        try:
+            team_name = self._validate_and_sanitize_team_name(team_name)
+        except ValueError as e:
+            return self.error(str(e))
 
         # Fase 1 MVP: Apenas futebol suportado
         if sport != "football":

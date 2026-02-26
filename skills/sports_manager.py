@@ -271,6 +271,17 @@ class SportsManagerSkill(BaseSkill):
                 "e use save_user_fact para persistir sports_favorite_team."
             )
 
+        # Validação robusta de team_name (segurança)
+        if not isinstance(team_name, str) or not team_name.strip():
+            return self.error("Nome do time inválido. Forneça um nome válido.")
+
+        # Sanitização básica do team_name (remover caracteres especiais perigosos)
+        team_name = team_name.strip()
+        if len(team_name) < 2:
+            return self.error("Nome do time muito curto. Forneça pelo menos 2 caracteres.")
+        if len(team_name) > 100:
+            return self.error("Nome do time muito longo. Máximo 100 caracteres.")
+
         # Fase 1 MVP: Apenas futebol suportado
         if sport != "football":
             return self.error(
@@ -278,8 +289,15 @@ class SportsManagerSkill(BaseSkill):
                 f"Apenas 'football' está disponível."
             )
 
+        # Validação explícita de API key (segurança)
+        if not config.THESPORTSDB_KEY:
+            return self.error(
+                "THESPORTSDB_KEY não configurada. "
+                "Configure a chave da API no arquivo .env (cadastro gratuito em thesportsdb.com)."
+            )
+
         # Verificar cache
-        cache_key = self._make_cache_key(action, sport, team_name)
+        cache_key = self._make_cache_key(action, sport, team_name, limit=limit)
         cached = self.cache.get(cache_key)
         if cached:
             self.logger.info(f"Cache hit: {cache_key}")
@@ -309,6 +327,7 @@ class SportsManagerSkill(BaseSkill):
         sport: str,
         team: str = None,
         league: str = None,
+        limit: int = None,
     ) -> str:
         """
         Gera chave de cache determinística.
@@ -318,6 +337,7 @@ class SportsManagerSkill(BaseSkill):
             sport: Esporte
             team: Nome do time (opcional)
             league: Liga (opcional)
+            limit: Número máximo de resultados (opcional)
 
         Returns:
             Chave de cache formatada
@@ -327,6 +347,8 @@ class SportsManagerSkill(BaseSkill):
             parts.append(team.lower().strip())
         if league:
             parts.append(league.lower().strip())
+        if limit is not None:
+            parts.append(str(limit))
         return ":".join(parts)
 
     async def _get_http_client(self) -> httpx.AsyncClient:

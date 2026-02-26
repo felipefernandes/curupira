@@ -207,8 +207,9 @@ class SportsManagerSkill(BaseSkill):
                         "valorant",
                     ],
                     "description": (
-                        "Esporte a consultar. Se omitido, usa sports_favorite_sport dos fatos persistentes. "
-                        "Valores: football (futebol), basketball, csgo, lol, dota2, valorant"
+                        "Esporte a consultar (SEMPRE em inglês). Se omitido, usa sports_favorite_sport dos fatos persistentes. "
+                        "Valores aceitos: 'football' (para futebol), 'basketball', 'csgo', 'lol', 'dota2', 'valorant'. "
+                        "IMPORTANTE: Use 'football', NÃO 'futebol'."
                     ),
                 },
                 "team_name": {

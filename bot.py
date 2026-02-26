@@ -56,6 +56,11 @@ from skills.job_hunter import JobHunterRunSearchSkill, JobHunterGetDefaultsSkill
 brain.register_skill(JobHunterRunSearchSkill())
 brain.register_skill(JobHunterGetDefaultsSkill())
 
+# Skill: Sports Manager
+from skills.sports_manager import SportsManagerSkill
+sports_skill = SportsManagerSkill(memory_manager)
+brain.register_skill(sports_skill)
+
 # Onboarding States
 WAITING_NAME = 1
 WAITING_SURNAME = 2

@@ -421,6 +421,163 @@ async def test_fetch_thesportsdb_results_success(sports_skill):
                 assert result["matches"][0]["home_team"] == "Flamengo"
 
 
+# ==================== TESTES DE FILTRAGEM DE JOGOS (Issue #117) ====================
+
+
+@pytest.mark.asyncio
+async def test_fetch_thesportsdb_results_filters_scheduled_matches(sports_skill):
+    """Testa que jogos agendados (sem placar) são filtrados dos resultados."""
+    search_response = MagicMock()
+    search_response.json.return_value = {
+        "teams": [{"idTeam": "133604", "strTeam": "Flamengo"}]
+    }
+    search_response.raise_for_status.return_value = None
+
+    # API retorna mix de jogos finalizados e agendados
+    results_response = MagicMock()
+    results_response.json.return_value = {
+        "results": [
+            {
+                "dateEvent": "2024-02-25",
+                "strHomeTeam": "Flamengo",
+                "strAwayTeam": "Palmeiras",
+                "intHomeScore": "2",
+                "intAwayScore": "1",
+                "strLeague": "Brasileirão Série A",
+                "strStatus": "Match Finished",
+            },
+            {
+                "dateEvent": "2024-03-01",
+                "strHomeTeam": "Flamengo",
+                "strAwayTeam": "Vasco",
+                "intHomeScore": None,
+                "intAwayScore": None,
+                "strLeague": "Brasileirão Série A",
+                "strStatus": "Not Started",
+            },
+            {
+                "dateEvent": "2024-02-28",
+                "strHomeTeam": "Santos",
+                "strAwayTeam": "Flamengo",
+                "intHomeScore": "",
+                "intAwayScore": "",
+                "strLeague": "Copa do Brasil",
+                "strStatus": "Postponed",
+            },
+        ]
+    }
+    results_response.raise_for_status.return_value = None
+
+    with patch("core.config.THESPORTSDB_KEY", "test_api_key_123"):
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.side_effect = [search_response, results_response]
+
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await sports_skill._fetch_thesportsdb_results("Flamengo", 5)
+
+                # Apenas o jogo finalizado (com placar) deve aparecer
+                assert result["matches_count"] == 1
+                assert result["matches"][0]["home_team"] == "Flamengo"
+                assert result["matches"][0]["away_team"] == "Palmeiras"
+                assert result["matches"][0]["home_score"] == "2"
+
+
+@pytest.mark.asyncio
+async def test_fetch_thesportsdb_results_all_scheduled_returns_message(sports_skill):
+    """Testa mensagem quando API retorna apenas jogos agendados (sem placar)."""
+    search_response = MagicMock()
+    search_response.json.return_value = {
+        "teams": [{"idTeam": "133604", "strTeam": "Flamengo"}]
+    }
+    search_response.raise_for_status.return_value = None
+
+    # Todos os jogos sem placar
+    results_response = MagicMock()
+    results_response.json.return_value = {
+        "results": [
+            {
+                "dateEvent": "2024-03-01",
+                "strHomeTeam": "Flamengo",
+                "strAwayTeam": "Vasco",
+                "intHomeScore": None,
+                "intAwayScore": None,
+                "strLeague": "Brasileirão Série A",
+                "strStatus": "Not Started",
+            },
+        ]
+    }
+    results_response.raise_for_status.return_value = None
+
+    with patch("core.config.THESPORTSDB_KEY", "test_api_key_123"):
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.side_effect = [search_response, results_response]
+
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await sports_skill._fetch_thesportsdb_results("Flamengo", 5)
+
+                assert result["matches_count"] == 0
+                assert result["matches"] == []
+                assert "agendados ou sem placar" in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_fetch_thesportsdb_results_sorted_by_date_desc(sports_skill):
+    """Testa que resultados são ordenados por data (mais recente primeiro)."""
+    search_response = MagicMock()
+    search_response.json.return_value = {
+        "teams": [{"idTeam": "133604", "strTeam": "Flamengo"}]
+    }
+    search_response.raise_for_status.return_value = None
+
+    # Jogos fora de ordem cronológica
+    results_response = MagicMock()
+    results_response.json.return_value = {
+        "results": [
+            {
+                "dateEvent": "2024-02-20",
+                "strHomeTeam": "Flamengo",
+                "strAwayTeam": "Palmeiras",
+                "intHomeScore": "1",
+                "intAwayScore": "0",
+                "strLeague": "Brasileirão",
+                "strStatus": "Match Finished",
+            },
+            {
+                "dateEvent": "2024-02-25",
+                "strHomeTeam": "Santos",
+                "strAwayTeam": "Flamengo",
+                "intHomeScore": "0",
+                "intAwayScore": "3",
+                "strLeague": "Copa do Brasil",
+                "strStatus": "Match Finished",
+            },
+            {
+                "dateEvent": "2024-02-22",
+                "strHomeTeam": "Flamengo",
+                "strAwayTeam": "Botafogo",
+                "intHomeScore": "2",
+                "intAwayScore": "2",
+                "strLeague": "Carioca",
+                "strStatus": "Match Finished",
+            },
+        ]
+    }
+    results_response.raise_for_status.return_value = None
+
+    with patch("core.config.THESPORTSDB_KEY", "test_api_key_123"):
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+            mock_get.side_effect = [search_response, results_response]
+
+            with patch("asyncio.sleep", new_callable=AsyncMock):
+                result = await sports_skill._fetch_thesportsdb_results("Flamengo", 5)
+
+                # Deve estar ordenado: 25 > 22 > 20
+                assert result["matches_count"] == 3
+                assert result["matches"][0]["date"] == "2024-02-25"
+                assert result["matches"][1]["date"] == "2024-02-22"
+                assert result["matches"][2]["date"] == "2024-02-20"
+
+
 # ==================== TESTES DE RETRY LOGIC ====================
 
 @pytest.mark.asyncio

@@ -11,6 +11,16 @@ Baseado na **Arquitetura da Restrição** e no **Conceito Diet**, ele transforma
 
 > 📜 **Leia nosso [Manifesto Curupira](MANIFESTO.md) para entender a filosofia por trás do código.**
 
+## 📋 Índice
+
+*   [🚀 Início Rápido](#-início-rápido)
+*   [🛠️ Tecnologias](#️-tecnologias)
+*   [🧠 Desenvolvimento de Skills](#-desenvolvimento-de-skills)
+*   [⚖️ Filosofia](#️-filosofia)
+*   [📦 Instalação Completa](docs/INSTALL.md)
+*   [🤝 Como Contribuir](CONTRIBUTING.md)
+*   [🗺️ Roadmap](ROADMAP.md)
+
 ## 🚀 Funcionalidades Atuais
 
 *   **🧠 Memória Persistente**: Lembra do seu nome, suas preferências e contexto de conversas passadas.
@@ -40,93 +50,53 @@ _Veja mais em [MANIFESTO.md](MANIFESTO.md)_
 
 ---
 
-## 📦 Instalação e Setup
+## 🚀 Início Rápido
 
-Este projeto foi otimizado para rodar em um **Raspberry Pi**, mas funciona em qualquer ambiente Python.
+Se você já tem experiência com Python, siga estes passos:
 
-### 1. Clonar o Repositório
-```bash
-git clone https://github.com/felipefernandes/curupira.git
-cd curupira
-```
+1.  **Clone e Acesse**: `git clone https://github.com/felipefernandes/curupira.git && cd curupira`
+2.  **Ambiente**: `python -m venv venv && source venv/bin/activate`
+3.  **Instale**: `pip install -r requirements.txt`
+4.  **Configure**: Crie um `.env` baseado no exemplo do [Guia de Instalação](docs/INSTALL.md).
+5.  **Rode**: `python bot.py`
 
-### 2. Ambiente Virtual
-```bash
-python3 -m venv venv
-# Linux/Mac
-source venv/bin/activate
-# Windows
-.\venv\Scripts\activate
-```
+> 📖 **Instruções detalhadas?** Veja o nosso [Guia de Instalação e Setup](docs/INSTALL.md).
 
-### 3. Dependências
-```bash
-pip install -r requirements.txt
-```
-*Certifique-se de que instalou o `python-telegram-bot[job-queue]` para as features de tempo funcionarem.*
- 
- Para desenvolvimento e testes:
- ```bash
- pip install -r requirements-dev.txt
- ```
+---
 
-### 4. Configuração (.env)
-Crie um arquivo `.env` na raiz do projeto:
+## 🛠️ Tecnologias
 
-```ini
-# Telegram Token (Pegue com o @BotFather)
-TELEGRAM_TOKEN=seu_token_aqui
+*   **Python 3.10+** (Core)
+*   **python-telegram-bot** (Interface Async)
+*   **SQLite + JSON** (Memória Lite e Persistente)
+*   **Groq / Google Gemini** (Provedores de IA)
 
-# ID do seu Usuário no Telegram (Segurança: o bot só responde a você)
-# Use o @userinfobot para descobrir seu ID
-AUTHORIZED_USER_ID=123456789
+---
 
-# Escolha seu Cérebro: 'groq' ou 'gemini'
-AI_PROVIDER=groq
+## 🧠 Desenvolvimento de Skills
 
-# Chaves de API
-GROQ_API_KEY=gsk_...
-GEMINI_API_KEY=...
-```
+O Curupira é modular. Você pode estender as capacidades dele criando novas _Skills_. 
 
-### 5. Configurando RSS (Opcional)
+⚠️ **Importante**: Todas as novas skills devem seguir o nosso **[Framework de Criação de Skills (MCP-Lite)](docs/SKILLS_FRAMEWORK.md)** para garantir eficiência e compatibilidade.
 
-Por padrão o Curupira já vem com G1, TechCrunch e Hacker News. Para personalizar, adicione no `.env`:
+---
 
-```ini
-# Feeds RSS personalizados (JSON)
-RSS_FEEDS_JSON={"G1": "https://g1.globo.com/rss/g1/", "Meu Blog": "https://meublog.com/feed"}
-```
+## ⚖️ Filosofia (Resumo)
 
-### 7. Configurando GitHub (Opcional)
+*   **Democratização**: Funciona em hardware de baixo custo (1GB RAM).
+*   **Eficiência "Diet"**: Processamento offboard, lógica local leve.
+*   **Acessibilidade**: Interface via Telegram, sem complexidade.
+*   **Privacidade**: Você controla quem fala com seu agente.
 
-Para usar a integração com o GitHub via MCP (Model Context Protocol), adicione seu token no `.env`:
-
-```ini
-# GitHub Integration (Opcional)
-GITHUB_PERSONAL_ACCESS_TOKEN=ghp_...
-```
-
-> **Migração:** Se você usava `mcp.json` para configurar o GitHub, basta mover o token para o `.env` e remover o `mcp.json`. A skill agora é carregada automaticamente via `skills/github.py`.
-
-> **Segurança:** Crie um [Personal Access Token (classic)](https://github.com/settings/tokens) com os **escopos mínimos necessários**:
-> - `repo` (read-only) — para listar repositórios e issues
-> - `read:org` — se precisar acessar repos de organizações
->
-> O `.env` já está no `.gitignore`. Variáveis de ambiente do sistema têm precedência sobre o `.env`.
-
-### 8. Executar
-```bash
-python bot.py
-```
+_Leia o [MANIFESTO.md](MANIFESTO.md) para a visão completa._
 
 ---
 
 ## 🤝 Como Contribuir
 
-Este é um projeto Open Source e adoramos colaborações!
+Este é um projeto Open Source e adoramos colaborações! 
 
-Para detalhes sobre o fluxo de trabalho, padrões de código e uso da Iara (nossa agente de revisão), por favor consulte o arquivo [CONTRIBUTING.md](CONTRIBUTING.md).
+Para detalhes sobre o fluxo de trabalho obrigatório (GitFlow + Revisão pela 🧜‍♀️ Iara), consulte o arquivo **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
 ## 📄 Licença
 

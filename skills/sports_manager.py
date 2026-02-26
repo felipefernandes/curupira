@@ -16,10 +16,17 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, Optional
 from collections import OrderedDict
+from urllib.parse import quote
 import httpx
 
 from skills.base import BaseSkill
 from core import config
+
+# Constantes para inferência de season
+BRAZILIAN_LEAGUE_KEYWORDS = [
+    "brasileir", "serie", "carioca", "paulist", "copa do brasil",
+    "paranaense", "gaucho", "mineiro", "baiano",
+]
 
 
 class SportsCache:
@@ -554,19 +561,22 @@ class SportsManagerSkill(BaseSkill):
 
         Ligas brasileiras usam formato ano único ("2026").
         Ligas europeias usam formato cruzado ("2025-2026").
+
+        Args:
+            league_name: Nome da liga (usado para inferir brasileiro vs europeu)
+            alternate: Se True, retorna formato oposto (usado em fallback)
+
+        Returns:
+            String de season no formato correto
         """
         now = datetime.now()
         year = now.year
         month = now.month
 
-        brazilian_keywords = [
-            "brasileir", "serie", "carioca", "paulist", "copa do brasil",
-            "paranaense", "gaucho", "mineiro", "baiano",
-        ]
         is_brazilian = False
         if league_name:
             lower_league = league_name.lower()
-            is_brazilian = any(kw in lower_league for kw in brazilian_keywords)
+            is_brazilian = any(kw in lower_league for kw in BRAZILIAN_LEAGUE_KEYWORDS)
 
         if is_brazilian and not alternate:
             return str(year)
@@ -755,7 +765,9 @@ class SportsManagerSkill(BaseSkill):
                 league_name = team_info.get("strLeague")
 
         if not league_id and league:
-            endpoint = f"search_all_teams.php?l={league}"
+            # URL-encode league name para evitar problemas com caracteres especiais
+            league_encoded = quote(league)
+            endpoint = f"search_all_teams.php?l={league_encoded}"
             data = await self._fetch_thesportsdb(endpoint)
             teams = data.get("teams") or []
             if teams:

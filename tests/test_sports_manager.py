@@ -1,6 +1,7 @@
 import pytest
 import httpx
 from unittest.mock import AsyncMock, patch, MagicMock
+from datetime import datetime
 import sys
 import os
 import asyncio
@@ -855,6 +856,24 @@ def test_determine_season_none_league(sports_skill):
     assert "-" in season  # Default é formato europeu
 
 
+def test_determine_season_brazilian_month_before_july(sports_skill):
+    """Testa season brasileira com month < 7 no alternate."""
+    with patch("skills.sports_manager.datetime") as mock_datetime:
+        mock_datetime.now.return_value = datetime(2026, 3, 15)  # Março
+        season = sports_skill._determine_season("Brasileirão", alternate=True)
+        assert "-" in season
+        assert season == "2025-2026"
+
+
+def test_determine_season_european_month_before_july(sports_skill):
+    """Testa season europeia com month < 7."""
+    with patch("skills.sports_manager.datetime") as mock_datetime:
+        mock_datetime.now.return_value = datetime(2026, 3, 15)  # Março
+        season = sports_skill._determine_season("Premier League")
+        assert "-" in season
+        assert season == "2025-2026"
+
+
 # ==================== TESTES DE get_schedule ====================
 
 
@@ -1290,3 +1309,36 @@ async def test_execute_get_standings_without_team_but_with_league(sports_skill):
         )
 
         assert result["status"] == "success"
+
+
+@pytest.mark.asyncio
+async def test_fetch_football_standings_cannot_determine_league(sports_skill):
+    """Testa erro quando não consegue determinar league_id."""
+    with patch("core.config.THESPORTSDB_KEY", "test_key"):
+        with pytest.raises(ValueError, match="determinar a liga"):
+            await sports_skill._fetch_football_standings(None, None)
+
+
+# ==================== TESTES DE shutdown ====================
+
+
+@pytest.mark.asyncio
+async def test_shutdown_closes_http_client(sports_skill):
+    """Testa que shutdown() fecha o HTTP client."""
+    # Simular que o client foi criado
+    mock_client = AsyncMock()
+    sports_skill._http_client = mock_client
+
+    await sports_skill.shutdown()
+
+    # Verifica que aclose() foi chamado
+    mock_client.aclose.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_shutdown_without_http_client(sports_skill):
+    """Testa que shutdown() não falha sem HTTP client."""
+    sports_skill._http_client = None
+
+    # Não deve levantar exception
+    await sports_skill.shutdown()

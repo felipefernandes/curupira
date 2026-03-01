@@ -50,6 +50,7 @@ def _load_config_isolated(toml_content: str = "", env_overrides: dict = None, mo
             "GROQ_MODEL", "GEMINI_MODEL", "GROQ_TEMPERATURE", "GROQ_TEMPERATURE_REFLECTION",
             "REFLECTION_GREETING_HOUR_START", "REFLECTION_GREETING_HOUR_END",
             "RETRY_ATTEMPTS", "RETRY_INITIAL_DELAY",
+            "THESPORTSDB_KEY", "API_FOOTBALL_KEY", "PANDASCORE_KEY",
         ]:
             if key not in env_overrides:
                 monkeypatch.delenv(key, raising=False)
@@ -263,3 +264,148 @@ def test_job_hunter_keywords_vazias_retorna_none(monkeypatch):
     """)
     cfg = _load_config_isolated(toml_content=toml, monkeypatch=monkeypatch)
     assert cfg.JOB_HUNTER_KEYWORDS is None
+
+
+# ── _cfg_bool: fix do bug de string ───────────────────────────────────
+
+def test_cfg_bool_toml_bool_false(monkeypatch):
+    """_cfg_bool deve retornar False quando TOML entrega bool False (não string)."""
+    toml = textwrap.dedent("""
+        [reflection]
+        enabled = false
+    """)
+    cfg = _load_config_isolated(toml_content=toml, monkeypatch=monkeypatch)
+    assert cfg.REFLECTION_ENABLED is False
+
+
+def test_cfg_bool_toml_int_zero(monkeypatch):
+    """_cfg_bool deve retornar False quando TOML entrega 0 (fallback de tipo)."""
+    toml = textwrap.dedent("""
+        [reflection]
+        enabled = 0
+    """)
+    cfg = _load_config_isolated(toml_content=toml, monkeypatch=monkeypatch)
+    assert cfg.REFLECTION_ENABLED is False
+
+
+def test_cfg_bool_toml_int_one(monkeypatch):
+    """_cfg_bool deve retornar True quando TOML entrega 1."""
+    toml = textwrap.dedent("""
+        [reflection]
+        enabled = 1
+    """)
+    cfg = _load_config_isolated(toml_content=toml, monkeypatch=monkeypatch)
+    assert cfg.REFLECTION_ENABLED is True
+
+
+# ── Retry via TOML ────────────────────────────────────────────────────
+
+def test_retry_settings_do_toml(monkeypatch):
+    """Deve carregar configurações de retry do TOML."""
+    toml = textwrap.dedent("""
+        [retry]
+        attempts = 5
+        initial_delay = 3.5
+    """)
+    cfg = _load_config_isolated(toml_content=toml, monkeypatch=monkeypatch)
+    assert cfg.RETRY_ATTEMPTS == 5
+    assert cfg.RETRY_INITIAL_DELAY == 3.5
+
+
+# ── Sports via TOML ───────────────────────────────────────────────────
+
+def test_sports_api_keys_do_toml(monkeypatch):
+    """Deve carregar chaves das APIs de esportes do TOML."""
+    toml = textwrap.dedent("""
+        [skills.sports]
+        thesportsdb_key = "abc123"
+        api_football_key = "def456"
+        pandascore_key = "ghi789"
+    """)
+    cfg = _load_config_isolated(toml_content=toml, monkeypatch=monkeypatch)
+    assert cfg.THESPORTSDB_KEY == "abc123"
+    assert cfg.API_FOOTBALL_KEY == "def456"
+    assert cfg.PANDASCORE_KEY == "ghi789"
+
+
+# ── Job Hunter score_cutoff via TOML ──────────────────────────────────
+
+def test_job_hunter_score_cutoff_do_toml(monkeypatch):
+    """Deve carregar score_cutoff do Job Hunter via TOML."""
+    toml = textwrap.dedent("""
+        [skills.job_hunter]
+        score_cutoff = 0.75
+    """)
+    cfg = _load_config_isolated(toml_content=toml, monkeypatch=monkeypatch)
+    assert cfg.JOB_HUNTER_SCORE_CUTOFF == 0.75
+
+
+def test_job_hunter_score_cutoff_env_sobrescreve_toml(monkeypatch):
+    """JOB_HUNTER_SCORE_CUTOFF ENV deve prevalecer sobre TOML."""
+    toml = textwrap.dedent("""
+        [skills.job_hunter]
+        score_cutoff = 0.75
+    """)
+    cfg = _load_config_isolated(
+        toml_content=toml,
+        env_overrides={"JOB_HUNTER_SCORE_CUTOFF": "0.5"},
+        monkeypatch=monkeypatch,
+    )
+    assert cfg.JOB_HUNTER_SCORE_CUTOFF == 0.5
+
+
+# ── authorized_user_id negativo ───────────────────────────────────────
+
+def test_authorized_user_id_negativo_fallback_zero(monkeypatch):
+    """authorized_user_id < 0 no ENV deve resultar em 0 (fallback de segurança)."""
+    cfg = _load_config_isolated(
+        toml_content="",
+        env_overrides={"AUTHORIZED_USER_ID": "-1"},
+        monkeypatch=monkeypatch,
+    )
+    assert cfg.AUTHORIZED_USER_ID == 0
+
+
+def test_authorized_user_id_invalido_fallback_zero(monkeypatch):
+    """authorized_user_id não numérico deve resultar em 0."""
+    cfg = _load_config_isolated(
+        toml_content="",
+        env_overrides={"AUTHORIZED_USER_ID": "nao_e_numero"},
+        monkeypatch=monkeypatch,
+    )
+    assert cfg.AUTHORIZED_USER_ID == 0
+
+
+# ── TOML inválido ─────────────────────────────────────────────────────
+
+def test_toml_invalido_retorna_defaults(monkeypatch):
+    """TOML com sintaxe inválida deve ser ignorado e usar defaults."""
+    # Passamos conteúdo inválido, mas o mock abre como arquivo válido –
+    # tomllib vai lançar TOMLDecodeError e _load_toml retorna {}.
+    bad_toml = b"[bot\nai_provider = !!!invalid"
+
+    def _fake_is_file(self):
+        return str(self).endswith("config.toml") and not str(self).endswith("default.config.toml")
+
+    m = mock_open(read_data=bad_toml)
+    m.return_value.read = lambda: bad_toml
+
+    for key in [
+        "TELEGRAM_TOKEN", "AI_PROVIDER", "GROQ_API_KEY", "GEMINI_API_KEY",
+        "AUTHORIZED_USER_ID", "HEARTBEAT_INTERVAL", "MCP_SERVERS_CONFIG",
+        "RSS_FEEDS_JSON", "REFLECTION_ENABLED",
+    ]:
+        monkeypatch.delenv(key, raising=False)
+
+    spec = importlib.util.spec_from_file_location("_test_config_isolated", _CONFIG_MODULE_PATH)
+    mod = importlib.util.module_from_spec(spec)
+
+    with patch("pathlib.Path.is_file", _fake_is_file), \
+         patch("builtins.open", m), \
+         patch("dotenv.load_dotenv"):
+        spec.loader.exec_module(mod)
+
+    # Com TOML inválido, deve usar defaults internos
+    assert mod.AI_PROVIDER == "groq"
+    assert mod.HEARTBEAT_INTERVAL == 1800
+    assert "G1" in mod.RSS_FEEDS

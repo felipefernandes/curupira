@@ -15,7 +15,13 @@ logging.basicConfig(
 )
 
 # ── Core Setup ─────────────────────────────────────────────────────────
-memory_manager = MemoryManager()
+# memory_manager é necessário se qualquer skill de memória ou sports estiver ativa
+_needs_memory = (
+    config.skill_enabled("memory")
+    or config.skill_enabled("sports")
+    or config.skill_enabled("reminders")
+)
+memory_manager = MemoryManager() if _needs_memory else None  # type: ignore[assignment]
 
 # Agent Brain Setup
 brain = AgentBrain(
@@ -27,13 +33,14 @@ brain = AgentBrain(
 
 # Skill: Lembretes
 from skills.reminders import ReminderManager, AddReminderSkill, ListRemindersSkill, DeleteReminderSkill, UpdateReminderSkill
-reminder_manager = ReminderManager()
 if config.skill_enabled("reminders"):
+    reminder_manager = ReminderManager()
     brain.register_skill(AddReminderSkill(reminder_manager))
     brain.register_skill(ListRemindersSkill(reminder_manager))
     brain.register_skill(DeleteReminderSkill(reminder_manager))
     brain.register_skill(UpdateReminderSkill(reminder_manager))
 else:
+    reminder_manager = None  # type: ignore[assignment]
     logging.info("Skill 'reminders' desabilitada pela configuração.")
 
 # Skill: Clima
@@ -339,7 +346,8 @@ async def system_heartbeat(context: ContextTypes.DEFAULT_TYPE):
         logging.error(f"Heartbeat Reflection Error: {e}")
 
 async def post_init(application: Application):
-    await memory_manager.init_db()
+    if memory_manager is not None:
+        await memory_manager.init_db()
     # Start MCP Clients
     await brain.start_mcp_clients()
     
@@ -348,13 +356,13 @@ async def post_init(application: Application):
         application.job_queue.run_repeating(system_heartbeat, interval=config.HEARTBEAT_INTERVAL, first=10, name="system_heartbeat")
         
         # Recover Persisted Reminders
-        try:
-            logging.info("Recuperando lembretes persistentes...")
-            # Assign callback for recovery
-            reminder_manager._execute_reminder_callback = execute_reminder 
-            await reminder_manager.recover_reminders(application.job_queue)
-        except Exception as e:
-            logging.error(f"Erro ao recuperar lembretes: {e}")
+        if reminder_manager is not None:
+            try:
+                logging.info("Recuperando lembretes persistentes...")
+                reminder_manager._execute_reminder_callback = execute_reminder 
+                await reminder_manager.recover_reminders(application.job_queue)
+            except Exception as e:
+                logging.error(f"Erro ao recuperar lembretes: {e}")
         
         logging.info("Jobs agendados: Heartbeat + Lembretes Recuperados")
     else:

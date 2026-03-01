@@ -111,7 +111,11 @@ def _cfg_bool(env_key: str, *toml_keys: str, default: bool) -> bool:
         return env_val.lower() in ("true", "1", "yes")
     toml_val = _toml_get(*toml_keys)
     if toml_val is not None:
-        return bool(toml_val)
+        if isinstance(toml_val, bool):
+            return toml_val
+        if isinstance(toml_val, str):
+            return toml_val.lower() in ("true", "1", "yes")
+        return bool(toml_val)  # fallback para int ou outros tipos
     return default
 
 

@@ -1,176 +1,334 @@
+"""
+core/config.py
+==============
+Carregamento unificado de configuração do Curupira.
+
+Prioridade (maior → menor):
+  1. Variáveis de Ambiente (OS / Docker / CI)
+  2. Arquivo .env  (python-dotenv)
+  3. config.toml   (arquivo de configuração do usuário)
+  4. Valores padrão internos
+
+Uso:
+  from core import config
+  print(config.AI_PROVIDER)
+  if config.skill_enabled("weather"):
+      ...
+"""
+
 import os
+import json
+import logging
+import tomllib
+from pathlib import Path
+from typing import Any, Dict, Optional
+
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# ── Inicialização ──────────────────────────────────────────────────────
 load_dotenv()
 
-# Heartbeat Interval (in seconds) - Default: 30 minutes
-HEARTBEAT_INTERVAL = 30 * 60
+logger = logging.getLogger(__name__)
 
-# Telegram Configuration
-TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+BASE_DIR = Path(__file__).resolve().parent.parent
 
-# AI Provider Configuration
-# Options: 'gemini', 'groq'
-AI_PROVIDER = os.getenv('AI_PROVIDER', 'groq').lower()
+# ── Carregamento do config.toml ────────────────────────────────────────
 
-# Gemini Configuration
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-
-# Groq Configuration
-GROQ_API_KEY = os.getenv('GROQ_API_KEY')
-# Model options (set via GROQ_MODEL env var):
-#   llama-3.1-8b-instant  — rápido, leve, menor custo (default)
-#   llama-3.3-70b-versatile — melhor raciocínio, recomendado para produção
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
-
-# Temperature controls (set via env var):
-#   0.0 = determinístico (melhor para ferramentas e reflexão)
-#   0.7 = balanceado criatividade/precisão (recomendado para diálogo)
-#   1.0 = máxima criatividade (não recomendado para uso de ferramentas)
-GROQ_TEMPERATURE = float(os.getenv("GROQ_TEMPERATURE", "0.7"))
-GROQ_TEMPERATURE_REFLECTION = float(os.getenv("GROQ_TEMPERATURE_REFLECTION", "0.0"))
+def _load_toml(path: Path) -> Dict[str, Any]:
+    """Lê um arquivo TOML e retorna o dicionário. Retorna {} em caso de falha."""
+    if not path.is_file():
+        return {}
+    try:
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+        logger.info("Configuração carregada de %s", path)
+        return data
+    except tomllib.TOMLDecodeError as exc:
+        logger.error("Erro ao ler %s (TOML inválido): %s", path, exc)
+    except Exception as exc:  # pragma: no cover
+        logger.error("Erro inesperado ao ler %s: %s", path, exc)
+    return {}
 
 
-# Retry Configuration
-# Maximum number of retries for 429/ResourceExhausted errors
-RETRY_ATTEMPTS = int(os.getenv("RETRY_ATTEMPTS", 3))
-# Initial delay in seconds for exponential backoff (jitter is added automatically)
-RETRY_INITIAL_DELAY = float(os.getenv("RETRY_INITIAL_DELAY", 2.0))
+_TOML: Dict[str, Any] = _load_toml(BASE_DIR / "config.toml")
 
-# Security Configuration
+if not _TOML:
+    logger.warning(
+        "config.toml não encontrado. "
+        "Copie default.config.toml para config.toml para personalizar."
+    )
+
+
+def _toml_get(*keys: str, default: Any = None) -> Any:
+    """Acessa um valor aninhado no TOML usando uma sequência de chaves."""
+    node = _TOML
+    for k in keys:
+        if isinstance(node, dict):
+            node = node.get(k)
+        else:
+            return default
+        if node is None:
+            return default
+    return node
+
+
+def _cfg(env_key: str, *toml_keys: str, default: Any = None) -> Any:
+    """
+    Resolve um valor de configuração respeitando a ordem de prioridade:
+      ENV > TOML > default
+    Retorna o valor como string raw (do ambiente) ou do tipo nativo do TOML.
+    """
+    env_val = os.getenv(env_key)
+    if env_val is not None:
+        return env_val
+    toml_val = _toml_get(*toml_keys)
+    if toml_val is not None:
+        return toml_val
+    return default
+
+
+def _cfg_int(env_key: str, *toml_keys: str, default: int) -> int:
+    val = _cfg(env_key, *toml_keys, default=default)
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        logger.error("Valor inválido para %s. Usando padrão: %s", env_key, default)
+        return default
+
+
+def _cfg_float(env_key: str, *toml_keys: str, default: float) -> float:
+    val = _cfg(env_key, *toml_keys, default=default)
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        logger.error("Valor inválido para %s. Usando padrão: %s", env_key, default)
+        return default
+
+
+def _cfg_bool(env_key: str, *toml_keys: str, default: bool) -> bool:
+    env_val = os.getenv(env_key)
+    if env_val is not None:
+        return env_val.lower() in ("true", "1", "yes")
+    toml_val = _toml_get(*toml_keys)
+    if toml_val is not None:
+        return bool(toml_val)
+    return default
+
+
+# ── Bot ────────────────────────────────────────────────────────────────
+
+TELEGRAM_TOKEN: Optional[str] = _cfg("TELEGRAM_TOKEN", "bot", "telegram_token") or None
+
 try:
-    AUTHORIZED_USER_ID = int(os.getenv('AUTHORIZED_USER_ID', 0))
+    AUTHORIZED_USER_ID: int = _cfg_int(
+        "AUTHORIZED_USER_ID", "bot", "authorized_user_id", default=0
+    )
     if AUTHORIZED_USER_ID < 0:
         raise ValueError("AUTHORIZED_USER_ID deve ser um número positivo.")
 except ValueError:
     AUTHORIZED_USER_ID = 0
 
-# Validation
-if not TELEGRAM_TOKEN:
-    print("WARNING: TELEGRAM_TOKEN is missing!")
+HEARTBEAT_INTERVAL: int = _cfg_int(
+    "HEARTBEAT_INTERVAL", "bot", "heartbeat_interval", default=30 * 60
+)
 
-if AUTHORIZED_USER_ID == 0:
-    print("WARNING: AUTHORIZED_USER_ID is not set!")
+# ── AI Provider ────────────────────────────────────────────────────────
 
-if AI_PROVIDER == 'gemini' and not GEMINI_API_KEY:
-    print("WARNING: GEMINI_API_KEY is missing but provider is set to 'gemini'!")
+AI_PROVIDER: str = (_cfg("AI_PROVIDER", "bot", "ai_provider", default="groq") or "groq").lower()
 
-if AI_PROVIDER == 'groq' and not GROQ_API_KEY:
-    print("WARNING: GROQ_API_KEY is missing but provider is set to 'groq'!")
+# ── Groq ───────────────────────────────────────────────────────────────
 
-# MCP Configuration
-import json
-import logging
-from pathlib import Path
-from typing import Dict, Any
+GROQ_API_KEY: Optional[str] = _cfg("GROQ_API_KEY", "ai", "groq", "api_key") or None
+GROQ_MODEL: str = _cfg("GROQ_MODEL", "ai", "groq", "model", default="llama-3.1-8b-instant")
+GROQ_TEMPERATURE: float = _cfg_float(
+    "GROQ_TEMPERATURE", "ai", "groq", "temperature", default=0.7
+)
+GROQ_TEMPERATURE_REFLECTION: float = _cfg_float(
+    "GROQ_TEMPERATURE_REFLECTION", "ai", "groq", "temperature_reflection", default=0.0
+)
 
-# Configure logger for this module
-logger = logging.getLogger(__name__)
+# ── Gemini ─────────────────────────────────────────────────────────────
 
-# Define path for mcp.json in the project root (one level up from core/)
-BASE_DIR = Path(__file__).resolve().parent.parent
+GEMINI_API_KEY: Optional[str] = _cfg("GEMINI_API_KEY", "ai", "gemini", "api_key") or None
+GEMINI_MODEL: str = _cfg("GEMINI_MODEL", "ai", "gemini", "model", default="gemini-2.5-flash")
+
+# ── Retry ──────────────────────────────────────────────────────────────
+
+RETRY_ATTEMPTS: int = _cfg_int("RETRY_ATTEMPTS", "retry", "attempts", default=3)
+RETRY_INITIAL_DELAY: float = _cfg_float(
+    "RETRY_INITIAL_DELAY", "retry", "initial_delay", default=2.0
+)
+
+# ── Skills (feature flags) ─────────────────────────────────────────────
+
+_SKILLS_DEFAULTS: Dict[str, bool] = {
+    "weather":    True,
+    "reminders":  True,
+    "time":       True,
+    "hardware":   True,
+    "memory":     True,
+    "rss":        True,
+    "job_hunter": True,
+    "sports":     True,
+    "github":     False,
+}
+
+_toml_skills: Dict[str, Any] = _toml_get("skills") or {}
+
+
+def skill_enabled(name: str) -> bool:
+    """
+    Retorna True se a skill estiver habilitada.
+
+    Prioridade:
+      1. Variável de ambiente: SKILL_<NAME>_ENABLED (ex: SKILL_WEATHER_ENABLED=false)
+      2. config.toml: [skills] weather = true/false
+      3. Padrão interno (_SKILLS_DEFAULTS)
+    """
+    env_key = f"SKILL_{name.upper()}_ENABLED"
+    env_val = os.getenv(env_key)
+    if env_val is not None:
+        return env_val.lower() in ("true", "1", "yes")
+    toml_val = _toml_skills.get(name)
+    if toml_val is not None and isinstance(toml_val, bool):
+        return toml_val
+    return _SKILLS_DEFAULTS.get(name, True)
+
+
+# ── MCP Configuration ──────────────────────────────────────────────────
+
 MCP_CONFIG_FILE = BASE_DIR / "mcp.json"
-
 MCP_SERVERS: Dict[str, Any] = {}
 
 if MCP_CONFIG_FILE.is_file():
     try:
-        with open(MCP_CONFIG_FILE, 'r', encoding='utf-8') as f:
+        with open(MCP_CONFIG_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
             if isinstance(data, dict):
                 MCP_SERVERS = data
-                logger.info(f"Loaded MCP configuration from {MCP_CONFIG_FILE}")
+                logger.info("MCP: configuração carregada de %s", MCP_CONFIG_FILE)
             else:
-                logger.error(f"{MCP_CONFIG_FILE} content must be a dictionary, got {type(data).__name__}")
+                logger.error("%s deve ser um dicionário JSON.", MCP_CONFIG_FILE)
     except json.JSONDecodeError:
-        logger.error(f"{MCP_CONFIG_FILE} is not valid JSON!")
-    except Exception as e:
-        logger.error(f"Error loading {MCP_CONFIG_FILE}: {e}")
+        logger.error("%s não é um JSON válido!", MCP_CONFIG_FILE)
+    except Exception as exc:
+        logger.error("Erro ao carregar %s: %s", MCP_CONFIG_FILE, exc)
 else:
-    # Fallback to current Env Var method
-    MCP_SERVERS_CONFIG = os.getenv('MCP_SERVERS_CONFIG', '{}')
+    _mcp_env = os.getenv("MCP_SERVERS_CONFIG", "{}")
     try:
-        data = json.loads(MCP_SERVERS_CONFIG)
+        data = json.loads(_mcp_env)
         if isinstance(data, dict):
             MCP_SERVERS = data
         else:
-             logger.warning("MCP_SERVERS_CONFIG must be a dictionary! Defaulting to empty.")
+            logger.warning("MCP_SERVERS_CONFIG deve ser um dicionário. Usando {}.")
     except json.JSONDecodeError:
-        logger.warning("MCP_SERVERS_CONFIG is not valid JSON!")
-    except Exception as e:
-        logger.error(f"Error parsing MCP_SERVERS_CONFIG: {e}")
+        logger.warning("MCP_SERVERS_CONFIG não é um JSON válido!")
+    except Exception as exc:
+        logger.error("Erro ao parsear MCP_SERVERS_CONFIG: %s", exc)
 
-# Job Hunter Configuration
-JOB_HUNTER_URL = os.getenv("JOB_HUNTER_URL", "").rstrip("/")
-JOB_HUNTER_TOKEN = os.getenv("JOB_HUNTER_TOKEN", "")
+# ── Job Hunter ─────────────────────────────────────────────────────────
 
-_jh_sources = os.getenv("JOB_HUNTER_SOURCES")
-_jh_keywords = os.getenv("JOB_HUNTER_KEYWORDS")
-_jh_cutoff = os.getenv("JOB_HUNTER_SCORE_CUTOFF")
+JOB_HUNTER_URL: str = (
+    _cfg("JOB_HUNTER_URL", "skills", "job_hunter", "url", default="") or ""
+).rstrip("/")
+JOB_HUNTER_TOKEN: str = (
+    _cfg("JOB_HUNTER_TOKEN", "skills", "job_hunter", "token", default="") or ""
+)
 
-JOB_HUNTER_SOURCES = [s.strip() for s in _jh_sources.split(",") if s.strip()] if _jh_sources else None
-JOB_HUNTER_KEYWORDS = [k.strip() for k in _jh_keywords.split(",") if k.strip()] if _jh_keywords else None
-try:
-    JOB_HUNTER_SCORE_CUTOFF = float(_jh_cutoff) if _jh_cutoff else None
-except ValueError:
-    logger.error("JOB_HUNTER_SCORE_CUTOFF inválido. Usando valor padrão None.")
-    JOB_HUNTER_SCORE_CUTOFF = None
+_jh_sources_env = os.getenv("JOB_HUNTER_SOURCES")
+_jh_keywords_env = os.getenv("JOB_HUNTER_KEYWORDS")
+_jh_cutoff_env = os.getenv("JOB_HUNTER_SCORE_CUTOFF")
 
-# RSS Configuration
+if _jh_sources_env:
+    JOB_HUNTER_SOURCES = [s.strip() for s in _jh_sources_env.split(",") if s.strip()]
+else:
+    _toml_jh_sources = _toml_get("skills", "job_hunter", "sources")
+    JOB_HUNTER_SOURCES = _toml_jh_sources if isinstance(_toml_jh_sources, list) else None
+
+if _jh_keywords_env:
+    JOB_HUNTER_KEYWORDS = [k.strip() for k in _jh_keywords_env.split(",") if k.strip()]
+else:
+    _toml_jh_kw = _toml_get("skills", "job_hunter", "keywords")
+    JOB_HUNTER_KEYWORDS = _toml_jh_kw if isinstance(_toml_jh_kw, list) and _toml_jh_kw else None
+
+if _jh_cutoff_env:
+    try:
+        JOB_HUNTER_SCORE_CUTOFF: Optional[float] = float(_jh_cutoff_env)
+    except ValueError:
+        logger.error("JOB_HUNTER_SCORE_CUTOFF inválido. Usando None.")
+        JOB_HUNTER_SCORE_CUTOFF = None
+else:
+    _toml_cutoff = _toml_get("skills", "job_hunter", "score_cutoff")
+    JOB_HUNTER_SCORE_CUTOFF = float(_toml_cutoff) if _toml_cutoff is not None else None
+
+# ── RSS ────────────────────────────────────────────────────────────────
+
 RSS_FEEDS_DEFAULT: Dict[str, str] = {
-    "G1": "https://g1.globo.com/rss/g1/",
-    "G1 Brasil": "https://g1.globo.com/rss/g1/brasil/",
-    "G1 Tecnologia": "https://g1.globo.com/rss/g1/tecnologia/",
-    "Folha de São Paulo": "https://feeds.folha.uol.com.br/emcimadahora/rss091.xml",
-    "TechCrunch": "https://techcrunch.com/feed/",
-    "Hacker News": "https://hnrss.org/frontpage",
+    "G1":                   "https://g1.globo.com/rss/g1/",
+    "G1 Brasil":            "https://g1.globo.com/rss/g1/brasil/",
+    "G1 Tecnologia":        "https://g1.globo.com/rss/g1/tecnologia/",
+    "Folha de São Paulo":   "https://feeds.folha.uol.com.br/emcimadahora/rss091.xml",
+    "TechCrunch":           "https://techcrunch.com/feed/",
+    "Hacker News":          "https://hnrss.org/frontpage",
 }
 
 _rss_env = os.getenv("RSS_FEEDS_JSON", "")
 if _rss_env.strip():
     try:
         _parsed = json.loads(_rss_env)
-        if isinstance(_parsed, dict):
-            RSS_FEEDS = _parsed
-        else:
-            logger.warning("RSS_FEEDS_JSON must be a dict. Using defaults.")
-            RSS_FEEDS = RSS_FEEDS_DEFAULT.copy()
-    except json.JSONDecodeError:
-        logger.warning("RSS_FEEDS_JSON is not valid JSON. Using defaults.")
-        RSS_FEEDS = RSS_FEEDS_DEFAULT.copy()
-    except Exception as e:
-        logger.error(f"Error parsing RSS_FEEDS_JSON: {e}. Using defaults.")
+        RSS_FEEDS: Dict[str, str] = _parsed if isinstance(_parsed, dict) else RSS_FEEDS_DEFAULT.copy()
+        if not isinstance(_parsed, dict):
+            logger.warning("RSS_FEEDS_JSON deve ser um dict. Usando padrões.")
+    except (json.JSONDecodeError, Exception) as exc:
+        logger.warning("Erro ao parsear RSS_FEEDS_JSON: %s. Usando padrões.", exc)
         RSS_FEEDS = RSS_FEEDS_DEFAULT.copy()
 else:
-    RSS_FEEDS = RSS_FEEDS_DEFAULT.copy()
+    _toml_rss_feeds = _toml_get("skills", "rss", "feeds")
+    if isinstance(_toml_rss_feeds, dict) and _toml_rss_feeds:
+        RSS_FEEDS = _toml_rss_feeds
+    else:
+        RSS_FEEDS = RSS_FEEDS_DEFAULT.copy()
 
-# Heartbeat Reflection Configuration
-REFLECTION_ENABLED = os.getenv("REFLECTION_ENABLED", "true").lower() == "true"
-REFLECTION_MODEL = os.getenv("REFLECTION_MODEL", "llama-3.3-70b-versatile") # Default to fast/smart Groq model
+# ── Reflection ─────────────────────────────────────────────────────────
 
-# Greeting window: the bot may only send a "Bom dia"-style greeting ONCE PER DAY,
-# and only when the current hour falls within [GREETING_HOUR_START, GREETING_HOUR_END).
-# Outside this window the model is explicitly instructed to stay silent about greetings.
-# Override via env vars: REFLECTION_GREETING_HOUR_START / REFLECTION_GREETING_HOUR_END
-REFLECTION_GREETING_HOUR_START = int(os.getenv("REFLECTION_GREETING_HOUR_START", "7"))
-REFLECTION_GREETING_HOUR_END   = int(os.getenv("REFLECTION_GREETING_HOUR_END",   "9"))
+REFLECTION_ENABLED: bool = _cfg_bool(
+    "REFLECTION_ENABLED", "reflection", "enabled", default=True
+)
+REFLECTION_MODEL: str = _cfg(
+    "REFLECTION_MODEL", "reflection", "model", default="llama-3.3-70b-versatile"
+)
+REFLECTION_GREETING_HOUR_START: int = _cfg_int(
+    "REFLECTION_GREETING_HOUR_START", "reflection", "greeting_hour_start", default=7
+)
+REFLECTION_GREETING_HOUR_END: int = _cfg_int(
+    "REFLECTION_GREETING_HOUR_END", "reflection", "greeting_hour_end", default=9
+)
 
-# Sports APIs Configuration
-THESPORTSDB_KEY = os.getenv("THESPORTSDB_KEY", "")
-API_FOOTBALL_KEY = os.getenv("API_FOOTBALL_KEY", "")
-PANDASCORE_KEY = os.getenv("PANDASCORE_KEY", "")
+# ── Sports ─────────────────────────────────────────────────────────────
 
+THESPORTSDB_KEY: str = (
+    _cfg("THESPORTSDB_KEY", "skills", "sports", "thesportsdb_key", default="") or ""
+)
+API_FOOTBALL_KEY: str = (
+    _cfg("API_FOOTBALL_KEY", "skills", "sports", "api_football_key", default="") or ""
+)
+PANDASCORE_KEY: str = (
+    _cfg("PANDASCORE_KEY", "skills", "sports", "pandascore_key", default="") or ""
+)
+
+# ── Validação e Avisos ─────────────────────────────────────────────────
+
+if not TELEGRAM_TOKEN:
+    logger.warning("TELEGRAM_TOKEN não configurado!")
+if AUTHORIZED_USER_ID == 0:
+    logger.warning("AUTHORIZED_USER_ID não configurado – nenhum usuário autorizado.")
+if AI_PROVIDER == "gemini" and not GEMINI_API_KEY:
+    logger.warning("GEMINI_API_KEY ausente mas provedor está como 'gemini'.")
+if AI_PROVIDER == "groq" and not GROQ_API_KEY:
+    logger.warning("GROQ_API_KEY ausente mas provedor está como 'groq'.")
 if not THESPORTSDB_KEY:
-    logger.warning("THESPORTSDB_KEY não configurada - cadastre-se gratuitamente em thesportsdb.com")
-
+    logger.warning("THESPORTSDB_KEY não configurada – cadastre-se em thesportsdb.com")
 if API_FOOTBALL_KEY:
-    logger.info("API-Football configurada (100 req/dia)")
-else:
-    logger.info("API-Football não configurada - usando apenas TheSportsDB")
-
+    logger.info("API-Football configurada (100 req/dia).")
 if PANDASCORE_KEY:
-    logger.info("PandaScore configurada para eSports (1000 req/mês)")
-else:
-    logger.info("PandaScore não configurada - eSports não disponíveis")
+    logger.info("PandaScore configurada para eSports (1000 req/mês).")

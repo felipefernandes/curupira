@@ -98,6 +98,21 @@ if [ "$SETUP_ENV" = true ]; then
     echo -e "${GREEN}[OK] Arquivo .env criado/atualizado.${NC}"
 fi
 
+# Configuração config.toml (arquivo central de configuração)
+echo -e "${YELLOW}[*] Configurando arquivo de configurações (config.toml)${NC}"
+if [ -f "config.toml" ]; then
+    echo -e "${BLUE}[i] config.toml já existe. Mantendo configurações atuais.${NC}"
+else
+    if [ -f "default.config.toml" ]; then
+        cp default.config.toml config.toml
+        echo -e "${GREEN}[OK] config.toml criado a partir do template.${NC}"
+        echo -e "${CYAN}[i] Edite o arquivo config.toml para personalizar suas preferências e habilitar/desabilitar skills.${NC}"
+    else
+        echo -e "${YELLOW}[!] default.config.toml não encontrado. O bot usará apenas variáveis de ambiente.${NC}"
+    fi
+fi
+echo ""
+
 # Instalar CLI Global (Curupira Wrapper)
 echo -e "${YELLOW}[*] Instalando comando global 'curupira'...${NC}"
 WRAPPER_SRC="curupira_wrapper.sh"

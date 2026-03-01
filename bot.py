@@ -1,19 +1,12 @@
-from google import genai
-from groq import Groq
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, Application
 from core import config
 import asyncio
-import re
 from datetime import datetime
 import logging
 from skills.memory import MemoryManager
-from skills.reminders import ReminderManager, AddReminderSkill, ListRemindersSkill, DeleteReminderSkill, UpdateReminderSkill
-from skills.weather_manager import WeatherSkill
-from skills.memory import SaveFactSkill
 from core.agent import AgentBrain
-from skills.github import configure as configure_github
 
 # Configure Logging
 logging.basicConfig(
@@ -21,45 +14,79 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-# AI Setup
+# ── Core Setup ─────────────────────────────────────────────────────────
 memory_manager = MemoryManager()
-reminder_manager = ReminderManager()
-weather_skill = WeatherSkill()
 
 # Agent Brain Setup
-brain = AgentBrain(config.AI_PROVIDER, config.GEMINI_MODEL if config.AI_PROVIDER == 'gemini' else config.GROQ_MODEL)
+brain = AgentBrain(
+    config.AI_PROVIDER,
+    config.GEMINI_MODEL if config.AI_PROVIDER == 'gemini' else config.GROQ_MODEL,
+)
 
-# Configure MCP Skills (before start_mcp_clients)
-configure_github()
+# ── Skill Registration (controlado por config.skill_enabled) ───────────
 
-# Register Skills
-brain.register_skill(weather_skill)
-brain.register_skill(AddReminderSkill(reminder_manager))
-brain.register_skill(ListRemindersSkill(reminder_manager))
-brain.register_skill(DeleteReminderSkill(reminder_manager))
-brain.register_skill(UpdateReminderSkill(reminder_manager))
+# Skill: Lembretes
+from skills.reminders import ReminderManager, AddReminderSkill, ListRemindersSkill, DeleteReminderSkill, UpdateReminderSkill
+reminder_manager = ReminderManager()
+if config.skill_enabled("reminders"):
+    brain.register_skill(AddReminderSkill(reminder_manager))
+    brain.register_skill(ListRemindersSkill(reminder_manager))
+    brain.register_skill(DeleteReminderSkill(reminder_manager))
+    brain.register_skill(UpdateReminderSkill(reminder_manager))
+else:
+    logging.info("Skill 'reminders' desabilitada pela configuração.")
+
+# Skill: Clima
+if config.skill_enabled("weather"):
+    from skills.weather_manager import WeatherSkill
+    weather_skill = WeatherSkill()
+    brain.register_skill(weather_skill)
+else:
+    logging.info("Skill 'weather' desabilitada pela configuração.")
+    weather_skill = None  # type: ignore[assignment]
 
 # Skill: Hardware Monitoring
-from skills.hardware import HardwareMonitoringSkill
-hardware_skill = HardwareMonitoringSkill()
-brain.register_skill(hardware_skill)
+if config.skill_enabled("hardware"):
+    from skills.hardware import HardwareMonitoringSkill
+    hardware_skill = HardwareMonitoringSkill()
+    brain.register_skill(hardware_skill)
+else:
+    logging.info("Skill 'hardware' desabilitada pela configuração.")
+    hardware_skill = None  # type: ignore[assignment]
 
-# Skill: Time
-from skills.time import GetTimeSkill
-brain.register_skill(GetTimeSkill())
+# Skill: Horário
+if config.skill_enabled("time"):
+    from skills.time import GetTimeSkill
+    brain.register_skill(GetTimeSkill())
+else:
+    logging.info("Skill 'time' desabilitada pela configuração.")
 
-# Skill: Save User Fact (long-term memory)
-brain.register_skill(SaveFactSkill(memory_manager))
+# Skill: Memória de Usuário (long-term facts)
+if config.skill_enabled("memory"):
+    from skills.memory import SaveFactSkill
+    brain.register_skill(SaveFactSkill(memory_manager))
+else:
+    logging.info("Skill 'memory' desabilitada pela configuração.")
 
 # Skill: Job Hunter
-from skills.job_hunter import JobHunterRunSearchSkill, JobHunterGetDefaultsSkill
-brain.register_skill(JobHunterRunSearchSkill())
-brain.register_skill(JobHunterGetDefaultsSkill())
+if config.skill_enabled("job_hunter"):
+    from skills.job_hunter import JobHunterRunSearchSkill, JobHunterGetDefaultsSkill
+    brain.register_skill(JobHunterRunSearchSkill())
+    brain.register_skill(JobHunterGetDefaultsSkill())
+else:
+    logging.info("Skill 'job_hunter' desabilitada pela configuração.")
 
 # Skill: Sports Manager
-from skills.sports_manager import SportsManagerSkill
-sports_skill = SportsManagerSkill(memory_manager)
-brain.register_skill(sports_skill)
+if config.skill_enabled("sports"):
+    from skills.sports_manager import SportsManagerSkill
+    sports_skill = SportsManagerSkill(memory_manager)
+    brain.register_skill(sports_skill)
+else:
+    logging.info("Skill 'sports' desabilitada pela configuração.")
+
+# Skill: GitHub (via MCP)
+from skills.github import configure as configure_github
+configure_github()  # Carrega apenas se o token estiver disponível
 
 # Onboarding States
 WAITING_NAME = 1
@@ -272,13 +299,17 @@ async def system_heartbeat(context: ContextTypes.DEFAULT_TYPE):
 
     try:
         # 1. Gather Context (Lightweight)
-        hw_status = await hardware_skill.execute({})
+        hw_metrics: dict = {}
+        if hardware_skill is not None:
+            hw_status = await hardware_skill.execute({})
+            hw_metrics = hw_status.get("metrics", {})
+
         now = datetime.now()
         
         reflection_context = {
             "time": now.strftime("%Y-%m-%d %H:%M:%S"),
             "hour": now.hour,
-            "hardware": hw_status.get("metrics", {}),
+            "hardware": hw_metrics,
             # "reminders": await reminder_manager.get_active_count() # Future optimization
         }
 

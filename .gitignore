@@ -6,6 +6,10 @@ venv/
 env/
 .venv/
 
+# User configuration (may contain API keys – never version this!)
+# Use default.config.toml as the template instead.
+config.toml
+
 # Python
 __pycache__/
 *.py[cod]

@@ -1,0 +1,111 @@
+# =====================================================================
+#  Curupira – Template de Configuração Central (default.config.toml)
+# =====================================================================
+#
+#  Como usar:
+#    Copie este arquivo para config.toml e preencha com seus valores:
+#      cp default.config.toml config.toml
+#
+#  Prioridade de configuração (maior → menor):
+#    1. Variáveis de Ambiente (OS / Docker / CI)
+#    2. Arquivo .env (python-dotenv)
+#    3. config.toml  ← este arquivo
+#    4. Valores padrão internos do código
+#
+#  Secrets (tokens e chaves) devem ser mantidos no .env ou em
+#  variáveis de ambiente — nunca versionados no config.toml!
+# =====================================================================
+
+[bot]
+# Seu token do BotFather. Deixe vazio para usar TELEGRAM_TOKEN do .env.
+telegram_token = ""
+
+# Seu ID numérico no Telegram (obtenha via @userinfobot).
+# 0 = não configurado (bot não responderá a ninguém).
+authorized_user_id = 0
+
+# Provedor de IA: "groq" ou "gemini"
+ai_provider = "groq"
+
+# Intervalo do heartbeat em segundos (padrão: 1800 = 30 minutos)
+heartbeat_interval = 1800
+
+# ─── Provedor Groq ────────────────────────────────────────────────────
+[ai.groq]
+# Deixe vazio para usar GROQ_API_KEY do .env
+api_key = ""
+# Modelo padrão. Opções: llama-3.1-8b-instant, llama-3.3-70b-versatile
+model = "llama-3.1-8b-instant"
+# Temperatura para diálogo (0.0 = determinístico, 1.0 = criativo)
+temperature = 0.7
+# Temperatura usada durante a reflexão do heartbeat
+temperature_reflection = 0.0
+
+# ─── Provedor Gemini ──────────────────────────────────────────────────
+[ai.gemini]
+# Deixe vazio para usar GEMINI_API_KEY do .env
+api_key = ""
+model = "gemini-2.5-flash"
+
+# ─── Skills (habilitar/desabilitar) ───────────────────────────────────
+#
+#  Defina como false para desabilitar a skill completamente.
+#  Skills desabilitadas não são carregadas e não consomem recursos.
+#
+[skills]
+weather   = true
+reminders = true
+time      = true
+hardware  = true
+memory    = true
+rss       = true
+job_hunter = true
+sports    = true
+github    = false   # Requer GITHUB_PERSONAL_ACCESS_TOKEN
+
+# ─── Configurações específicas por skill ──────────────────────────────
+
+[skills.rss]
+# Feeds personalizados (sobrescreve os padrões se definido)
+# Formato: { "Nome" = "https://url/feed" }
+# Exemplo:
+#   feeds.G1 = "https://g1.globo.com/rss/g1/"
+#   feeds.TechCrunch = "https://techcrunch.com/feed/"
+# Deixe vazio para usar os feeds padrão embutidos no código.
+
+[skills.job_hunter]
+# URL da API de busca de vagas (sobrescreve JOB_HUNTER_URL do .env)
+url = ""
+# Token de autenticação da API
+token = ""
+# Palavras-chave para filtro de busca (lista de strings)
+keywords = []
+# Sites/fontes para restringir a busca (lista de strings, [] = todos)
+sources = []
+# Nota mínima de relevância (0.0–1.0). null = sem corte.
+# score_cutoff = 0.5
+
+[skills.sports]
+# Chave da TheSportsDB (gratuita em thesportsdb.com)
+thesportsdb_key = ""
+# Chave da API-Football (opcional, 100 req/dia no plano gratuito)
+api_football_key = ""
+# Chave da PandaScore (opcional, para eSports)
+pandascore_key = ""
+
+# ─── Reflexão do Heartbeat ────────────────────────────────────────────
+[reflection]
+# Habilitar reflexão proativa durante o heartbeat
+enabled = true
+# Modelo usado para reflexão (pode ser diferente do modelo principal)
+model = "llama-3.3-70b-versatile"
+# Janela para saudação matinal (hora de início e fim, formato 24h)
+greeting_hour_start = 7
+greeting_hour_end   = 9
+
+# ─── Configuração de Retry ────────────────────────────────────────────
+[retry]
+# Número máximo de tentativas em caso de erros 429/ResourceExhausted
+attempts = 3
+# Delay inicial em segundos para backoff exponencial
+initial_delay = 2.0

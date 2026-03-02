@@ -98,10 +98,10 @@ def test_check_env_secrets_gemini(mock_config):
     assert any("GEMINI_API_KEY" in m for m in missing)
 
 def test_check_system_dependencies():
-    with patch("shutil.which", return_value=None):
-        ok, missing = health.check_system_dependencies()
-        assert not ok
-        assert "ffmpeg" in missing
+    # Agora sempre retorna ok=True pois removemos as dependências obrigatórias temporariamente
+    ok, missing = health.check_system_dependencies()
+    assert ok
+    assert len(missing) == 0
 
     with patch("shutil.which", return_value="/usr/bin/ffmpeg"):
         ok, missing = health.check_system_dependencies()
@@ -209,3 +209,14 @@ def test_run_full_diagnostic_warning_git():
          assert report["status"] == "warning"
          assert len(report["issues"]) == 1
          assert "file.py" in report["issues"][0]
+
+def test_run_full_diagnostic_warning_connectivity():
+    with patch("core.health.check_memory_zram", return_value=(True, "OK")), \
+         patch("core.health.check_env_secrets", return_value=(True, [])), \
+         patch("core.health.check_system_dependencies", return_value=(True, [])), \
+         patch("core.health.check_connectivity", return_value=(False, ["Timeout Groq"])), \
+         patch("core.health.check_git", return_value=("ok", "Clean")):
+         
+         report = health.run_full_diagnostic(force=True)
+         assert report["status"] == "warning"
+         assert "Timeout Groq" in report["issues"][0]

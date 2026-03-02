@@ -336,3 +336,24 @@ if API_FOOTBALL_KEY:
     logger.info("API-Football configurada (100 req/dia).")
 if PANDASCORE_KEY:
     logger.info("PandaScore configurada para eSports (1000 req/mês).")
+
+# ── Sumário de configuração (startup debug) ────────────────────────────
+
+def log_config_summary() -> None:
+    """Loga um resumo da configuração carregada para facilitar o debugging."""
+    source = "config.toml" if _TOML else "variáveis de ambiente / defaults"
+    logger.info("─── Configuração do Curupira ───────────────────────────")
+    logger.info("  Fonte principal : %s", source)
+    logger.info("  Provedor IA     : %s", AI_PROVIDER.upper())
+    logger.info("  Heartbeat       : %ds", HEARTBEAT_INTERVAL)
+    logger.info("  Reflexão ativa  : %s", REFLECTION_ENABLED)
+
+    enabled_skills  = [k for k in _SKILLS_DEFAULTS if skill_enabled(k)]
+    disabled_skills = [k for k in _SKILLS_DEFAULTS if not skill_enabled(k)]
+    logger.info("  Skills ativas   : %s", ", ".join(enabled_skills) or "nenhuma")
+    if disabled_skills:
+        logger.info("  Skills inativas : %s", ", ".join(disabled_skills))
+    logger.info("────────────────────────────────────────────────────────")
+
+
+log_config_summary()

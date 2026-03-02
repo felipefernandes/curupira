@@ -282,3 +282,32 @@ class TestGetContextSessionMemory:
             assert "Msg 4" in context
         finally:
             os.unlink(db_path)
+
+# ---------------------------------------------------------------------------
+# Token Usage
+# ---------------------------------------------------------------------------
+
+class TestTokenUsage:
+    @pytest.mark.asyncio
+    async def test_log_and_get_usage_summary(self):
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        try:
+            mm = MemoryManager(db_path=db_path)
+            await mm.init_db()
+
+            await mm.log_token_usage("gemini", "gemini-1.5-flash", 100, 50)
+            await mm.log_token_usage("gemini", "gemini-1.5-flash", 200, 150)
+            await mm.log_token_usage("groq", "llama3", 50, 20)
+
+            summary = await mm.get_usage_summary()
+
+            assert "gemini" in summary
+            assert summary["gemini"]["prompt_tokens"] == 300
+            assert summary["gemini"]["completion_tokens"] == 200
+
+            assert "groq" in summary
+            assert summary["groq"]["prompt_tokens"] == 50
+            assert summary["groq"]["completion_tokens"] == 20
+        finally:
+            os.unlink(db_path)

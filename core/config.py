@@ -175,6 +175,7 @@ _SKILLS_DEFAULTS: Dict[str, bool] = {
     "job_hunter": True,
     "sports":     True,
     "github":     False,
+    "usage_report": True,
 }
 
 _toml_skills: Dict[str, Any] = _toml_get("skills") or {}

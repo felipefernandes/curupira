@@ -91,6 +91,13 @@ if config.skill_enabled("sports"):
 else:
     logging.info("Skill 'sports' desabilitada pela configuração.")
 
+# Skill: Usage Report
+if config.skill_enabled("usage_report"):
+    from skills.usage_report import UsageReportSkill
+    brain.register_skill(UsageReportSkill(memory_manager))
+else:
+    logging.info("Skill 'usage_report' desabilitada pela configuração.")
+
 # Skill: GitHub (via MCP)
 from skills.github import configure as configure_github
 configure_github()  # Carrega apenas se o token estiver disponível
@@ -179,6 +186,7 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "user_facts": user_facts,
         "job_queue": context.job_queue,
         "assistant_surname": assistant_surname,
+        "memory_manager": memory_manager,
     }
 
     async def keep_typing():
@@ -265,6 +273,7 @@ async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
                 "user_facts": user_facts,
                 "job_queue": context.job_queue,
                 "assistant_surname": assistant_surname,
+                "memory_manager": memory_manager,
             }
             response_text = await brain.process(message, agent_context, chat_history=[])
             await context.bot.send_message(chat_id=job.chat_id, text=response_text)

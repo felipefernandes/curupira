@@ -5,6 +5,7 @@
 venv/
 env/
 .venv/
+BACKUP.env
 
 # User configuration (may contain API keys – never version this!)
 # Use default.config.toml as the template instead.

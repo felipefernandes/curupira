@@ -82,6 +82,15 @@ Foco na saúde do sistema e evolução das capacidades técnicas (MCP-Lite) usan
 - [ ] **Skill de Terminal (Power User):** Execução segura de comandos shell locais. (Issue #42)
 - [ ] **Monitoramento de Logs:** Detecção de anomalias no sistema. (Issue #53)
 
+### ⚙️ v0.12.0: UX de Configuração e Manutenção ✅
+Foco em simplificar a manutenção para usuários não-técnicos e aumentar a configurabilidade do sistema. (Issue #121 — PR #123)
+- [x] **config.toml centralizado:** Template comentado `default.config.toml` com todas as configurações em um lugar. 
+- [x] **Prioridade de configuração:** ENV > .env > config.toml > defaults internos, com retrocompatibilidade total.
+- [x] **Feature Flags por Skill:** Habilitar/desabilitar qualquer skill via `[skills] weather = false` no config.toml.
+- [x] **Sumário de startup:** Log automático das skills ativas/inativas e provedor de IA ao iniciar o bot.
+- [x] **Segurança:** `config.toml` adicionado ao `.gitignore`; secrets permanecem exclusivamente em ENV/.env.
+- [x] **install.sh atualizado:** Copia template automaticamente no primeiro setup.
+
 ### 💼 v1.0.0: O Assistente Pessoal Completo ("Day-to-day Helper")
 Integrações essenciais para rotina e facilidades da vida pessoal.
 - [ ] **Compreensão de Áudio:** Ouvir e processar solicitações via voz. (Issue #60)

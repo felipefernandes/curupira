@@ -4,6 +4,52 @@ import logging
 import asyncio
 from typing import Any, Dict
 
+# Tabela WMO Weather Interpretation Codes → Descrição PT-BR
+# Referência: https://open-meteo.com/en/docs#weather_variable_documentation
+_WMO_DESCRIPTIONS: Dict[int, str] = {
+    0:  "Céu limpo",
+    1:  "Predominantemente limpo",
+    2:  "Parcialmente nublado",
+    3:  "Nublado",
+    45: "Neblina",
+    48: "Neblina com geada",
+    51: "Chuvisco leve",
+    53: "Chuvisco moderado",
+    55: "Chuvisco intenso",
+    56: "Chuvisco gelado leve",
+    57: "Chuvisco gelado intenso",
+    61: "Chuva leve",
+    63: "Chuva moderada",
+    65: "Chuva intensa",
+    66: "Chuva gelada leve",
+    67: "Chuva gelada intensa",
+    71: "Neve leve",
+    73: "Neve moderada",
+    75: "Neve intensa",
+    77: "Grãos de neve",
+    80: "Pancadas de chuva leves",
+    81: "Pancadas de chuva moderadas",
+    82: "Pancadas de chuva violentas",
+    85: "Pancadas de neve leves",
+    86: "Pancadas de neve intensas",
+    95: "Trovoada",
+    96: "Trovoada com granizo leve",
+    99: "Trovoada com granizo intenso",
+}
+
+
+def _wmo_description(code: int) -> str:
+    """Converte um código WMO para descrição legível em PT-BR.
+
+    Args:
+        code: Código inteiro da Open-Meteo (weather_code).
+
+    Returns:
+        String descritiva em português ou fallback com o código.
+    """
+    return _WMO_DESCRIPTIONS.get(code, f"Condição desconhecida (código: {code})")
+
+
 class WeatherSkill(BaseSkill):
     def __init__(self):
         self.logger = logging.getLogger("WeatherSkill")
@@ -54,7 +100,7 @@ class WeatherSkill(BaseSkill):
             "temperature": current.get("temperature_2m"),
             "humidity": current.get("relative_humidity_2m"),
             "rain_probability": current.get("precipitation_probability", 0),
-            "condition_code": current.get("weather_code")
+            "condition": _wmo_description(current.get("weather_code", -1)),
         })
 
     async def get_coordinates(self, city_name, retries=3, backoff=2):

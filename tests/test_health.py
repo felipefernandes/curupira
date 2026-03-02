@@ -15,7 +15,7 @@ def test_check_memory_zram_not_linux():
     with patch("os.path.exists", return_value=False):
         ok, msg = health.check_memory_zram()
         assert ok
-        assert "não é Linux" in msg
+        assert "não tem /proc/meminfo" in msg
 
 def test_check_memory_zram_enough_ram():
     fake_meminfo = "MemTotal:        4000000 kB\n"
@@ -56,26 +56,26 @@ def test_check_memory_zram_low_ram_no_swap():
             assert "Risco de Out Of Memory" in msg
 
 def test_check_env_secrets_groq(mock_config):
-    mock_config.TELEGRAM_TOKEN = "1234567890_abcdef"
+    mock_config.TELEGRAM_TOKEN = "1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi"
     mock_config.AI_PROVIDER = "groq"
     mock_config.GROQ_API_KEY = None
     
     ok, missing = health.check_env_secrets()
     assert not ok
-    assert "GROQ_API_KEY" in missing
+    assert any("GROQ_API_KEY" in m for m in missing)
     
-    mock_config.GROQ_API_KEY = "g_1234567890_abcdef"
+    mock_config.GROQ_API_KEY = "gsk_1234567890abcdefghij"
     ok, missing = health.check_env_secrets()
     assert ok
 
 def test_check_env_secrets_gemini(mock_config):
-    mock_config.TELEGRAM_TOKEN = "1234567890_abcdef"
+    mock_config.TELEGRAM_TOKEN = "1234567890:ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghi"
     mock_config.AI_PROVIDER = "gemini"
     mock_config.GEMINI_API_KEY = None
     
     ok, missing = health.check_env_secrets()
     assert not ok
-    assert "GEMINI_API_KEY" in missing
+    assert any("GEMINI_API_KEY" in m for m in missing)
 
 def test_check_system_dependencies():
     with patch("shutil.which", return_value=None):
@@ -105,9 +105,10 @@ def test_check_connectivity_fail(mock_config):
 def test_check_git_ok():
     from unittest.mock import Mock
     mock_branch = Mock(stdout="main\n")
+    mock_commit = Mock(stdout="abcdef\n")
     mock_status = Mock(stdout="")
     
-    with patch("subprocess.run", side_effect=[mock_branch, mock_status]):
+    with patch("subprocess.run", side_effect=[mock_branch, mock_commit, mock_status]):
         status, msg = health.check_git()
         assert status == "ok"
         assert "limpa" in msg

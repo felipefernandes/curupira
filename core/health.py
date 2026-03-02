@@ -26,7 +26,8 @@ def check_memory_zram() -> tuple[bool, str]:
     """
     # Em sistemas Windows ou mac, /proc/meminfo não existe
     if not os.path.exists("/proc/meminfo"):
-        return True, "Sistema operacional não é Linux ou não tem /proc/meminfo. Assumindo RAM suficiente."
+        logger.warning("Sistema operacional detectado como NÃO Linux. Validação de segurança de RAM pulada.")
+        return True, "Sistema operacional não tem /proc/meminfo. Assumir RAM suficiente (Cuidado: Pode causar crashes em SBCs customizados)."
     
     try:
         total_mem_kb = 0
@@ -56,22 +57,33 @@ def check_memory_zram() -> tuple[bool, str]:
 
 def check_env_secrets() -> tuple[bool, list[str]]:
     """
-    Verifica a presença dos segredos obrigatórios baseados no provedor de IA atual.
+    Verifica a presença dos segredos obrigatórios baseados no provedor de IA atual com Regex.
     """
+    import re
     missing = []
     
-    # Valida presença e um comprimento básico contra strings vazias ou tokens quebrados
-    def is_valid_key(val: str | None) -> bool:
-        return bool(val and len(str(val).strip()) > 10)
+    # Valida presença e regex format compatível
+    def is_valid_key(provider: str, val: str | None) -> bool:
+        if not val:
+            return False
+        v = str(val).strip()
+        if provider == "telegram":
+            # API do telegram: numero_id:letrasnumeros
+            return bool(re.match(r"^\d{8,10}:[a-zA-Z0-9_-]{35}$", v))
+        elif provider == "groq":
+            return v.startswith("gsk_") and len(v) > 20
+        elif provider == "gemini":
+            return v.startswith("AIza") and len(v) >= 30
+        return len(v) > 10
 
-    if not is_valid_key(config.TELEGRAM_TOKEN):
-        missing.append("TELEGRAM_TOKEN")
+    if not is_valid_key("telegram", config.TELEGRAM_TOKEN):
+        missing.append("TELEGRAM_TOKEN (Token inválido ou ausente)")
     
-    if config.AI_PROVIDER == "groq" and not is_valid_key(config.GROQ_API_KEY):
-        missing.append("GROQ_API_KEY")
+    if config.AI_PROVIDER == "groq" and not is_valid_key("groq", config.GROQ_API_KEY):
+        missing.append("GROQ_API_KEY (Formato inválido/ausente)")
     
-    if config.AI_PROVIDER == "gemini" and not is_valid_key(config.GEMINI_API_KEY):
-        missing.append("GEMINI_API_KEY")
+    if config.AI_PROVIDER == "gemini" and not is_valid_key("gemini", config.GEMINI_API_KEY):
+        missing.append("GEMINI_API_KEY (Formato inválido/ausente)")
     
     if missing:
         return False, missing
@@ -91,28 +103,37 @@ def check_system_dependencies() -> tuple[bool, list[str]]:
 
 def check_connectivity() -> tuple[bool, list[str]]:
     """
-    Tenta se conectar rapidamento aos serviços essenciais.
+    Tenta se conectar e validar chaves com os serviços essenciais.
     """
     failures = []
-    urls_to_check = [
-        ("Telegram", "https://api.telegram.org"),
-    ]
+    urls_to_check = []
+    headers = {}
 
-    if config.AI_PROVIDER == "groq":
+    if config.TELEGRAM_TOKEN:
+        urls_to_check.append(("Telegram", f"https://api.telegram.org/bot{config.TELEGRAM_TOKEN}/getMe"))
+    else:
+        urls_to_check.append(("Telegram", "https://api.telegram.org"))
+
+    if config.AI_PROVIDER == "groq" and config.GROQ_API_KEY:
         urls_to_check.append(("Groq", "https://api.groq.com/openai/v1/models"))
-    elif config.AI_PROVIDER == "gemini":
-        urls_to_check.append(("Gemini", "https://generativelanguage.googleapis.com"))
+        headers["Groq"] = {"Authorization": f"Bearer {config.GROQ_API_KEY}"}
+    elif config.AI_PROVIDER == "gemini" and config.GEMINI_API_KEY:
+        urls_to_check.append(("Gemini", f"https://generativelanguage.googleapis.com/v1beta/models?key={config.GEMINI_API_KEY}"))
 
     for name, url in urls_to_check:
         try:
-            # Apenas verificar se o host resolve e aceita requisição (timeout curto)
-            req = urllib.request.Request(url, method="HEAD")
-            urllib.request.urlopen(req, timeout=3)
-        except urllib.error.HTTPError:
-            # HTTP Error significa que conectou, só deu erro de autorização ou rota, o que indica network OK
-            pass
+            req_headers = headers.get(name, {})
+            req = urllib.request.Request(url, headers=req_headers, method="GET")
+            urllib.request.urlopen(req, timeout=5)
+        except urllib.error.HTTPError as e:
+            if e.code == 401:
+                failures.append(f"Autenticação falhou em {name} (Chave de API inválida/401)")
+            elif e.code == 403:
+                failures.append(f"Acesso negado em {name} (403 Forbidden)")
+            else:
+                failures.append(f"Erro HTTP {e.code} ao conectar no {name}")
         except Exception as e:
-            failures.append(f"Falha ao conectar no {name} ({url}): {e}")
+            failures.append(f"Falha de rede ao conectar no {name}: {e}")
             
     if failures:
         return False, failures
@@ -129,24 +150,24 @@ def check_git() -> tuple[str, str]:
         branch = branch_res.stdout.strip()
         
         if not branch:
-            return "unknown", "Repositório Git não detectado ou sem commits."
+            return "unknown", "Repositório Git não detectado ou sem commits iniciais."
+        
+        commit_res = subprocess.run(["git", "log", "-1", "--format=%h"], capture_output=True, text=True, check=True)
+        commit = commit_res.stdout.strip()
         
         # Tenta pegar status (modified, untracked)
         status_res = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, check=True)
         changes = status_res.stdout.strip()
         
         estado = "limpa" if not changes else "com arquivos modificados"
-        
-        # Tenta verificar se tem remote origin para pull (opicional, pode falhar timeout)
-        # Não faremos fetch para não atrasar o bot, apenas vemos status local em relação ao upstream
-        return "ok", f"Branch atual: {branch} ({estado})"
+        return "ok", f"Branch: {branch} (Commit: {commit}) - Árvore {estado}."
         
     except FileNotFoundError:
-        return "unknown", "Git não instalado no sistema."
-    except subprocess.CalledProcessError:
-        return "unknown", "Pasta atual não é um repositório git válido."
+        return "unknown", "Git não processado: Binário 'git' não instalado no PATH."
+    except subprocess.CalledProcessError as e:
+        return "unknown", f"Erro interno ao validar Git: {'Repositório vazio/corrompido' if not e.stderr else e.stderr.strip()}"
     except Exception as e:
-        return "unknown", f"Erro inesperado ao verificar git: {e}"
+        return "unknown", f"Erro de I/O inesperado ao verificar git: {e}"
 
 def run_full_diagnostic(force: bool = False) -> HealthReport:
     """

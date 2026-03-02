@@ -582,6 +582,16 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                     msg = response.choices[0].message
                     messages.append(msg)
                     
+                    if hasattr(response, 'usage') and response.usage:
+                        prompt_tokens = getattr(response.usage, 'prompt_tokens', 0)
+                        completion_tokens = getattr(response.usage, 'completion_tokens', 0)
+                        mem_mgr = context.get('memory_manager')
+                        if mem_mgr:
+                            try:
+                                await mem_mgr.log_token_usage('groq', self.model_name, prompt_tokens, completion_tokens)
+                            except Exception as e:
+                                self.logger.warning(f"Erro ao salvar token usage: {e}")
+                    
                     if msg.tool_calls:
                         # Check and dispatch preamble text for multi-turn conversational feel
                         if on_intermediate_reply is not None and msg.content:
@@ -760,6 +770,16 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                          
                      # Append Agent Response
                      contents.append(response.candidates[0].content)
+                     
+                     if hasattr(response, 'usage_metadata') and response.usage_metadata:
+                         prompt_tokens = getattr(response.usage_metadata, 'prompt_token_count', 0)
+                         completion_tokens = getattr(response.usage_metadata, 'candidates_token_count', 0)
+                         mem_mgr = context.get('memory_manager')
+                         if mem_mgr:
+                             try:
+                                 await mem_mgr.log_token_usage('gemini', self.model_name, prompt_tokens, completion_tokens)
+                             except Exception as e:
+                                 self.logger.warning(f"Erro ao salvar token usage: {e}")
                      
                      text_parts = []
                      function_calls = []

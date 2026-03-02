@@ -84,6 +84,16 @@ class MemoryManager:
                     FOREIGN KEY(user_id) REFERENCES users(user_id)
                 )
             """)
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS token_usage (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    provider TEXT,
+                    model TEXT,
+                    prompt_tokens INTEGER,
+                    completion_tokens INTEGER,
+                    timestamp DATETIME
+                )
+            """)
             await db.commit()
 
             # Migration: add recurrence columns if they don't exist yet
@@ -180,6 +190,31 @@ class MemoryManager:
                      role_name = "User" if role == "user" else "Model"
                      formatted_history.append(f"{role_name}: {content}")
                 return "\n".join(formatted_history)
+
+    async def log_token_usage(self, provider: str, model: str, prompt_tokens: int, completion_tokens: int):
+        """Logs the tokens consumed by the LLM."""
+        async with aiosqlite.connect(self.db_path) as db:
+            await db.execute("""
+                INSERT INTO token_usage (provider, model, prompt_tokens, completion_tokens, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            """, (provider, model, prompt_tokens, completion_tokens, datetime.now()))
+            await db.commit()
+
+    async def get_usage_summary(self) -> Dict[str, Dict[str, int]]:
+        """Returns a consolidated report of token usage grouped by provider."""
+        summary = {}
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute("""
+                SELECT provider, SUM(prompt_tokens), SUM(completion_tokens)
+                FROM token_usage
+                GROUP BY provider
+            """) as cursor:
+                async for row in cursor:
+                    summary[row[0]] = {
+                        "prompt_tokens": row[1] or 0,
+                        "completion_tokens": row[2] or 0
+                    }
+        return summary
 
 
 class SaveFactSkill(BaseSkill):

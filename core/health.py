@@ -17,6 +17,7 @@ class HealthReport(TypedDict):
 _last_diagnostic: "HealthReport | None" = None
 _last_diagnostic_time: float = 0
 _CACHE_TTL = 60
+MIN_RAM_KB = 2_000_000
 
 
 def check_memory_zram() -> tuple[bool, str]:
@@ -30,14 +31,13 @@ def check_memory_zram() -> tuple[bool, str]:
     try:
         total_mem_kb = 0
         with open("/proc/meminfo", "r") as f:
-            for line in f:
-                if line.startswith("MemTotal:"):
-                    parts = line.split()
-                    total_mem_kb = int(parts[1])
-                    break
+            # Lê apenas a primeira linha necessária ao invés de ler todo o arquivo
+            first_line = f.readline()
+            if first_line.startswith("MemTotal:"):
+                total_mem_kb = int(first_line.split()[1])
         
-        # Se MemTotal for maior que 2GB (aprox 2000000 kB), assume que tá tranquilo
-        if total_mem_kb > 2_000_000:
+        # Se MemTotal for maior que o mínimo (aprox 2000000 kB), assume que tá tranquilo
+        if total_mem_kb > MIN_RAM_KB:
             return True, f"Memória total: {total_mem_kb // 1024} MB (OK)"
 
         # Verifica zram ou swap
@@ -205,8 +205,7 @@ def run_full_diagnostic(force: bool = False) -> HealthReport:
     # Compila status
     status = "ok"
     if issues:
-        # Faltar token de apis obriga crítico. Faltar ffmpeg é apenas um aviso.
-        if not env_ok:
+        if not env_ok or not deps_ok:
             status = "critical"
         else:
             status = "warning"

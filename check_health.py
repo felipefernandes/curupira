@@ -59,7 +59,6 @@ def main():
 
     print("========================================")
     # Resultado Final Consolidado
-    report = health.run_full_diagnostic()
     if report["status"] == "ok":
         print("🎉 STATUS GERAL: SAUDÁVEL. O bot está pronto para operar.")
         sys.exit(0)

@@ -24,36 +24,42 @@ def check_memory_zram() -> tuple[bool, str]:
     """
     Verifica se a memória é suficiente ou se o zram está ativo.
     """
-    # Em sistemas Windows ou mac, /proc/meminfo não existe
-    if not os.path.exists("/proc/meminfo"):
-        logger.warning("Sistema operacional detectado como NÃO Linux. Validação de segurança de RAM pulada.")
-        return True, "Sistema operacional não tem /proc/meminfo. Assumir RAM suficiente (Cuidado: Pode causar crashes em SBCs customizados)."
+    total_mem_kb = 0
     
     try:
-        total_mem_kb = 0
-        with open("/proc/meminfo", "r") as f:
-            # Lê apenas a primeira linha necessária ao invés de ler todo o arquivo
-            first_line = f.readline()
-            if first_line.startswith("MemTotal:"):
-                total_mem_kb = int(first_line.split()[1])
+        import psutil
+        total_mem_kb = psutil.virtual_memory().total // 1024
+    except ImportError:
+        # Fallback sem psutil em hardwares exóticos
+        if not os.path.exists("/proc/meminfo"):
+            logger.warning("Sistema não-Linux e psutil indisponível. Validação de RAM pulada.")
+            return False, "Aviso: Hardware desconhecido e psutil ausente. Risco de OOM indetectável."
         
-        # Se MemTotal for maior que o mínimo (aprox 2000000 kB), assume que tá tranquilo
-        if total_mem_kb > MIN_RAM_KB:
-            return True, f"Memória total: {total_mem_kb // 1024} MB (OK)"
+        try:
+            with open("/proc/meminfo", "r") as f:
+                first_line = f.readline()
+                if first_line.startswith("MemTotal:"):
+                    total_mem_kb = int(first_line.split()[1])
+        except Exception as e:
+            logger.warning(f"Erro ao ler informações de memória: {e}")
+            return False, "Aviso: Não foi possível rastrear informações de memória."
 
-        # Verifica zram ou swap
-        if os.path.exists("/proc/swaps"):
+    if total_mem_kb > MIN_RAM_KB:
+        return True, f"Memória total: {total_mem_kb // 1024} MB (OK)"
+
+    # Verifica zram ou swap nativo
+    if os.path.exists("/proc/swaps"):
+        try:
             with open("/proc/swaps", "r") as f:
                 swaps = f.read()
                 if "zram" in swaps:
                     return True, "Dispositivo com pouca RAM, mas zram está ativo (OK)."
                 elif "file" in swaps or "partition" in swaps:
                     return True, "Dispositivo com pouca RAM, mas swap está ativo (OK)."
+        except Exception:
+            pass
             
-        return False, "Pouca RAM (< 2GB) e nenhum ZRAM/Swap detectado. Risco de Out Of Memory."
-    except Exception as e:
-        logger.warning(f"Erro ao ler informações de memória: {e}")
-        return True, "Aviso: não foi possível validar a memória."
+    return False, "Pouca RAM (< 2GB) e nenhum ZRAM/Swap detectado. Risco de Out Of Memory."
 
 def check_env_secrets() -> tuple[bool, list[str]]:
     """
@@ -69,7 +75,7 @@ def check_env_secrets() -> tuple[bool, list[str]]:
         v = str(val).strip()
         if provider == "telegram":
             # API do telegram: numero_id:letrasnumeros
-            return bool(re.match(r"^\d{8,10}:[a-zA-Z0-9_-]{35}$", v))
+            return bool(re.match(r"^\d{8,12}:[a-zA-Z0-9_-]{30,45}$", v))
         elif provider == "groq":
             return v.startswith("gsk_") and len(v) > 20
         elif provider == "gemini":
@@ -133,7 +139,7 @@ def check_connectivity() -> tuple[bool, list[str]]:
             else:
                 failures.append(f"Erro HTTP {e.code} ao conectar no {name}")
         except Exception as e:
-            failures.append(f"Falha de rede ao conectar no {name}: {e}")
+            failures.append(f"Falha de rede ao conectar no {name} ({type(e).__name__} genérico)")
             
     if failures:
         return False, failures

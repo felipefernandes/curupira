@@ -12,14 +12,14 @@ def mock_config():
         yield mock
 
 def test_check_memory_zram_not_linux():
-    with patch("os.path.exists", return_value=False):
+    with patch.dict("sys.modules", {"psutil": None}), patch("os.path.exists", return_value=False):
         ok, msg = health.check_memory_zram()
-        assert ok
-        assert "não tem /proc/meminfo" in msg
+        assert not ok
+        assert "Hardware desconhecido" in msg
 
 def test_check_memory_zram_enough_ram():
     fake_meminfo = "MemTotal:        4000000 kB\n"
-    with patch("os.path.exists", return_value=True):
+    with patch.dict("sys.modules", {"psutil": None}), patch("os.path.exists", return_value=True):
         with patch("builtins.open", mock_open(read_data=fake_meminfo)):
             ok, msg = health.check_memory_zram()
             assert ok
@@ -29,7 +29,7 @@ def test_check_memory_zram_low_ram_with_zram():
     fake_meminfo = "MemTotal:        1000000 kB\n"
     fake_swaps = "Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\n/dev/zram0                              partition\t995116\t\t2124\t\t100\n"
     
-    with patch("os.path.exists", return_value=True):
+    with patch.dict("sys.modules", {"psutil": None}), patch("os.path.exists", return_value=True):
         m = mock_open()
         m.side_effect = [
             mock_open(read_data=fake_meminfo).return_value,
@@ -44,7 +44,7 @@ def test_check_memory_zram_low_ram_no_swap():
     fake_meminfo = "MemTotal:        1000000 kB\n"
     fake_swaps = "Filename\t\t\t\tType\t\tSize\t\tUsed\t\tPriority\n"
     
-    with patch("os.path.exists", return_value=True):
+    with patch.dict("sys.modules", {"psutil": None}), patch("os.path.exists", return_value=True):
         m = mock_open()
         m.side_effect = [
             mock_open(read_data=fake_meminfo).return_value,
@@ -100,7 +100,7 @@ def test_check_connectivity_fail(mock_config):
         ok, failures = health.check_connectivity()
         assert not ok
         assert len(failures) > 0
-        assert "Timeout" in failures[0]
+        assert "Exception" in failures[0]
 
 def test_check_git_ok():
     from unittest.mock import Mock

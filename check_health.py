@@ -12,8 +12,15 @@ Uso:
 import sys
 from core import health
 
-def print_status(name: str, status: bool, details: str):
-    icon = "✅" if status else "❌"
+def print_status(name: str, status: str, details: str):
+    icon = "❓"
+    if status == "ok":
+        icon = "✅"
+    elif status == "warning":
+        icon = "⚠️"
+    elif status == "critical":
+        icon = "❌"
+    
     print(f"[{icon}] {name}:")
     print(f"    {details}")
     print()
@@ -27,35 +34,35 @@ def main():
     report = health.run_full_diagnostic(force=True)
 
     # 1. Memória & ZRAM
-    mem_msg = report["details"].get("memory", "")
-    mem_ok = mem_msg not in report["issues"]
-    print_status("Memória e ZRAM", mem_ok, mem_msg)
+    mem_status_msg = report["details"].get("memory", "")
+    mem_status = "ok" if mem_status_msg not in report["issues"] else "warning"
+    print_status("Memória e ZRAM", mem_status, mem_status_msg)
 
     # 2. Variáveis e Segredos
-    env_msg = report["details"].get("env", "")
-    env_ok = env_msg not in report["issues"]
-    print_status("Segredos e Configuração", env_ok, env_msg)
+    env_status_msg = report["details"].get("env", "")
+    env_status = "ok" if env_status_msg not in report["issues"] else "critical"
+    print_status("Segredos e Configuração", env_status, env_status_msg)
 
     # 3. Dependências (OS)
-    deps_msg = report["details"].get("dependencies", "")
-    deps_ok = deps_msg not in report["issues"]
-    icon_deps = "✅" if deps_ok else "⚠️"
-    print(f"[{icon_deps}] Dependências de Sistema:")
-    print(f"    {deps_msg}")
-    print()
+    deps_status_msg = report["details"].get("dependencies", "")
+    deps_status = "ok" if deps_status_msg not in report["issues"] else "critical"
+    print_status("Dependências de Sistema", deps_status, deps_status_msg)
 
     # 4. Conectividade
-    conn_msg = report["details"].get("connectivity", "")
-    conn_ok = conn_msg not in report["issues"]
-    print_status("Conectividade e Internet", conn_ok, conn_msg)
+    conn_status_msg = report["details"].get("connectivity", "")
+    conn_status = "ok" if conn_status_msg not in report["issues"] else "warning"
+    print_status("Conectividade e Internet", conn_status, conn_status_msg)
 
     # 5. Git Status
-    git_msg = report["details"].get("git", "")
-    git_ok = git_msg not in report["issues"]
-    git_icon = "❓" if "Erro" in git_msg or "não instalado" in git_msg else ("✅" if "limpa" in git_msg else "⚠️")
-    print(f"[{git_icon}] Repositório Git:")
-    print(f"    {git_msg}")
-    print()
+    git_status_msg = report["details"].get("git", "")
+    git_status = "ok"
+    if git_status_msg in report["issues"]:
+        git_status = "critical"
+    elif "modificados" in git_status_msg or "não processado" in git_status_msg:
+        git_status = "warning"
+    elif "unknown" in git_status_msg:
+        git_status = "warning"
+    print_status("Repositório Git", git_status, git_status_msg)
 
     print("========================================")
     # Resultado Final Consolidado

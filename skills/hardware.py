@@ -30,18 +30,25 @@ class HardwareMonitoringSkill(BaseSkill):
 
     async def execute(self, context: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         """
-        Retrieves hardware metrics.
+        Retrieves hardware metrics and health diagnostics.
         Runs blocking psutil calls in a separate thread to avoid freezing the bot.
         """
         if psutil is None:
             return self.error("Biblioteca `psutil` não instalada no servidor.")
 
+        from core import health
+
         try:
             # Run blocking I/O in thread
             metrics = await asyncio.to_thread(self._get_metrics)
             
+            # Run health diagnostics
+            diag = await asyncio.to_thread(health.run_full_diagnostic)
+            
             # Add time to metrics so LLM doesn't miss it if it ignores summary
             metrics["system_time"] = datetime.now().strftime('%H:%M:%S')
+            metrics["health_status"] = diag["status"]
+            metrics["health_issues"] = diag["issues"]
             
             # Format output with emojis
             summary = (
@@ -53,7 +60,12 @@ class HardwareMonitoringSkill(BaseSkill):
             )
             
             if metrics['temp'] != "N/A":
-                summary += f"🌡️ **Temp:** {metrics['temp']}°C"
+                summary += f"🌡️ **Temp:** {metrics['temp']}°C\n"
+            
+            if diag["issues"]:
+                summary += "\n⚠️ **Avisos de Integridade (Health Check):**\n"
+                for issue in diag["issues"]:
+                    summary += f"- Aviso: {issue}\n"
                 
             return self.success(metrics, summary)
         except psutil.Error as pe:

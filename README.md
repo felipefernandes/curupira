@@ -65,6 +65,13 @@ Se você já tem experiência com Python, siga estes passos:
     > Alternativamente, crie um `.env` baseado no exemplo do [Guia de Instalação](docs/INSTALL.md).
 5.  **Rode**: `python bot.py`
 
+### 🩺 Diagnóstico de Integridade (Doctor)
+
+Se o bot apresentar problemas ou se você quiser validar sua instalação (ZRAM, FFmpeg, chaves de API, etc), execute o script de diagnóstico standalone:
+```bash
+python check_health.py
+```
+
 > 📖 **Instruções detalhadas?** Veja o nosso [Guia de Instalação e Setup](docs/INSTALL.md).
 
 ---

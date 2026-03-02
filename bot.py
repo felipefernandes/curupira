@@ -378,9 +378,16 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ Sistema Online e você está autenticado! (Agentic Mode)\n{provider_status}")
 
 def main():
-    if not config.TELEGRAM_TOKEN:
-        print("Erro: TELEGRAM_TOKEN não configurado.")
+    from core import health
+    diag = health.run_full_diagnostic()
+    if diag["status"] == "critical":
+        logging.error("❌ STATUS CRÍTICO NO HEALTH CHECK: " + "; ".join(diag["issues"]))
+        print("Erro: Falha crítica na configuração. Verifique os logs.")
         return
+    elif diag["status"] == "warning":
+        logging.warning("⚠️ HEALTH CHECK (AVISOS): " + "; ".join(diag["issues"]))
+    else:
+        logging.info("✅ Health Check: Sistema Saudável.")
 
     app = ApplicationBuilder().token(config.TELEGRAM_TOKEN).post_init(post_init).build()
     

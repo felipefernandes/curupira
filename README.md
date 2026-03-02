@@ -57,7 +57,12 @@ Se você já tem experiência com Python, siga estes passos:
 1.  **Clone e Acesse**: `git clone https://github.com/felipefernandes/curupira.git && cd curupira`
 2.  **Ambiente**: `python -m venv venv && source venv/bin/activate`
 3.  **Instale**: `pip install -r requirements.txt`
-4.  **Configure**: Crie um `.env` baseado no exemplo do [Guia de Instalação](docs/INSTALL.md).
+4.  **Configure**: Copie o template de configuração e edite com seus tokens:
+    ```bash
+    cp default.config.toml config.toml
+    # Edite config.toml com suas chaves e preferências
+    ```
+    > Alternativamente, crie um `.env` baseado no exemplo do [Guia de Instalação](docs/INSTALL.md).
 5.  **Rode**: `python bot.py`
 
 > 📖 **Instruções detalhadas?** Veja o nosso [Guia de Instalação e Setup](docs/INSTALL.md).

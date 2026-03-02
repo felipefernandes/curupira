@@ -97,11 +97,10 @@ def check_env_secrets() -> tuple[bool, list[str]]:
 
 def check_system_dependencies() -> tuple[bool, list[str]]:
     """
-    Verifica a presença de binários do sistema como ffmpeg.
+    Verifica a presença de binários do sistema.
     """
     missing = []
-    if not shutil.which("ffmpeg"):
-        missing.append("ffmpeg")
+    # ffmpeg removido pois é feature futura
     
     if missing:
         return False, missing
@@ -113,7 +112,8 @@ def check_connectivity() -> tuple[bool, list[str]]:
     """
     failures = []
     urls_to_check = []
-    headers = {}
+    common_headers = {"User-Agent": "CurupiraHealthCheck/1.0"}
+    headers: Dict[str, Dict[str, str]] = {}
 
     if config.TELEGRAM_TOKEN:
         urls_to_check.append(("Telegram", f"https://api.telegram.org/bot{config.TELEGRAM_TOKEN}/getMe"))
@@ -122,13 +122,16 @@ def check_connectivity() -> tuple[bool, list[str]]:
 
     if config.AI_PROVIDER == "groq" and config.GROQ_API_KEY:
         urls_to_check.append(("Groq", "https://api.groq.com/openai/v1/models"))
-        headers["Groq"] = {"Authorization": f"Bearer {config.GROQ_API_KEY}"}
+        headers["Groq"] = {
+            "Authorization": f"Bearer {config.GROQ_API_KEY}",
+            **common_headers
+        }
     elif config.AI_PROVIDER == "gemini" and config.GEMINI_API_KEY:
         urls_to_check.append(("Gemini", f"https://generativelanguage.googleapis.com/v1beta/models?key={config.GEMINI_API_KEY}"))
 
     for name, url in urls_to_check:
         try:
-            req_headers = headers.get(name, {})
+            req_headers = {**common_headers, **headers.get(name, {})}
             req = urllib.request.Request(url, headers=req_headers, method="GET")
             urllib.request.urlopen(req, timeout=5)
         except urllib.error.HTTPError as e:
@@ -233,7 +236,9 @@ def run_full_diagnostic(force: bool = False) -> HealthReport:
     # Compila status
     status = "ok"
     if issues:
-        if not env_ok or not deps_ok or git_status in ["critical", "unknown"]:
+        # Só bloqueia startup por ENV ausente ou conectividade crítica (Telegram falha severa ou segredos errados)
+        # Git unknown ou deps_missing agora são apenas warnings
+        if not env_ok:
             status = "critical"
         else:
             status = "warning"

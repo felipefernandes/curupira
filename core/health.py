@@ -166,14 +166,15 @@ def check_git() -> tuple[str, str]:
         changes = status_res.stdout.strip()
         
         estado = "limpa" if not changes else "com arquivos modificados"
-        return "ok", f"Branch: {branch} (Commit: {commit}) - Árvore {estado}."
+        status_code = "ok" if not changes else "warning"
+        return status_code, f"Branch: {branch} (Commit: {commit}) - Árvore {estado}."
         
     except FileNotFoundError:
-        return "unknown", "Git não processado: Binário 'git' não instalado no PATH."
+        return "critical", "Git não processado: Binário 'git' não instalado no PATH."
     except subprocess.CalledProcessError as e:
-        return "unknown", f"Erro interno ao validar Git: {'Repositório vazio/corrompido' if not e.stderr else e.stderr.strip()}"
+        return "critical", f"Erro interno ao validar Git: {'Repositório vazio/corrompido' if not e.stderr else e.stderr.strip()}"
     except Exception as e:
-        return "unknown", f"Erro de I/O inesperado ao verificar git: {e}"
+        return "critical", f"Erro de I/O inesperado ao verificar git: {e}"
 
 def run_full_diagnostic(force: bool = False) -> HealthReport:
     """
@@ -226,13 +227,13 @@ def run_full_diagnostic(force: bool = False) -> HealthReport:
     # Git
     git_status, git_msg = check_git()
     details["git"] = git_msg
-    if git_status == "critical":
+    if git_status in ["critical", "warning"]:
         issues.append(git_msg)
         
     # Compila status
     status = "ok"
     if issues:
-        if not env_ok or not deps_ok:
+        if not env_ok or not deps_ok or git_status == "critical":
             status = "critical"
         else:
             status = "warning"

@@ -10,7 +10,7 @@ Uso:
 """
 
 import sys
-from core import health
+from core.health import run_full_diagnostic
 
 def print_status(name: str, status: str, details: str):
     icon = "❓"
@@ -31,7 +31,7 @@ def main():
     print("========================================")
     print()
 
-    report = health.run_full_diagnostic(force=True)
+    report = run_full_diagnostic(force=True)
 
     # 1. Memória & ZRAM
     mem_status_msg = report["details"].get("memory", "")

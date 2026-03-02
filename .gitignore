@@ -47,3 +47,6 @@ test_debug*.*
 
 .claude/settings.local.json
 cov*.*
+
+# Temp files
+.temp/

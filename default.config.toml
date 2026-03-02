@@ -58,10 +58,14 @@ reminders = true
 time      = true
 hardware  = true
 memory    = true
-rss       = true
-job_hunter = true
-sports    = true
 github    = false   # Requer GITHUB_PERSONAL_ACCESS_TOKEN
+
+# NOTA: rss, job_hunter e sports possuem seções próprias abaixo
+# ([skills.rss], [skills.job_hunter], [skills.sports]).
+# Para desabilitá-las, use variáveis de ambiente:
+#   SKILL_RSS_ENABLED=false
+#   SKILL_JOB_HUNTER_ENABLED=false
+#   SKILL_SPORTS_ENABLED=false
 
 # ─── Configurações específicas por skill ──────────────────────────────
 

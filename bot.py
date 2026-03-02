@@ -377,17 +377,28 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     provider_status = f"IA: {config.AI_PROVIDER.upper()}"
     await update.message.reply_text(f"✅ Sistema Online e você está autenticado! (Agentic Mode)\n{provider_status}")
 
-def main():
+def run_pre_start_checks() -> bool:
+    """Executa verificações de configuração e ambiente antes de iniciar a Aplicação."""
+    if not config.TELEGRAM_TOKEN:
+        logging.error("❌ TELEGRAM_TOKEN ausente na configuração. O bot não pode iniciar.")
+        return False
+        
     from core import health
     diag = health.run_full_diagnostic()
     if diag["status"] == "critical":
         logging.error("❌ STATUS CRÍTICO NO HEALTH CHECK: " + "; ".join(diag["issues"]))
         print("Erro: Falha crítica na configuração. Verifique os logs.")
-        return
+        return False
     elif diag["status"] == "warning":
         logging.warning("⚠️ HEALTH CHECK (AVISOS): " + "; ".join(diag["issues"]))
     else:
         logging.info("✅ Health Check: Sistema Saudável.")
+    
+    return True
+
+def main():
+    if not run_pre_start_checks():
+        return
 
     app = ApplicationBuilder().token(config.TELEGRAM_TOKEN).post_init(post_init).build()
     

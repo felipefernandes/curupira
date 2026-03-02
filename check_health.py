@@ -31,7 +31,8 @@ def main():
     print("========================================")
     print()
 
-    report = run_full_diagnostic(force=True)
+    force_run = "--force" in sys.argv
+    report = run_full_diagnostic(force=force_run)
 
     # 1. Memória & ZRAM
     mem_status_msg = report["details"].get("memory", "")

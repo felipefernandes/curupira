@@ -227,13 +227,13 @@ def run_full_diagnostic(force: bool = False) -> HealthReport:
     # Git
     git_status, git_msg = check_git()
     details["git"] = git_msg
-    if git_status in ["critical", "warning"]:
+    if git_status in ["critical", "warning", "unknown"]:
         issues.append(git_msg)
         
     # Compila status
     status = "ok"
     if issues:
-        if not env_ok or not deps_ok or git_status == "critical":
+        if not env_ok or not deps_ok or git_status in ["critical", "unknown"]:
             status = "critical"
         else:
             status = "warning"

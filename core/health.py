@@ -14,6 +14,11 @@ class HealthReport(TypedDict):
     issues: list[str]
     details: Dict[str, Any]
 
+_last_diagnostic: "HealthReport | None" = None
+_last_diagnostic_time: float = 0
+_CACHE_TTL = 60
+
+
 def check_memory_zram() -> tuple[bool, str]:
     """
     Verifica se a memória é suficiente ou se o zram está ativo.
@@ -36,14 +41,15 @@ def check_memory_zram() -> tuple[bool, str]:
             return True, f"Memória total: {total_mem_kb // 1024} MB (OK)"
 
         # Verifica zram ou swap
-        with open("/proc/swaps", "r") as f:
-            swaps = f.read()
-            if "zram" in swaps:
-                return True, "Dispositivo com pouca RAM, mas zram está ativo (OK)."
-            elif "file" in swaps or "partition" in swaps:
-                return True, "Dispositivo com pouca RAM, mas swap está ativo (OK)."
+        if os.path.exists("/proc/swaps"):
+            with open("/proc/swaps", "r") as f:
+                swaps = f.read()
+                if "zram" in swaps:
+                    return True, "Dispositivo com pouca RAM, mas zram está ativo (OK)."
+                elif "file" in swaps or "partition" in swaps:
+                    return True, "Dispositivo com pouca RAM, mas swap está ativo (OK)."
             
-            return False, "Pouca RAM (< 2GB) e nenhum ZRAM/Swap detectado. Risco de Out Of Memory."
+        return False, "Pouca RAM (< 2GB) e nenhum ZRAM/Swap detectado. Risco de Out Of Memory."
     except Exception as e:
         logger.warning(f"Erro ao ler informações de memória: {e}")
         return True, "Aviso: não foi possível validar a memória."
@@ -53,13 +59,18 @@ def check_env_secrets() -> tuple[bool, list[str]]:
     Verifica a presença dos segredos obrigatórios baseados no provedor de IA atual.
     """
     missing = []
-    if not config.TELEGRAM_TOKEN:
+    
+    # Valida presença e um comprimento básico contra strings vazias ou tokens quebrados
+    def is_valid_key(val: str | None) -> bool:
+        return bool(val and len(str(val).strip()) > 10)
+
+    if not is_valid_key(config.TELEGRAM_TOKEN):
         missing.append("TELEGRAM_TOKEN")
     
-    if config.AI_PROVIDER == "groq" and not config.GROQ_API_KEY:
+    if config.AI_PROVIDER == "groq" and not is_valid_key(config.GROQ_API_KEY):
         missing.append("GROQ_API_KEY")
     
-    if config.AI_PROVIDER == "gemini" and not config.GEMINI_API_KEY:
+    if config.AI_PROVIDER == "gemini" and not is_valid_key(config.GEMINI_API_KEY):
         missing.append("GEMINI_API_KEY")
     
     if missing:
@@ -134,11 +145,21 @@ def check_git() -> tuple[str, str]:
         return "unknown", "Git não instalado no sistema."
     except subprocess.CalledProcessError:
         return "unknown", "Pasta atual não é um repositório git válido."
+    except Exception as e:
+        return "unknown", f"Erro inesperado ao verificar git: {e}"
 
-def run_full_diagnostic() -> HealthReport:
+def run_full_diagnostic(force: bool = False) -> HealthReport:
     """
     Executa todas as validações e retorna o relatório consolidado de saúde da instância.
+    Utiliza um cache de 60 segundos para não onerar sistema em caso de spam.
     """
+    global _last_diagnostic, _last_diagnostic_time
+    import time
+    
+    now = time.time()
+    if not force and _last_diagnostic and (now - _last_diagnostic_time < _CACHE_TTL):
+        return _last_diagnostic
+
     issues = []
     details = {}
     
@@ -190,4 +211,8 @@ def run_full_diagnostic() -> HealthReport:
         else:
             status = "warning"
             
-    return HealthReport(status=status, issues=issues, details=details)
+    report = HealthReport(status=status, issues=issues, details=details)
+    _last_diagnostic = report
+    _last_diagnostic_time = now
+    
+    return report

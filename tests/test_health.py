@@ -56,7 +56,7 @@ def test_check_memory_zram_low_ram_no_swap():
             assert "Risco de Out Of Memory" in msg
 
 def test_check_env_secrets_groq(mock_config):
-    mock_config.TELEGRAM_TOKEN = "123"
+    mock_config.TELEGRAM_TOKEN = "1234567890_abcdef"
     mock_config.AI_PROVIDER = "groq"
     mock_config.GROQ_API_KEY = None
     
@@ -64,12 +64,12 @@ def test_check_env_secrets_groq(mock_config):
     assert not ok
     assert "GROQ_API_KEY" in missing
     
-    mock_config.GROQ_API_KEY = "g_123"
+    mock_config.GROQ_API_KEY = "g_1234567890_abcdef"
     ok, missing = health.check_env_secrets()
     assert ok
 
 def test_check_env_secrets_gemini(mock_config):
-    mock_config.TELEGRAM_TOKEN = "123"
+    mock_config.TELEGRAM_TOKEN = "1234567890_abcdef"
     mock_config.AI_PROVIDER = "gemini"
     mock_config.GEMINI_API_KEY = None
     

@@ -119,6 +119,6 @@ def test_run_full_diagnostic():
          patch("core.health.check_connectivity", return_value=(True, [])), \
          patch("core.health.check_git", return_value=("ok", "Clean")):
          
-         report = health.run_full_diagnostic()
+         report = health.run_full_diagnostic(force=True)
          assert report["status"] == "ok"
          assert len(report["issues"]) == 0

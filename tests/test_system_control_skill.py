@@ -215,9 +215,17 @@ class TestSystemControlSkill:
         assert "não fornecido" in result["error"].lower()
 
     @pytest.mark.asyncio
+    @patch("skills.system_control.get_config")
     @patch("skills.system_control.get_security_guard")
-    async def test_execute_command_blocked_by_guard(self, mock_guard_func):
+    async def test_execute_command_blocked_by_guard(self, mock_guard_func, mock_get_config):
         """Test that dangerous commands are blocked by security guard."""
+        # Mock configuration to allow custom commands
+        mock_config = MagicMock()
+        mock_config.system_control_security_level = "normal"
+        mock_config.system_control_allow_custom_commands = True
+        mock_config.system_control_allow_file_writes = False
+        mock_get_config.return_value = mock_config
+
         # Mock security guard to reject command
         mock_guard = AsyncMock()
         mock_guard.evaluate_command = AsyncMock(
@@ -236,10 +244,18 @@ class TestSystemControlSkill:
         assert "destrutivo" in result["error"].lower()
 
     @pytest.mark.asyncio
+    @patch("skills.system_control.get_config")
     @patch("skills.system_control.shutil.which")
     @patch("skills.system_control.get_security_guard")
-    async def test_execute_command_approved_and_success(self, mock_guard_func, mock_which):
+    async def test_execute_command_approved_and_success(self, mock_guard_func, mock_which, mock_get_config):
         """Test successful execution of LLM-approved command."""
+        # Mock configuration to allow custom commands
+        mock_config = MagicMock()
+        mock_config.system_control_security_level = "normal"
+        mock_config.system_control_allow_custom_commands = True
+        mock_config.system_control_allow_file_writes = False
+        mock_get_config.return_value = mock_config
+
         # Mock security guard to approve command
         mock_guard = AsyncMock()
         mock_guard.evaluate_command = AsyncMock(
@@ -297,8 +313,8 @@ class TestSystemControlSkill:
     @pytest.mark.asyncio
     async def test_run_subprocess_output_truncation(self):
         """Test that large outputs are truncated to prevent OOM."""
-        # Mock subprocess that returns large output
-        large_output = "x" * (self.skill.MAX_OUTPUT_SIZE + 1000)
+        # Mock subprocess that returns large output (using short repeating pattern to avoid token detection)
+        large_output = "line\n" * ((self.skill.MAX_OUTPUT_SIZE // 5) + 200)
 
         async def mock_create_subprocess(*args, **kwargs):
             mock_process = MagicMock()

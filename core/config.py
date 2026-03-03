@@ -339,6 +339,83 @@ if API_FOOTBALL_KEY:
 if PANDASCORE_KEY:
     logger.info("PandaScore configurada para eSports (1000 req/mês).")
 
+# ── System Control Skill (Power User) ──────────────────────────────────
+
+SYSTEM_CONTROL_SECURITY_LEVEL: str = _cfg(
+    "SYSTEM_CONTROL_SECURITY_LEVEL",
+    "skills", "system_control", "security_level",
+    default="normal"
+)
+
+SYSTEM_CONTROL_ALLOW_CUSTOM_COMMANDS: bool = _cfg_bool(
+    "SYSTEM_CONTROL_ALLOW_CUSTOM_COMMANDS",
+    "skills", "system_control", "allow_custom_commands",
+    default=False
+)
+
+SYSTEM_CONTROL_ALLOW_FILE_WRITES: bool = _cfg_bool(
+    "SYSTEM_CONTROL_ALLOW_FILE_WRITES",
+    "skills", "system_control", "allow_file_writes",
+    default=False
+)
+
+# ── Security & Audit ───────────────────────────────────────────────────
+
+SECURITY_AUDIT_LOG_PATH: str = _cfg(
+    "SECURITY_AUDIT_LOG_PATH",
+    "security", "audit_log_path",
+    default="/var/log/curupira_security.log"
+)
+
+SECURITY_NOTIFY_EVENTS: bool = _cfg_bool(
+    "SECURITY_NOTIFY_EVENTS",
+    "security", "notify_security_events",
+    default=False
+)
+
+# ── Config Class (for dependency injection compatibility) ──────────────
+
+class Config:
+    """Configuration class for accessing settings via properties."""
+
+    @property
+    def system_control_security_level(self) -> str:
+        """Security level for system control skill: strict, normal, or permissive."""
+        return SYSTEM_CONTROL_SECURITY_LEVEL
+
+    @property
+    def system_control_allow_custom_commands(self) -> bool:
+        """Allow custom commands via LLM guard."""
+        return SYSTEM_CONTROL_ALLOW_CUSTOM_COMMANDS
+
+    @property
+    def system_control_allow_file_writes(self) -> bool:
+        """Allow file write operations (mv, cp, >)."""
+        return SYSTEM_CONTROL_ALLOW_FILE_WRITES
+
+    @property
+    def security_audit_log_path(self) -> str:
+        """Path to security audit log file."""
+        return SECURITY_AUDIT_LOG_PATH
+
+    @property
+    def security_notify_events(self) -> bool:
+        """Send Telegram notification when suspicious commands are blocked."""
+        return SECURITY_NOTIFY_EVENTS
+
+
+# Global singleton instance
+_config_instance: Optional[Config] = None
+
+
+def get_config() -> Config:
+    """Get the global Config instance."""
+    global _config_instance
+    if _config_instance is None:
+        _config_instance = Config()
+    return _config_instance
+
+
 # ── Sumário de configuração (startup debug) ────────────────────────────
 
 def log_config_summary() -> None:

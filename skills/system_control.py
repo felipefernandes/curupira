@@ -13,11 +13,144 @@ Resolves Issues #42 and #53.
 
 import asyncio
 import logging
+import re
 import shutil
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 from .base import BaseSkill
 from core.security_guard import get_security_guard
+from core.config import get_config
+
+
+class PathSecurityValidator:
+    """Validates file paths to prevent access to sensitive files."""
+
+    SENSITIVE_EXTENSIONS = {
+        '.env', '.pem', '.key', '.toml', '.json', '.ini',
+        '.conf', '.password', '.secret', '.cert'
+    }
+
+    SENSITIVE_DIRS = {
+        '/etc/', '/root/', '~/.ssh/', '~/.config/',
+        '~/.aws/', '~/.gnupg/', '/boot/'
+    }
+
+    SAFE_READ_DIRS = {
+        '/var/log/', '/tmp/', '/proc/', '/sys/'
+    }
+
+    @staticmethod
+    def is_safe_path(file_path: str) -> Tuple[bool, str]:
+        """
+        Check if file path is safe to access.
+
+        Returns:
+            (is_safe, reason) tuple
+        """
+        try:
+            # Normalize path for initial checks (before resolving)
+            normalized_path = str(file_path).replace('\\', '/').lower()
+
+            # Check directory blacklist FIRST (before resolving path)
+            for sensitive_dir in PathSecurityValidator.SENSITIVE_DIRS:
+                expanded_dir = sensitive_dir.replace('~', str(Path.home())).replace('\\', '/').lower()
+                if normalized_path.startswith(expanded_dir):
+                    return False, f"Diretório sensível: {sensitive_dir}"
+
+            # Check extension blacklist on original path
+            file_ext = Path(file_path).suffix.lower()
+            if file_ext in PathSecurityValidator.SENSITIVE_EXTENSIONS:
+                return False, f"Extensão bloqueada: {file_ext}"
+
+            # Check if filename contains sensitive keywords
+            file_name = Path(file_path).name.lower()
+            if file_name in {'secrets', 'credentials', 'password', 'private'}:
+                return False, f"Nome de arquivo sensível: {file_name}"
+
+            # Now resolve to absolute path (handles symlinks and ..)
+            resolved = Path(file_path).resolve()
+            resolved_str = str(resolved).replace('\\', '/').lower()
+
+            # Re-check directory blacklist on resolved path
+            for sensitive_dir in PathSecurityValidator.SENSITIVE_DIRS:
+                expanded_dir = sensitive_dir.replace('~', str(Path.home())).replace('\\', '/').lower()
+                if resolved_str.startswith(expanded_dir):
+                    return False, f"Diretório sensível: {sensitive_dir}"
+
+            # Check if in safe directory (allow these explicitly)
+            for safe_dir in PathSecurityValidator.SAFE_READ_DIRS:
+                if resolved_str.startswith(safe_dir.replace('\\', '/').lower()):
+                    return True, "Diretório seguro"
+
+            return True, "Path validation passed"
+
+        except Exception as e:
+            return False, f"Erro na validação: {str(e)}"
+
+
+class OutputSanitizer:
+    """Sanitizes command output to remove sensitive information."""
+
+    # Patterns for detecting secrets (compiled regexes for performance)
+    SECRET_PATTERNS = [
+        # Generic long tokens (32+ alphanumeric)
+        (re.compile(r'\b[A-Za-z0-9_-]{32,}\b'), 'TOKEN'),
+
+        # GitHub tokens
+        (re.compile(r'\bghp_[A-Za-z0-9]{36}\b'), 'GITHUB_TOKEN'),
+        (re.compile(r'\bgho_[A-Za-z0-9]{36}\b'), 'GITHUB_OAUTH'),
+
+        # Groq API keys
+        (re.compile(r'\bgsk_[A-Za-z0-9]{32,}\b'), 'GROQ_KEY'),
+
+        # Google/Gemini keys
+        (re.compile(r'\bAIza[A-Za-z0-9_-]{35}\b'), 'GOOGLE_KEY'),
+
+        # OpenAI keys
+        (re.compile(r'\bsk-[A-Za-z0-9]{48}\b'), 'OPENAI_KEY'),
+
+        # AWS credentials
+        (re.compile(r'\bAKIA[A-Z0-9]{16}\b'), 'AWS_ACCESS_KEY'),
+
+        # Private keys
+        (re.compile(r'-----BEGIN .*PRIVATE KEY-----'), 'PRIVATE_KEY'),
+
+        # Telegram bot tokens
+        (re.compile(r'\b\d{8,10}:[A-Za-z0-9_-]{35}\b'), 'TELEGRAM_TOKEN'),
+
+        # JWT tokens
+        (re.compile(r'\beyJ[A-Za-z0-9_-]+\.eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b'), 'JWT'),
+
+        # Password assignments in various formats
+        (re.compile(r'password["\']?\s*[:=]\s*["\']?([^\s"\']+)', re.IGNORECASE), 'PASSWORD'),
+        (re.compile(r'passwd["\']?\s*[:=]\s*["\']?([^\s"\']+)', re.IGNORECASE), 'PASSWORD'),
+
+        # API key assignments
+        (re.compile(r'api[_-]?key["\']?\s*[:=]\s*["\']?([^\s"\']+)', re.IGNORECASE), 'API_KEY'),
+
+        # Secret assignments
+        (re.compile(r'secret["\']?\s*[:=]\s*["\']?([^\s"\']+)', re.IGNORECASE), 'SECRET'),
+    ]
+
+    @staticmethod
+    def sanitize(text: str) -> Tuple[str, int]:
+        """
+        Sanitize text by redacting detected secrets.
+
+        Returns:
+            (sanitized_text, redaction_count) tuple
+        """
+        redaction_count = 0
+        sanitized = text
+
+        for pattern, label in OutputSanitizer.SECRET_PATTERNS:
+            matches = pattern.findall(sanitized)
+            if matches:
+                sanitized = pattern.sub(f'[{label}_REDACTED]', sanitized)
+                redaction_count += len(matches)
+
+        return sanitized, redaction_count
 
 
 class SystemControlSkill(BaseSkill):
@@ -281,11 +414,11 @@ class SystemControlSkill(BaseSkill):
         Returns:
             Success or error response with file content
         """
-        # Security check: prevent reading sensitive files (check before resolving path)
-        sensitive_paths = ["/etc/shadow", "/etc/gshadow", "/root/.ssh", "\\etc\\shadow"]
-        normalized_path = file_path.replace("\\", "/").lower()
-        if any(normalized_path.startswith(sp.lower()) for sp in sensitive_paths):
-            return self.error(f"Acesso negado: arquivo sensível")
+        # NEW: Path security validation using PathSecurityValidator
+        is_safe, reason = PathSecurityValidator.is_safe_path(file_path)
+        if not is_safe:
+            self._log_security_event("FILE_READ_BLOCKED", file_path, reason)
+            return self.error(f"🚫 Acesso negado: {reason}")
 
         path = Path(file_path).resolve()
 
@@ -428,6 +561,54 @@ class SystemControlSkill(BaseSkill):
         """
         self.logger.info(f"Validando comando via Security Guard: {command}")
 
+        # NEW: Check security level configuration
+        config = get_config()
+        security_level = config.system_control_security_level
+
+        # Strict mode: Block all custom commands
+        if security_level == "strict":
+            self._log_security_event("CUSTOM_COMMAND_BLOCKED", command, "Modo strict ativado")
+            return self.error(
+                "🚫 Comando customizado bloqueado (modo strict ativado).\n\n"
+                "Apenas comandos whitelisted são permitidos.\n"
+                "Configure security_level='normal' em config.toml para habilitar comandos customizados."
+            )
+
+        # Check if custom commands are allowed
+        if not config.system_control_allow_custom_commands:
+            self._log_security_event("CUSTOM_COMMAND_DISABLED", command, "allow_custom_commands=false")
+            return self.error(
+                "🚫 Comandos customizados desabilitados.\n\n"
+                "Configure allow_custom_commands=true em config.toml."
+            )
+
+        # NEW: Extract file paths from command and validate
+        file_read_commands = ['cat', 'less', 'tail', 'head', 'nano', 'vim', 'more']
+        if any(word in command.lower() for word in file_read_commands):
+            # Parse command to extract file path
+            import shlex
+            try:
+                cmd_parts = shlex.split(command)
+                if len(cmd_parts) > 1:
+                    potential_path = cmd_parts[-1]  # Usually last argument
+                    is_safe_path, path_reason = PathSecurityValidator.is_safe_path(potential_path)
+                    if not is_safe_path:
+                        self._log_security_event("FILE_ACCESS_BLOCKED", command, path_reason)
+                        return self.error(f"🚫 Acesso negado: {path_reason}")
+            except ValueError:
+                # Parsing error - let Security Guard handle it
+                pass
+
+        # Check if command involves file writes
+        write_patterns = ['mv ', 'cp ', '>', 'dd ', 'tee ']
+        if any(p in command.lower() for p in write_patterns):
+            if not config.system_control_allow_file_writes:
+                self._log_security_event("FILE_WRITE_BLOCKED", command, "allow_file_writes=false")
+                return self.error(
+                    "🚫 Operação de escrita bloqueada.\n\n"
+                    "Configure allow_file_writes=true em config.toml para permitir."
+                )
+
         # Get security guard and evaluate
         guard = get_security_guard()
         is_safe, reason = await guard.evaluate_command(command)
@@ -435,6 +616,7 @@ class SystemControlSkill(BaseSkill):
         if not is_safe:
             self.logger.warning(f"Comando bloqueado pelo Security Guard: {command}")
             self.logger.warning(f"Razão: {reason}")
+            self._log_security_event("SECURITY_GUARD_BLOCKED", command, reason)
             return self.error(
                 f"🛡️ Comando bloqueado por segurança\n\n"
                 f"**Comando:** `{command}`\n"
@@ -510,17 +692,34 @@ class SystemControlSkill(BaseSkill):
                 timeout=self.COMMAND_TIMEOUT
             )
 
-            # Decode and limit output size
+            # Decode output
             stdout = stdout_bytes.decode('utf-8', errors='replace')
             stderr = stderr_bytes.decode('utf-8', errors='replace')
 
-            if len(stdout) > self.MAX_OUTPUT_SIZE:
-                stdout = stdout[:self.MAX_OUTPUT_SIZE] + "\n... [saída truncada]"
+            # NEW: Sanitize output before size limiting (defense in depth)
+            stdout_sanitized, stdout_redactions = OutputSanitizer.sanitize(stdout)
+            stderr_sanitized, stderr_redactions = OutputSanitizer.sanitize(stderr)
 
-            if len(stderr) > self.MAX_OUTPUT_SIZE:
-                stderr = stderr[:self.MAX_OUTPUT_SIZE] + "\n... [saída truncada]"
+            # Log if secrets were redacted
+            total_redactions = stdout_redactions + stderr_redactions
+            if total_redactions > 0:
+                self.logger.warning(
+                    f"🚨 Output sanitization: {total_redactions} secrets redacted"
+                )
+                self._log_security_event(
+                    "SECRET_REDACTED",
+                    f"Command output contained {total_redactions} secrets",
+                    "Secrets automatically redacted from output"
+                )
 
-            return stdout, stderr, process.returncode
+            # Apply size limits to sanitized output
+            if len(stdout_sanitized) > self.MAX_OUTPUT_SIZE:
+                stdout_sanitized = stdout_sanitized[:self.MAX_OUTPUT_SIZE] + "\n... [saída truncada]"
+
+            if len(stderr_sanitized) > self.MAX_OUTPUT_SIZE:
+                stderr_sanitized = stderr_sanitized[:self.MAX_OUTPUT_SIZE] + "\n... [saída truncada]"
+
+            return stdout_sanitized, stderr_sanitized, process.returncode
 
         except asyncio.TimeoutError:
             # Kill the process if it times out
@@ -528,3 +727,32 @@ class SystemControlSkill(BaseSkill):
                 process.kill()
                 await process.wait()
             raise
+
+    def _log_security_event(self, event_type: str, command: str, reason: str):
+        """
+        Log security events to audit file.
+
+        Args:
+            event_type: Type of security event (FILE_READ_BLOCKED, CUSTOM_COMMAND_BLOCKED, etc.)
+            command: The command or operation that was blocked
+            reason: Reason for blocking
+        """
+        try:
+            config = get_config()
+            audit_log = config.security_audit_log_path
+
+            timestamp = datetime.now().isoformat()
+            log_entry = f"{timestamp} | {event_type} | {command} | {reason}\n"
+
+            # Ensure directory exists
+            log_path = Path(audit_log)
+            log_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Append to audit log
+            with open(audit_log, 'a', encoding='utf-8') as f:
+                f.write(log_entry)
+
+            self.logger.debug(f"Security event logged: {event_type}")
+
+        except Exception as e:
+            self.logger.error(f"Failed to write security audit log: {e}")

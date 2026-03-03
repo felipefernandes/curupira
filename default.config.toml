@@ -113,3 +113,31 @@ greeting_hour_end   = 9
 attempts = 3
 # Delay inicial em segundos para backoff exponencial
 initial_delay = 2.0
+
+# ─── System Control Skill (Power User) ─────────────────────────────────
+[skills.system_control]
+# Security level controls how strictly commands are validated:
+#   "strict"     → Only whitelisted safe commands (read-only diagnostics)
+#   "normal"     → Whitelisted + LLM-approved safe commands (recommended)
+#   "permissive" → Current behavior (LLM guard only, less secure)
+security_level = "normal"
+
+# Allow custom commands to be evaluated by LLM Security Guard
+# If false, only whitelisted commands from SAFE_COMMANDS dict are allowed
+allow_custom_commands = false
+
+# Allow file write operations (mv, cp, >, >>, dd, etc.)
+# DANGER: Set to true only if you fully trust the security layers
+allow_file_writes = false
+
+# Directories where file operations are considered safe
+# Used when allow_file_writes = true
+safe_directories = ["/tmp/curupira", "/var/log"]
+
+# ─── Security & Audit ──────────────────────────────────────────────────
+[security]
+# Path to security audit log (records all blocked commands)
+audit_log_path = "/var/log/curupira_security.log"
+
+# Send Telegram notification when suspicious commands are blocked
+notify_security_events = false

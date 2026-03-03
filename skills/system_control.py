@@ -39,6 +39,7 @@ class SystemControlSkill(BaseSkill):
         "get_uptime": ["uptime"],
         "get_memory": ["free", "-h"],
         "get_network_interfaces": ["ip", "link", "show"],
+        "list_wifi_networks": ["nmcli", "device", "wifi", "list"],
     }
 
     # Maximum command execution timeout (seconds)
@@ -62,8 +63,9 @@ class SystemControlSkill(BaseSkill):
     def description(self) -> str:
         return (
             "Fornece acesso seguro a informações e controles do sistema operacional. "
-            "Permite executar comandos diagnósticos, ler logs do sistema, e configurar "
-            "rede (WiFi). Inclui proteções contra comandos perigosos."
+            "Comandos disponíveis: verificar IP/hostname/disco/uptime/memória, "
+            "listar interfaces e redes WiFi, ler logs (journalctl), ler arquivos de texto, "
+            "configurar WiFi (nmcli). Comandos customizados requerem validação de segurança."
         )
 
     @property
@@ -80,12 +82,16 @@ class SystemControlSkill(BaseSkill):
                         "get_uptime",
                         "get_memory",
                         "get_network_interfaces",
+                        "list_wifi_networks",
                         "read_system_logs",
                         "read_file",
                         "configure_wifi",
                         "execute_command",
                     ],
-                    "description": "A ação do sistema a ser executada",
+                    "description": (
+                        "Ação do sistema. Use ações específicas (get_ip, get_uptime, etc.) quando disponíveis. "
+                        "Use execute_command APENAS para comandos não cobertos pelas outras ações."
+                    ),
                 },
                 "log_filter": {
                     "type": "string",

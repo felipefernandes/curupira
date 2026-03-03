@@ -23,6 +23,22 @@ class TestLLMSecurityGuard:
         assert "vazio" in reason.lower()
 
     @pytest.mark.asyncio
+    async def test_evaluate_whitelisted_command_quick_approval(self):
+        """Test that internal whitelist commands are approved without LLM call."""
+        # Mock Groq client to verify it's NOT called
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create = AsyncMock()
+
+        with patch.object(self.guard, "_get_groq_client", return_value=mock_client):
+            is_safe, reason = await self.guard.evaluate_command("date")
+
+            assert is_safe
+            assert "whitelist" in reason.lower()
+            # Verify LLM was NOT called (whitelist should bypass LLM)
+            mock_client.chat.completions.create.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("core.security_guard.config.GROQ_API_KEY", "fake_key")
     async def test_evaluate_dangerous_patterns_quick_reject(self):
         """Test that obviously dangerous patterns are rejected without LLM call."""
         dangerous_commands = [
@@ -34,10 +50,18 @@ class TestLLMSecurityGuard:
             ":(){:|:&};:",  # fork bomb
         ]
 
-        for cmd in dangerous_commands:
-            is_safe, reason = await self.guard.evaluate_command(cmd)
-            assert not is_safe, f"Command '{cmd}' should be rejected"
-            assert "perigoso" in reason.lower() or "reject" in reason.lower()
+        # Mock Groq client to ensure LLM is NOT called for quick rejects
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create = AsyncMock()
+
+        with patch.object(self.guard, "_get_groq_client", return_value=mock_client):
+            for cmd in dangerous_commands:
+                is_safe, reason = await self.guard.evaluate_command(cmd)
+                assert not is_safe, f"Command '{cmd}' should be rejected"
+                assert "perigoso" in reason.lower() or "reject" in reason.lower()
+
+            # Verify LLM was NOT called (quick reject should prevent LLM calls)
+            mock_client.chat.completions.create.assert_not_called()
 
     @pytest.mark.asyncio
     @patch("core.security_guard.config.GROQ_API_KEY", "fake_key")
@@ -70,8 +94,9 @@ class TestLLMSecurityGuard:
         mock_client = AsyncMock()
         mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
 
+        # Use a command that won't be caught by quick reject patterns
         with patch.object(self.guard, "_get_groq_client", return_value=mock_client):
-            is_safe, reason = await self.guard.evaluate_command("chmod -R 777 /home")
+            is_safe, reason = await self.guard.evaluate_command("chown root:root /home")
 
             assert not is_safe
             assert "modificar sistema" in reason.lower()
@@ -125,7 +150,8 @@ class TestLLMSecurityGuard:
         guard = LLMSecurityGuard()
         assert guard._client is None
 
-        with patch("core.security_guard.AsyncGroq") as mock_groq:
+        # Patch AsyncGroq at the import location (groq module)
+        with patch("groq.AsyncGroq") as mock_groq:
             mock_groq.return_value = MagicMock()
 
             client1 = guard._get_groq_client()

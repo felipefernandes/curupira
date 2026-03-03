@@ -275,12 +275,13 @@ class SystemControlSkill(BaseSkill):
         Returns:
             Success or error response with file content
         """
-        path = Path(file_path).resolve()
-
-        # Security check: prevent reading sensitive files
-        sensitive_paths = ["/etc/shadow", "/etc/gshadow", "/root/.ssh"]
-        if any(str(path).startswith(sp) for sp in sensitive_paths):
+        # Security check: prevent reading sensitive files (check before resolving path)
+        sensitive_paths = ["/etc/shadow", "/etc/gshadow", "/root/.ssh", "\\etc\\shadow"]
+        normalized_path = file_path.replace("\\", "/").lower()
+        if any(normalized_path.startswith(sp.lower()) for sp in sensitive_paths):
             return self.error(f"Acesso negado: arquivo sensível")
+
+        path = Path(file_path).resolve()
 
         # Check if file exists and is readable
         if not path.is_file():

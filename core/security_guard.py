@@ -24,6 +24,15 @@ class LLMSecurityGuard:
     blocking dangerous operations while allowing legitimate diagnostics.
     """
 
+    # Internal whitelist of safe commands (quick approval without LLM)
+    INTERNAL_WHITELIST = {
+        "system_info": ["uname", "-a"],
+        "date": ["date"],
+        "whoami": ["whoami"],
+        "pwd": ["pwd"],
+        "echo": ["echo"],
+    }
+
     # System prompt for security evaluation
     SECURITY_PROMPT = """Você é um especialista em segurança de sistemas Linux.
 Sua tarefa é avaliar se um comando de shell é SEGURO ou PERIGOSO para executar.
@@ -111,22 +120,28 @@ Agora analise o seguinte comando:"""
         if not command or not command.strip():
             return False, "Comando vazio"
 
+        # Quick whitelist check (avoid LLM call for known-safe commands)
+        if self.is_whitelisted(command, self.INTERNAL_WHITELIST):
+            self.logger.debug(f"Comando '{command}' aprovado por whitelist interna")
+            return True, "Comando na whitelist de comandos seguros"
+
         # Quick heuristic checks before calling LLM (performance optimization)
         dangerous_patterns = [
             "rm -rf /",
             "mkfs",
             "dd if=",
             "> /dev/sd",
-            "curl.*|.*bash",
-            "wget.*|.*sh",
+            "| bash",
+            "| sh",
             "chmod 777",
-            "chmod -R 777",
+            "chmod -r 777",
             ":(){:|:&};:",  # Fork bomb
-            "eval",
+            "eval ",
         ]
 
+        cmd_lower = command.lower()
         for pattern in dangerous_patterns:
-            if pattern in command.lower():
+            if pattern in cmd_lower:
                 return False, f"REJECT: Padrão perigoso detectado: {pattern}"
 
         try:
@@ -196,7 +211,22 @@ _guard_instance = None
 
 
 def get_security_guard() -> LLMSecurityGuard:
-    """Returns singleton LLM Security Guard instance."""
+    """
+    Returns singleton LLM Security Guard instance.
+
+    The security guard provides LLM-based command validation using Groq's
+    fast inference models. It evaluates shell commands for safety before
+    execution, protecting against destructive operations and malicious inputs.
+
+    Returns:
+        LLMSecurityGuard: Singleton instance of the security guard
+
+    Example:
+        >>> guard = get_security_guard()
+        >>> is_safe, reason = await guard.evaluate_command("ip addr")
+        >>> print(is_safe)
+        True
+    """
     global _guard_instance
     if _guard_instance is None:
         _guard_instance = LLMSecurityGuard()

@@ -285,7 +285,7 @@ Responda APENAS:
                 messages=[
                     {
                         "role": "user",
-                        "content": full_prompt
+                        "content": enhanced_prompt
                     }
                 ],
                 temperature=0.0,  # Deterministic responses

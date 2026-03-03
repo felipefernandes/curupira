@@ -95,8 +95,9 @@ class TestLLMSecurityGuard:
         mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
 
         # Use a command that won't be caught by quick reject patterns
+        # but would be dangerous (LLM should reject it)
         with patch.object(self.guard, "_get_groq_client", return_value=mock_client):
-            is_safe, reason = await self.guard.evaluate_command("chown root:root /home")
+            is_safe, reason = await self.guard.evaluate_command("touch /etc/test")
 
             assert not is_safe
             assert "modificar sistema" in reason.lower()

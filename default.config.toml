@@ -137,7 +137,9 @@ safe_directories = ["/tmp/curupira", "/var/log"]
 # ─── Security & Audit ──────────────────────────────────────────────────
 [security]
 # Path to security audit log (records all blocked commands)
-audit_log_path = "/var/log/curupira_security.log"
+# Default: logs/security.log (relative to project root)
+# For system-wide logging, use: /var/log/curupira_security.log (requires sudo)
+audit_log_path = "logs/security.log"
 
 # Send Telegram notification when suspicious commands are blocked
 notify_security_events = false

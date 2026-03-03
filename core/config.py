@@ -364,7 +364,7 @@ SYSTEM_CONTROL_ALLOW_FILE_WRITES: bool = _cfg_bool(
 SECURITY_AUDIT_LOG_PATH: str = _cfg(
     "SECURITY_AUDIT_LOG_PATH",
     "security", "audit_log_path",
-    default="/var/log/curupira_security.log"
+    default=str(BASE_DIR / "logs" / "security.log")
 )
 
 SECURITY_NOTIFY_EVENTS: bool = _cfg_bool(

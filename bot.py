@@ -61,6 +61,15 @@ else:
     logging.info("Skill 'hardware' desabilitada pela configuração.")
     hardware_skill = None  # type: ignore[assignment]
 
+# Skill: System Control (Power User)
+if config.skill_enabled("system_control"):
+    from skills.system_control import SystemControlSkill
+    system_control_skill = SystemControlSkill()
+    brain.register_skill(system_control_skill)
+else:
+    logging.info("Skill 'system_control' desabilitada pela configuração.")
+    system_control_skill = None  # type: ignore[assignment]
+
 # Skill: Horário
 if config.skill_enabled("time"):
     from skills.time import GetTimeSkill

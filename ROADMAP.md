@@ -42,6 +42,14 @@
 - [x] Leitura de temperatura, CPU e RAM.
 - [x] Feedback visual com emojis.
 
+### 🛡️ System Control (Power User)
+- [x] **Diagnósticos do SO:** Comandos read-only seguros (IP, disco, hostname, uptime, memória).
+- [x] **Leitura de Logs:** Acesso programático a journalctl e logs do sistema com filtros.
+- [x] **Leitura de Arquivos:** Leitura segura de arquivos de texto/log com proteção OOM.
+- [x] **Configuração de Rede:** Conexão WiFi via NetworkManager (nmcli).
+- [x] **LLM Security Guard:** Validação dual-layer (whitelist + LLM Groq) para prevenir comandos destrutivos.
+- [x] **Execução Customizada:** "Escape hatch" para power users executarem comandos validados pelo Security Guard.
+
 ### 📰 RSS Reader
 - [x] **Leitura de feeds:** Busca as últimas entradas de qualquer URL RSS/Atom. (Issue #54)
 - [x] **Listagem:** Lista feeds pré-configurados via `RSS_FEEDS_JSON`.
@@ -79,8 +87,8 @@ Foco em dar iniciativa ao bot, melhorias na injeção de contexto e aprimorament
 Foco na saúde do sistema e evolução das capacidades técnicas (MCP-Lite) usando ferramentas orientadas a sistema.
 - [ ] **Doctor (Health Checks):** Diagnóstico de integridade do ambiente (ZRAM, Chaves, Git). (Issue #72)
 - [x] **Padronização MCP-Lite:** Isolar lógicas das skills para retorno JSON padronizado. (Issue #71)
-- [ ] **Skill de Terminal (Power User):** Execução segura de comandos shell locais. (Issue #42)
-- [ ] **Monitoramento de Logs:** Detecção de anomalias no sistema. (Issue #53)
+- [x] **Skill de Terminal (Power User):** Execução segura de comandos shell locais com LLM Security Guard dual-layer. (Issue #42)
+- [x] **Monitoramento de Logs:** Detecção de anomalias via leitura de journalctl e arquivos de log sob demanda. (Issue #53)
 
 ### ⚙️ v0.12.0: UX de Configuração e Manutenção ✅
 Foco em simplificar a manutenção para usuários não-técnicos e aumentar a configurabilidade do sistema. (Issue #121 — PR #123)

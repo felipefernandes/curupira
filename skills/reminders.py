@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Tuple
 import dateparser
 from skills.memory import DB_FILE
+import html
 
 class ReminderManager:
     def __init__(self, db_path=DB_FILE):
@@ -682,7 +683,6 @@ class ListRemindersSkill(BaseSkill):
             if not formatted_reminders:
                 summary = "Você não tem lembretes pendentes."
             else:
-                import html
                 lines = [f"Você tem {len(formatted_reminders)} lembrete(s) pendente(s):"]
                 for r in formatted_reminders:
                     rec_str = f" 🔁 {self._recurrence_label(r['recurrence'])}" if r.get("recurrence") else ""
@@ -690,8 +690,10 @@ class ListRemindersSkill(BaseSkill):
                     safe_msg = html.escape(r['message'])
                     lines.append(f"• <code>[ID {r['id']}]</code> <b>{safe_msg}</b>\n  <i>(próximo: {r['at']}{rec_str}{task_str})</i>")
                 
-                instruction = "\n\n[INSTRUÇÃO IMPORTANTE PARA A IA: Devolva a lista acima ao usuário EXATAMENTE com essa formatação HTML (<code>, <b>, <i>). NÃO converta para Markdown (* ou **).] "
-                summary = "\n".join(lines) + instruction
+                # Instruction is hidden in the 'summary' kwargs param returned back to AgentBrain
+                summary = "\n".join(lines)
+                instruction = "\n\n[INSTRUÇÃO IMPORTANTE: Devolva a lista acima EXATAMENTE com essa formatação HTML (<code>, <b>, <i>). NÃO converta para Markdown.]"
+                summary += instruction
 
             return self.success({
                 "reminders": formatted_reminders,

@@ -1,0 +1,43 @@
+{
+    "project": {
+        "name": "Curupira",
+        "description": "Assistente pessoal de IA opensource e leve",
+        "tech_stack": [
+            "Python"
+        ]
+    },
+    "review": {
+        "focus_areas": [
+            "Security",
+            "Privacy",
+            "Performance",
+            "Clean Code",
+            "Error Handling"
+        ],
+        "ignore_patterns": [
+            "migrations/",
+            "tests/fixtures/",
+            ".venv/",
+            "node_modules/"
+        ],
+        "max_diff_tokens": 12000,
+        "false_positive_patterns": [
+            {
+                "name": "curupira-config-globals",
+                "file_pattern": "config\\.py$",
+                "message_pattern": "global.*variable",
+                "reason": "Config files use globals by design"
+            }
+        ]
+    },
+    "ci": {
+        "platform": "github",
+        "review_mode": "inline"
+    },
+    "model": {
+        "preferred": "google/gemini-2.0-flash-exp:free",
+        "fallback_enabled": true,
+        "provider": "openrouter"
+    },
+    "language": "pt-br"
+}

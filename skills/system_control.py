@@ -619,8 +619,8 @@ class SystemControlSkill(BaseSkill):
             self._log_security_event("SECURITY_GUARD_BLOCKED", command, reason)
             return self.error(
                 f"🛡️ Comando bloqueado por segurança\n\n"
-                f"**Comando:** `{command}`\n"
-                f"**Razão:** {reason}\n\n"
+                f"<b>Comando:</b> <code>{command}</code>\n"
+                f"<b>Razão:</b> {reason}\n\n"
                 f"Se você acredita que este comando é seguro, "
                 f"considere solicitar que seja adicionado à whitelist."
             )

@@ -52,18 +52,18 @@ class HardwareMonitoringSkill(BaseSkill):
             
             # Format output with emojis
             summary = (
-                f"🌡️ **Status do Sistema**\n"
-                f"🕒 **Hora:** {metrics['system_time']}\n\n"
-                f"🧠 **RAM:** {metrics['ram_used']}/{metrics['ram_total']} ({metrics['ram_percent']}%)\n"
-                f"⚙️ **CPU:** {metrics['cpu_percent']}%\n"
-                f"💾 **Disco:** {metrics['disk_free']} livres\n"
+                f"🌡️ <b>Status do Sistema</b>\n"
+                f"🕒 <b>Hora:</b> {metrics['system_time']}\n\n"
+                f"🧠 <b>RAM:</b> {metrics['ram_used']}/{metrics['ram_total']} ({metrics['ram_percent']}%)\n"
+                f"⚙️ <b>CPU:</b> {metrics['cpu_percent']}%\n"
+                f"💾 <b>Disco:</b> {metrics['disk_free']} livres\n"
             )
             
             if metrics['temp'] != "N/A":
-                summary += f"🌡️ **Temp:** {metrics['temp']}°C\n"
+                summary += f"🌡️ <b>Temp:</b> {metrics['temp']}°C\n"
             
             if diag["issues"]:
-                summary += "\n⚠️ **Avisos de Integridade (Health Check):**\n"
+                summary += "\n⚠️ <b>Avisos de Integridade (Health Check):</b>\n"
                 for issue in diag["issues"]:
                     summary += f"- Aviso: {issue}\n"
                 

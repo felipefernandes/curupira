@@ -686,7 +686,7 @@ class ListRemindersSkill(BaseSkill):
                 for r in formatted_reminders:
                     rec_str = f" 🔁 {self._recurrence_label(r['recurrence'])}" if r.get("recurrence") else ""
                     task_str = " | Tarefa automática" if r.get("is_task") else ""
-                    lines.append(f"* `[ID {r['id']}]` **{r['message']}**\n  _(próximo: {r['at']}{rec_str}{task_str})_")
+                    lines.append(f"* <code>[ID {r['id']}]</code> <b>{r['message']}</b>\n  <i>(próximo: {r['at']}{rec_str}{task_str})</i>")
                 summary = "\n".join(lines)
 
             return self.success({

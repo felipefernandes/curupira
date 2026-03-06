@@ -687,10 +687,10 @@ class ListRemindersSkill(BaseSkill):
                 for r in formatted_reminders:
                     rec_str = f" 🔁 {self._recurrence_label(r['recurrence'])}" if r.get("recurrence") else ""
                     task_str = " | Tarefa automática" if r.get("is_task") else ""
+                    # Escape HTML para evitar quebra de formatação e injection
                     safe_msg = html.escape(r['message'])
                     lines.append(f"• <code>[ID {r['id']}]</code> <b>{safe_msg}</b>\n  <i>(próximo: {r['at']}{rec_str}{task_str})</i>")
                 
-                # Instruction is hidden in the 'summary' kwargs param returned back to AgentBrain
                 summary = "\n".join(lines)
                 instruction = "\n\n[INSTRUÇÃO IMPORTANTE: Devolva a lista acima EXATAMENTE com essa formatação HTML (<code>, <b>, <i>). NÃO converta para Markdown.]"
                 summary += instruction

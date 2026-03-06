@@ -36,10 +36,12 @@ jobs:
           fetch-depth: 0  # Necessário para análise completa do histórico
 
       - name: Run Iara Code Review
-        uses: felipefernandes/iara@v1
+        uses: felipefernandes/iara@v1.9.0
         with:
-          # API Key (obrigatório - adicione como secret)
-          openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
+          # API Key do Groq
+          groq_api_key: ${{ secrets.GROQ_API_KEY }}
+          provider: 'groq'
+          model: 'llama-3.3-70b-versatile'
 
           # Modo de review: 'inline' ou 'summary'
           # inline = comentários nas linhas específicas (recomendado!)
@@ -52,15 +54,8 @@ jobs:
           # Caminho do arquivo de configuração (opcional)
           # Se não especificado, usa .iara.json na raiz
           config_path: 'iara.json'
-
-          # Provider e modelo (opcional - usa fallback automático se não especificado)
-          # Opções: openrouter (padrão), groq, anthropic, openai, gemini
-          # provider: 'openrouter'
-          # model: 'google/gemini-2.0-flash-exp:free'
-
-          # RAG Memory - indexa codebase para reviews mais contextuais (opcional)
-          # Útil para projetos grandes, mas aumenta o tempo de execução
-          # index_codebase: 'true'
-
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+          # GitHub variables explícitas para a nova versão da Action Docker
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_repository: ${{ github.repository }}
+          github_event_path: ${{ github.event_path }}

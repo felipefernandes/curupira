@@ -14,7 +14,7 @@
 #   2. Crie um arquivo .iara.json na raiz do projeto (veja exemplo abaixo)
 #   3. Copie este arquivo para .github/workflows/iara-review.yml
 
-name: "🧜‍♀️ Iara - Revisora de Código"
+name: 🧜‍♀️ Iara - Revisora de Código
 
 on:
   pull_request:
@@ -26,9 +26,8 @@ permissions:
 
 jobs:
   review:
-    name: "Executar revisão"
+    name: Executar revisão
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,29 +37,11 @@ jobs:
       - name: Run Iara Code Review
         uses: felipefernandes/iara@v1
         with:
-          # API Key (obrigatório - adicione como secret)
-          openrouter_api_key: ${{ secrets.OPENROUTER_API_KEY }}
-
-          # Modo de review: 'inline' ou 'summary'
-          # inline = comentários nas linhas específicas (recomendado!)
-          # summary = comentário único com todas as issues
-          review_mode: 'inline'
-
-          # Idioma da review (pt-br para Curupira)
-          language: 'pt-br'
-
-          # Caminho do arquivo de configuração (opcional)
-          # Se não especificado, usa .iara.json na raiz
-          config_path: 'iara.json'
-
-          # Provider e modelo (opcional - usa fallback automático se não especificado)
-          # Opções: openrouter (padrão), groq, anthropic, openai, gemini
-          # provider: 'openrouter'
-          # model: 'google/gemini-2.0-flash-exp:free'
-
-          # RAG Memory - indexa codebase para reviews mais contextuais (opcional)
-          # Útil para projetos grandes, mas aumenta o tempo de execução
-          # index_codebase: 'true'
-
-        env:
+          config_path: iara.json
+          provider: groq
+          groq_api_key: ${{ secrets.GROQ_API_KEY }}
+          model: llama-3.3-70b-versatile
+          index_codebase: "true"
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          github_repository: ${{ github.repository }}
+          github_event_path: ${{ github.event_path }}

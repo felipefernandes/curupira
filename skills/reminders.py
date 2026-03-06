@@ -35,7 +35,7 @@ class ReminderManager:
                 async with db.execute("""
                     SELECT id, message, remind_at, recurrence, is_task FROM reminders
                     WHERE user_id = ? AND status = 'PENDING'
-                    ORDER BY remind_at ASC
+                    ORDER BY id ASC
                 """, (user_id,)) as cursor:
                     rows = await cursor.fetchall()
                     return rows
@@ -686,7 +686,7 @@ class ListRemindersSkill(BaseSkill):
                 for r in formatted_reminders:
                     rec_str = f" 🔁 {self._recurrence_label(r['recurrence'])}" if r.get("recurrence") else ""
                     task_str = " | Tarefa automática" if r.get("is_task") else ""
-                    lines.append(f"* [ID {r['id']}] {r['message']} (próximo: {r['at']}{rec_str}{task_str})")
+                    lines.append(f"* `[ID {r['id']}]` **{r['message']}**\n  _(próximo: {r['at']}{rec_str}{task_str})_")
                 summary = "\n".join(lines)
 
             return self.success({

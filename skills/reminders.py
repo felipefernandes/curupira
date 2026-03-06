@@ -682,12 +682,16 @@ class ListRemindersSkill(BaseSkill):
             if not formatted_reminders:
                 summary = "Você não tem lembretes pendentes."
             else:
+                import html
                 lines = [f"Você tem {len(formatted_reminders)} lembrete(s) pendente(s):"]
                 for r in formatted_reminders:
                     rec_str = f" 🔁 {self._recurrence_label(r['recurrence'])}" if r.get("recurrence") else ""
                     task_str = " | Tarefa automática" if r.get("is_task") else ""
-                    lines.append(f"* <code>[ID {r['id']}]</code> <b>{r['message']}</b>\n  <i>(próximo: {r['at']}{rec_str}{task_str})</i>")
-                summary = "\n".join(lines)
+                    safe_msg = html.escape(r['message'])
+                    lines.append(f"• <code>[ID {r['id']}]</code> <b>{safe_msg}</b>\n  <i>(próximo: {r['at']}{rec_str}{task_str})</i>")
+                
+                instruction = "\n\n[INSTRUÇÃO IMPORTANTE PARA A IA: Devolva a lista acima ao usuário EXATAMENTE com essa formatação HTML (<code>, <b>, <i>). NÃO converta para Markdown (* ou **).] "
+                summary = "\n".join(lines) + instruction
 
             return self.success({
                 "reminders": formatted_reminders,

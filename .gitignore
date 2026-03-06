@@ -37,6 +37,7 @@ logs/
 !package.json
 !tsconfig.json
 !mcp.json
+!iara.json
 
 # Github PRs e Comentários
 pr_*.*

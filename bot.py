@@ -1,4 +1,5 @@
 from telegram import Update
+from telegram.error import TelegramError
 from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, Application
 from core import config
@@ -285,7 +286,14 @@ async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
                 "memory_manager": memory_manager,
             }
             response_text = await brain.process(message, agent_context, chat_history=[])
-            await context.bot.send_message(chat_id=job.chat_id, text=response_text)
+            try:
+                await context.bot.send_message(chat_id=job.chat_id, text=response_text, parse_mode=ParseMode.HTML)
+            except TelegramError as e:
+                logging.error(f"Erro de parsing HTML via Reminder: {e}")
+                await context.bot.send_message(chat_id=job.chat_id, text=response_text)
+            except Exception as e:
+                logging.error(f"Erro inesperado ao enviar mensagem de Task: {e}")
+                raise e
         except Exception as e:
             task_error = True
             logging.error(f"Error executing task reminder {reminder_id}: {e}")

@@ -12,6 +12,7 @@ import asyncio
 import unittest
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch, call
+from telegram.error import TelegramError
 
 from skills.reminders import ReminderManager
 
@@ -55,7 +56,12 @@ async def _execute_reminder_impl(context, reminder_manager, memory_manager, brai
                 "assistant_surname": assistant_surname,
             }
             response_text = await brain.process(message, agent_context, chat_history=[])
-            await context.bot.send_message(chat_id=job.chat_id, text=response_text)
+            try:
+                await context.bot.send_message(chat_id=job.chat_id, text=response_text, parse_mode="HTML")
+            except TelegramError:
+                await context.bot.send_message(chat_id=job.chat_id, text=response_text)
+            except Exception as e:
+                raise e
         except Exception:
             task_error = True
             try:

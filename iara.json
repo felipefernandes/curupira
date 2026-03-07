@@ -35,9 +35,9 @@
         "review_mode": "inline"
     },
     "model": {
-        "preferred": "google/gemini-2.0-flash-exp:free",
+        "preferred": "llama-3.3-70b-versatile",
         "fallback_enabled": true,
-        "provider": "openrouter"
+        "provider": "groq"
     },
     "language": "pt-br"
 }

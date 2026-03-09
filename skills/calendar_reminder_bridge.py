@@ -23,7 +23,9 @@ from core.config import GCAL_CALENDAR_ID
 
 
 # Google Calendar API scopes
-SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+# Must match google_calendar.py since both share the same OAuth token
+# Needs write access for create/update/delete operations in GoogleCalendarSkill
+SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 # Token storage path
 DATA_DIR = Path(__file__).parent.parent / "data"

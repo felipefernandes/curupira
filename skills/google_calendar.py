@@ -302,11 +302,11 @@ class GoogleCalendarSkill(BaseSkill):
             }
 
             flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
-            # Generate authorization URL with explicit OOB redirect_uri
-            # This ensures the URL includes the required redirect_uri parameter
+            # Generate authorization URL
+            # redirect_uri is automatically taken from client_config["installed"]["redirect_uris"]
             auth_url, _ = flow.authorization_url(
                 prompt="consent",
-                redirect_uri="urn:ietf:wg:oauth:2.0:oob"
+                access_type="offline"  # Request refresh token
             )
 
             return self.success(

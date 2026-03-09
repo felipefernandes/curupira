@@ -29,6 +29,10 @@ from core.config import GCAL_CLIENT_ID, GCAL_CLIENT_SECRET, GCAL_CALENDAR_ID
 
 
 # Google Calendar API scopes
+# Using https://www.googleapis.com/auth/calendar (read/write access)
+# - Required for: create, update, delete calendar events
+# - calendar.readonly would be insufficient for full functionality
+# - Same scope must be used in calendar_reminder_bridge.py (shared token)
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 # Token storage path
@@ -281,7 +285,12 @@ class GoogleCalendarSkill(BaseSkill):
 
         # If no auth_code provided, generate authorization URL
         if not auth_code:
-            # Create OAuth flow
+            # Create OAuth flow for "Desktop app" type
+            # Using "urn:ietf:wg:oauth:2.0:oob" (Out-of-Band) redirect_uri:
+            # - Standard for CLI/desktop apps without web server
+            # - User authorizes in browser, Google displays auth code
+            # - User manually copies code back to the app (via Telegram)
+            # - Approved method for Google Cloud "Desktop app" OAuth clients
             client_config = {
                 "installed": {
                     "client_id": GCAL_CLIENT_ID,
@@ -293,7 +302,8 @@ class GoogleCalendarSkill(BaseSkill):
             }
 
             flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
-            # Generate authorization URL with explicit redirect_uri
+            # Generate authorization URL with explicit OOB redirect_uri
+            # This ensures the URL includes the required redirect_uri parameter
             auth_url, _ = flow.authorization_url(
                 prompt="consent",
                 redirect_uri="urn:ietf:wg:oauth:2.0:oob"

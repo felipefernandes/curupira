@@ -15,6 +15,7 @@ import asyncio
 import httpx
 import json
 import logging
+import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -38,6 +39,16 @@ SCOPES = ["https://www.googleapis.com/auth/calendar"]
 # Token storage path
 DATA_DIR = Path(__file__).parent.parent / "data"
 TOKEN_FILE = DATA_DIR / "google_token.json"
+
+# Invalid auth_code placeholders that LLMs commonly generate
+# Using set for O(1) lookup performance
+INVALID_AUTH_CODE_PLACEHOLDERS = frozenset({
+    'none', 'nenhum', 'nenhum código', 'nenhum código fornecido',
+    'n/a', 'null', 'sem código', 'não fornecido', '[seu_codigo]',
+    '[codigo]', 'seu codigo', 'código', 'codigo', 'placeholder',
+    'seu_código', '[seu código]', 'example', 'exemplo', 'test',
+    'teste', 'invalid', 'inválido'
+})
 
 
 class GoogleCalendarSkill(BaseSkill):
@@ -234,6 +245,56 @@ class GoogleCalendarSkill(BaseSkill):
 
         return creds
 
+    def _validate_auth_code(self, auth_code: Optional[str]) -> Optional[str]:
+        """
+        Validates and normalizes auth_code parameter.
+
+        Filters out common LLM-generated placeholders and malformed values.
+
+        Args:
+            auth_code: Raw authorization code from LLM tool call
+
+        Returns:
+            Normalized auth_code or None if invalid
+
+        Security:
+            - Prevents processing of placeholder/dummy values
+            - Validates basic format constraints for OAuth2 codes
+            - Google OAuth codes are typically 40-100 chars, alphanumeric with hyphens/underscores
+        """
+        if not auth_code:
+            return None
+
+        # Normalize whitespace
+        normalized = auth_code.strip()
+
+        # Check against known invalid placeholders (O(1) lookup with frozenset)
+        if normalized.lower() in INVALID_AUTH_CODE_PLACEHOLDERS:
+            self.logger.warning(f"Rejected invalid placeholder auth_code: {normalized[:20]}...")
+            return None
+
+        # Basic format validation for OAuth2 authorization codes
+        # Google codes are typically:
+        # - 40-100 characters long
+        # - Alphanumeric with allowed special chars: - _ / =
+        # - No spaces or other special characters
+
+        if len(normalized) < 20:
+            self.logger.warning(f"auth_code too short ({len(normalized)} chars), likely invalid")
+            return None
+
+        if len(normalized) > 512:
+            self.logger.warning(f"auth_code too long ({len(normalized)} chars), likely invalid")
+            return None
+
+        # Check for suspicious characters (spaces, quotes, brackets, etc.)
+        # Valid chars: alphanumeric + - _ / =
+        if not re.match(r'^[A-Za-z0-9\-_/=]+$', normalized):
+            self.logger.warning("auth_code contains invalid characters")
+            return None
+
+        return normalized
+
     async def _get_client(self) -> Optional[httpx.AsyncClient]:
         """
         Gets authenticated HTTP client for Google Calendar API.
@@ -274,6 +335,9 @@ class GoogleCalendarSkill(BaseSkill):
             return self.error(
                 "Google Calendar não configurado. Configure GCAL_CLIENT_ID e GCAL_CLIENT_SECRET no .env"
             )
+
+        # Validate and normalize auth_code using centralized helper
+        auth_code = self._validate_auth_code(auth_code)
 
         # Check if already authenticated
         creds = await self._get_valid_credentials()

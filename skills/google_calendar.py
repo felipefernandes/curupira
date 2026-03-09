@@ -366,10 +366,14 @@ class GoogleCalendarSkill(BaseSkill):
             }
 
             flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
+
+            # IMPORTANT: Must set redirect_uri explicitly on flow object
+            # - Without this, library won't include redirect_uri in authorization URL
+            # - Google will reject with "Missing required parameter: redirect_uri"
+            # - Using "urn:ietf:wg:oauth:2.0:oob" for Out-of-Band flow (CLI/desktop apps)
+            flow.redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
+
             # Generate authorization URL
-            # redirect_uri: Automatically from client_config["installed"]["redirect_uris"]
-            #   - Set to "urn:ietf:wg:oauth:2.0:oob" for Out-of-Band flow (line 287)
-            #   - Passing it again as parameter would cause TypeError (duplicate argument)
             # access_type="offline": Requests refresh token for long-term access
             #   - Refresh token stored securely in data/google_token.json (gitignored)
             #   - Allows auto-refresh without re-authentication
@@ -400,6 +404,9 @@ class GoogleCalendarSkill(BaseSkill):
             }
 
             flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
+
+            # Set redirect_uri explicitly (must match the one used in authorization URL)
+            flow.redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
 
             # Fetch token using authorization code with timeout
             await asyncio.wait_for(

@@ -13,6 +13,7 @@ from .mcp_client import MCPClient
 from skills.mcp_skill import MCPSkill
 from skills.introspection import IntrospectionSkill
 from skills.rss import RssReadSkill, RssListSkill
+from skills.google_calendar import GoogleCalendarSkill
 import random
 
 # NOTE: Providers are lazy-loaded to save memory
@@ -62,6 +63,7 @@ class AgentBrain:
         self.register_skill(IntrospectionSkill(self))
         self.register_skill(RssReadSkill())
         self.register_skill(RssListSkill())
+        self.register_skill(GoogleCalendarSkill())
 
     @staticmethod
     def _sanitize_text(text: str) -> str:

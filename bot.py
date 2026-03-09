@@ -34,6 +34,7 @@ brain = AgentBrain(
 
 # Skill: Lembretes
 from skills.reminders import ReminderManager, AddReminderSkill, ListRemindersSkill, DeleteReminderSkill, UpdateReminderSkill
+from skills.calendar_reminder_bridge import run_calendar_sync
 if config.skill_enabled("reminders"):
     reminder_manager = ReminderManager()
     brain.register_skill(AddReminderSkill(reminder_manager))
@@ -380,17 +381,28 @@ async def post_init(application: Application):
     if application.job_queue:
         # System Heartbeat
         application.job_queue.run_repeating(system_heartbeat, interval=config.HEARTBEAT_INTERVAL, first=10, name="system_heartbeat")
-        
+
         # Recover Persisted Reminders
         if reminder_manager is not None:
             try:
                 logging.info("Recuperando lembretes persistentes...")
-                reminder_manager._execute_reminder_callback = execute_reminder 
+                reminder_manager._execute_reminder_callback = execute_reminder
                 await reminder_manager.recover_reminders(application.job_queue)
             except Exception as e:
                 logging.error(f"Erro ao recuperar lembretes: {e}")
-        
-        logging.info("Jobs agendados: Heartbeat + Lembretes Recuperados")
+
+        # Google Calendar Sync
+        if config.GCAL_CLIENT_ID and config.GCAL_CLIENT_SECRET:
+            sync_interval = config.GCAL_SYNC_INTERVAL_MINUTES * 60
+            application.job_queue.run_repeating(
+                lambda context: asyncio.create_task(run_calendar_sync(config.AUTHORIZED_USER_ID)),
+                interval=sync_interval,
+                first=60,  # First sync after 1 minute
+                name="calendar_sync"
+            )
+            logging.info(f"Calendar sync job agendado (intervalo: {config.GCAL_SYNC_INTERVAL_MINUTES} minutos)")
+
+        logging.info("Jobs agendados: Heartbeat + Lembretes + Calendar Sync")
     else:
         logging.error("JobQueue não está disponível!")
 

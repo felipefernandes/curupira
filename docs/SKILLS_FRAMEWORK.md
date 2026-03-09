@@ -124,7 +124,238 @@ O intuito deste envelopamento é reduzir o _"temperature noise"_ que faz as LLMs
 
 ---
 
-## 4. Checklist para Inserção da Skill no Bot
+## 4. Skills Multi-Tool (Uma Skill, Múltiplas Ferramentas)
+
+Quando uma skill oferece **múltiplas operações relacionadas**, NÃO crie classes separadas para cada operação. Ao invés disso, use uma **única Skill** com um parâmetro `action` (ou similar) para despachar entre diferentes ferramentas.
+
+### Quando Usar Multi-Tool?
+- ✅ Operações relacionadas ao mesmo domínio (ex: Google Calendar: listar, criar, deletar eventos)
+- ✅ Compartilham autenticação ou cliente HTTP
+- ✅ Operações complementares que formam um "conjunto de funcionalidades"
+
+### Exemplo: Skill com Múltiplas Actions
+
+```python
+from typing import Any, Dict
+from skills.base import BaseSkill
+import httpx
+
+class GoogleCalendarSkill(BaseSkill):
+    def __init__(self):
+        self.logger = logging.getLogger("GoogleCalendarSkill")
+        self.client = httpx.AsyncClient()
+
+    @property
+    def name(self) -> str:
+        return "google_calendar"
+
+    @property
+    def display_name(self) -> str:
+        return "📅 Google Agenda"
+
+    @property
+    def description(self) -> str:
+        return "Gerencia eventos no Google Calendar: listar, criar e cancelar eventos."
+
+    @property
+    def parameters(self) -> Dict[str, Any]:
+        return {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["list_events", "add_event", "cancel_event"],
+                    "description": "Ação a executar: list_events, add_event ou cancel_event"
+                },
+                "time_range": {
+                    "type": "string",
+                    "description": "Período para listar (usado com list_events). Ex: 'today', 'tomorrow', 'week'"
+                },
+                "summary": {
+                    "type": "string",
+                    "description": "Título do evento (usado com add_event)"
+                },
+                "event_id": {
+                    "type": "string",
+                    "description": "ID do evento para cancelar (usado com cancel_event)"
+                }
+            },
+            "required": ["action"]
+        }
+
+    async def execute(self, context: Dict[str, Any], **kwargs) -> Dict[str, Any]:
+        """Despacha para o handler apropriado baseado na action."""
+        action = kwargs.get("action")
+
+        if not action:
+            return self.error("Ação não especificada")
+
+        # Dispatch para métodos internos
+        try:
+            if action == "list_events":
+                return await self._list_events(kwargs.get("time_range", "today"))
+            elif action == "add_event":
+                return await self._add_event(kwargs.get("summary"), kwargs.get("start_time"))
+            elif action == "cancel_event":
+                return await self._cancel_event(kwargs.get("event_id"))
+            else:
+                return self.error(f"Ação desconhecida: {action}")
+        except Exception as e:
+            self.logger.error(f"Erro em {action}: {e}")
+            return self.error(f"Falha ao executar {action}: {str(e)}")
+
+    # Métodos internos (prefixados com _)
+    async def _list_events(self, time_range: str) -> Dict[str, Any]:
+        """Lista eventos do calendário."""
+        # Lógica aqui...
+        events = []  # Fetch from API
+        return self.success({"events": events, "range": time_range})
+
+    async def _add_event(self, summary: str, start_time: str) -> Dict[str, Any]:
+        """Cria novo evento."""
+        # Lógica aqui...
+        return self.success({"event_id": "123", "summary": summary})
+
+    async def _cancel_event(self, event_id: str) -> Dict[str, Any]:
+        """Cancela um evento existente."""
+        # Lógica aqui...
+        return self.success({"deleted": event_id})
+```
+
+### Padrão de Nomenclatura
+- Métodos internos (helpers) devem ter prefixo `_` (ex: `_list_events`, `_get_client`, `_validate_token`)
+- São privados e não acessíveis ao LLM diretamente
+- Ajudam a organizar código complexo e reutilizar lógica
+
+**Exemplo Real**: Veja `skills/system_control.py` que usa este padrão com 11+ actions diferentes.
+
+---
+
+## 5. Usando o Dicionário `context`
+
+O parâmetro `context` fornecido ao `execute()` contém informações globais do bot. Principais chaves disponíveis:
+
+```python
+async def execute(self, context: Dict[str, Any], **kwargs) -> Dict[str, Any]:
+    # Acessando valores do context
+    user_id = context.get("user_id")        # ID do usuário Telegram
+    job_queue = context.get("job_queue")    # JobQueue para agendar tarefas
+    config = context.get("config")          # Configurações globais do bot
+
+    # Exemplo: Agendar tarefa recorrente
+    if job_queue:
+        job_queue.run_repeating(
+            self._minha_tarefa_periodica,
+            interval=3600,
+            first=10,
+            name=f"task_{user_id}"
+        )
+
+    # Exemplo: Acessar configuração
+    api_key = config.get("SOME_API_KEY") if config else None
+```
+
+### Valores Comuns no Context
+| Chave | Tipo | Descrição |
+|-------|------|-----------|
+| `user_id` | int | ID do usuário Telegram autorizado |
+| `job_queue` | JobQueue | Fila de jobs do python-telegram-bot |
+| `config` | dict | Variáveis de ambiente/configuração |
+| `application` | Application | Instância do Application do telegram |
+
+**⚠️ Importante**: Sempre use `.get()` ao acessar o context para evitar KeyError se alguma chave não existir.
+
+---
+
+## 6. Async Best Practices (I/O e Performance)
+
+### Quando Usar `asyncio.to_thread()`
+Use `asyncio.to_thread()` para **operações bloqueantes síncronas** que não têm versão async:
+
+```python
+import asyncio
+
+async def execute(self, context: Dict[str, Any], **kwargs) -> Dict[str, Any]:
+    # ❌ ERRADO: Bloqueia o event loop
+    result = subprocess.run(["ls", "-la"], capture_output=True, text=True)
+
+    # ✅ CORRETO: Executa em thread separada
+    result = await asyncio.to_thread(
+        subprocess.run,
+        ["ls", "-la"],
+        capture_output=True,
+        text=True,
+        timeout=30
+    )
+
+    return self.success({"output": result.stdout})
+```
+
+### Timeouts Obrigatórios
+Sempre defina timeouts para operações externas:
+
+```python
+import httpx
+import asyncio
+
+async def _fetch_data(self, url: str) -> dict:
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            return response.json()
+    except httpx.TimeoutException:
+        self.logger.error(f"Timeout ao acessar {url}")
+        raise
+    except httpx.HTTPError as e:
+        self.logger.error(f"Erro HTTP: {e}")
+        raise
+```
+
+### Limites de Memória
+Para operações que podem gerar grandes volumes de dados:
+
+```python
+MAX_OUTPUT_SIZE = 10 * 1024  # 10KB
+
+async def _read_large_file(self, path: str) -> str:
+    """Lê arquivo com proteção contra OOM."""
+    try:
+        # Usa tail para limitar output
+        result = await asyncio.to_thread(
+            subprocess.run,
+            ["tail", "-n", "100", path],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        output = result.stdout
+        if len(output) > self.MAX_OUTPUT_SIZE:
+            output = output[:self.MAX_OUTPUT_SIZE] + "\n[... truncado ...]"
+
+        return output
+    except Exception as e:
+        raise
+```
+
+---
+
+## 7. Exemplos Reais do Projeto
+
+Consulte estas skills existentes como referência:
+
+| Skill | Arquivo | Padrão Demonstrado |
+|-------|---------|-------------------|
+| **Weather** | `skills/weather_manager.py` | Skill simples, single-tool, httpx client |
+| **System Control** | `skills/system_control.py` | Multi-tool com enum actions, subprocess safety |
+| **Reminders** | `skills/reminders.py` | Gerenciamento de estado com banco de dados |
+| **Hardware** | `skills/hardware.py` | Monitoramento de sistema com timeouts |
+| **Time** | `skills/time.py` | Skill ultra-leve (sem dependências externas) |
+
+---
+
+## 8. Checklist para Inserção da Skill no Bot
 Após criar o arquivo `skills/sua_skill.py` e a classe respectiva:
 
 1. **Instanciar o objeto**: Abra o arquivo `core/agent.py` e registre sua Skill no método `__init__` do `AgentBrain`.
@@ -134,3 +365,5 @@ Após criar o arquivo `skills/sua_skill.py` e a classe respectiva:
    self.register_skill(MinhaNovaSkill())
    ```
 2. **Atualizar Roadmap**: Se a skill foi completada, lembre-se de marcar na seção correspondente do `ROADMAP.md` e testar no hardware local alvo.
+3. **Documentar Dependências**: Se adicionar bibliotecas ao `requirements.txt`, comente o porquê e verifique impacto em memória.
+4. **Testar em Hardware Alvo**: Execute no Raspberry Pi 3 (ou similar) para garantir que não cause OOM ou latência excessiva.

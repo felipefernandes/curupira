@@ -322,6 +322,28 @@ PANDASCORE_KEY: str = (
     _cfg("PANDASCORE_KEY", "skills", "sports", "pandascore_key", default="") or ""
 )
 
+# ── Google Calendar ────────────────────────────────────────────────────
+
+GCAL_CLIENT_ID: Optional[str] = _cfg(
+    "GCAL_CLIENT_ID", "skills", "google_calendar", "client_id"
+) or None
+
+GCAL_CLIENT_SECRET: Optional[str] = _cfg(
+    "GCAL_CLIENT_SECRET", "skills", "google_calendar", "client_secret"
+) or None
+
+GCAL_SYNC_INTERVAL_MINUTES: int = _cfg_int(
+    "GCAL_SYNC_INTERVAL_MINUTES",
+    "skills", "google_calendar", "sync_interval_minutes",
+    default=30
+)
+
+GCAL_CALENDAR_ID: str = _cfg(
+    "GCAL_CALENDAR_ID",
+    "skills", "google_calendar", "calendar_id",
+    default="primary"
+)
+
 # ── Validação e Avisos ─────────────────────────────────────────────────
 
 if not TELEGRAM_TOKEN:

@@ -102,6 +102,7 @@ class MemoryManager:
             for col, defn in [
                 ("recurrence", "TEXT DEFAULT NULL"),
                 ("is_task", "INTEGER DEFAULT 0"),
+                ("external_id", "TEXT DEFAULT NULL"),
             ]:
                 if col not in existing_cols:
                     try:
@@ -112,6 +113,16 @@ class MemoryManager:
                         self.logger.error(
                             f"Failed to migrate reminders table — could not add column '{col}': {e}"
                         )
+
+            # Create index on external_id for performance (Google Calendar integration)
+            try:
+                await db.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_reminders_external_id ON reminders(external_id)"
+                )
+                await db.commit()
+                self.logger.info("Created index on reminders.external_id.")
+            except Exception as e:
+                self.logger.error(f"Failed to create index on external_id: {e}")
 
             self.logger.info("Database initialized.")
 

@@ -9,5 +9,7 @@ feedparser==6.0.12
 dateparser
 iara-reviewer>=1.5.1
 mcp[cli]
+google-auth>=2.23.0
+google-auth-oauthlib>=1.1.0
 
 

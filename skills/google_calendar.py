@@ -293,7 +293,11 @@ class GoogleCalendarSkill(BaseSkill):
             }
 
             flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
-            auth_url = flow.authorization_url(prompt="consent")[0]
+            # Generate authorization URL with explicit redirect_uri
+            auth_url, _ = flow.authorization_url(
+                prompt="consent",
+                redirect_uri="urn:ietf:wg:oauth:2.0:oob"
+            )
 
             return self.success(
                 {"auth_url": auth_url},

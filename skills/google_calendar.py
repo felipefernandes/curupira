@@ -169,7 +169,7 @@ class GoogleCalendarSkill(BaseSkill):
             creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), SCOPES)
             return creds
         except Exception as e:
-            self.logger.error(f"Erro ao carregar token: {e}")
+            self.logger.error(f"Erro ao carregar token: {type(e).__name__}")
             return None
 
     def _save_token(self, creds: Credentials):
@@ -179,7 +179,7 @@ class GoogleCalendarSkill(BaseSkill):
                 f.write(creds.to_json())
             self.logger.info("Token salvo com sucesso")
         except Exception as e:
-            self.logger.error(f"Erro ao salvar token: {e}")
+            self.logger.error(f"Erro ao salvar token: {type(e).__name__}")
             raise
 
     async def _refresh_token(self, creds: Credentials) -> bool:
@@ -190,12 +190,19 @@ class GoogleCalendarSkill(BaseSkill):
             True if refresh successful, False otherwise
         """
         try:
-            await asyncio.to_thread(creds.refresh, Request())
+            # Add timeout to prevent indefinite blocking
+            await asyncio.wait_for(
+                asyncio.to_thread(creds.refresh, Request()),
+                timeout=30.0
+            )
             self._save_token(creds)
             self.logger.info("Token renovado com sucesso")
             return True
+        except asyncio.TimeoutError:
+            self.logger.error("Timeout ao renovar token (30s)")
+            return False
         except Exception as e:
-            self.logger.error(f"Erro ao renovar token: {e}")
+            self.logger.error(f"Erro ao renovar token: {type(e).__name__}")
             return False
 
     async def _get_valid_credentials(self) -> Optional[Credentials]:
@@ -310,8 +317,11 @@ class GoogleCalendarSkill(BaseSkill):
 
             flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
 
-            # Fetch token using authorization code
-            await asyncio.to_thread(flow.fetch_token, code=auth_code)
+            # Fetch token using authorization code with timeout
+            await asyncio.wait_for(
+                asyncio.to_thread(flow.fetch_token, code=auth_code),
+                timeout=30.0
+            )
             creds = flow.credentials
 
             # Save credentials
@@ -323,8 +333,8 @@ class GoogleCalendarSkill(BaseSkill):
             )
 
         except Exception as e:
-            self.logger.error(f"Erro na autenticação OAuth2: {e}")
-            return self.error(f"Falha na autenticação: {str(e)}")
+            self.logger.error(f"Erro na autenticação OAuth2: {type(e).__name__}")
+            return self.error("Falha na autenticação. Verifique o código fornecido.")
 
     async def _list_calendar_events(self, time_range: str) -> Dict[str, Any]:
         """
@@ -394,6 +404,14 @@ class GoogleCalendarSkill(BaseSkill):
                 message=f"Encontrados {len(events)} evento(s) para {time_range}"
             )
 
+        except httpx.TimeoutException:
+            await client.aclose()
+            self.logger.error("Timeout ao conectar com Google Calendar")
+            return self.error("Timeout ao acessar o Google Calendar. Tente novamente.")
+        except (httpx.ConnectError, httpx.NetworkError) as e:
+            await client.aclose()
+            self.logger.error(f"Erro de conexão com Google Calendar: {type(e).__name__}")
+            return self.error("Não foi possível conectar ao Google Calendar. Verifique sua conexão.")
         except httpx.HTTPStatusError as e:
             await client.aclose()
             self.logger.error(f"Erro HTTP ao listar eventos: {e.response.status_code}")
@@ -469,6 +487,14 @@ class GoogleCalendarSkill(BaseSkill):
                 message=f"✅ Evento '{summary}' criado com sucesso"
             )
 
+        except httpx.TimeoutException:
+            await client.aclose()
+            self.logger.error("Timeout ao conectar com Google Calendar")
+            return self.error("Timeout ao criar evento. Tente novamente.")
+        except (httpx.ConnectError, httpx.NetworkError) as e:
+            await client.aclose()
+            self.logger.error(f"Erro de conexão com Google Calendar: {type(e).__name__}")
+            return self.error("Não foi possível conectar ao Google Calendar. Verifique sua conexão.")
         except httpx.HTTPStatusError as e:
             await client.aclose()
             self.logger.error(f"Erro HTTP ao criar evento: {e.response.status_code}")
@@ -507,6 +533,14 @@ class GoogleCalendarSkill(BaseSkill):
                 message=f"✅ Evento cancelado com sucesso"
             )
 
+        except httpx.TimeoutException:
+            await client.aclose()
+            self.logger.error("Timeout ao conectar com Google Calendar")
+            return self.error("Timeout ao cancelar evento. Tente novamente.")
+        except (httpx.ConnectError, httpx.NetworkError) as e:
+            await client.aclose()
+            self.logger.error(f"Erro de conexão com Google Calendar: {type(e).__name__}")
+            return self.error("Não foi possível conectar ao Google Calendar. Verifique sua conexão.")
         except httpx.HTTPStatusError as e:
             await client.aclose()
             if e.response.status_code == 404:

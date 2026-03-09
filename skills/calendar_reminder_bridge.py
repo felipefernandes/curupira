@@ -60,7 +60,7 @@ class CalendarReminderBridge:
             creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), SCOPES)
             return creds
         except Exception as e:
-            self.logger.error(f"Erro ao carregar token: {e}")
+            self.logger.error(f"Erro ao carregar token: {type(e).__name__}")
             return None
 
     async def _refresh_token(self, creds: Credentials) -> bool:
@@ -71,7 +71,11 @@ class CalendarReminderBridge:
             True if refresh successful, False otherwise
         """
         try:
-            await asyncio.to_thread(creds.refresh, Request())
+            # Add timeout to prevent indefinite blocking
+            await asyncio.wait_for(
+                asyncio.to_thread(creds.refresh, Request()),
+                timeout=30.0
+            )
 
             # Save refreshed token
             with open(TOKEN_FILE, "w") as f:
@@ -79,8 +83,11 @@ class CalendarReminderBridge:
 
             self.logger.info("Token renovado durante sync do calendário")
             return True
+        except asyncio.TimeoutError:
+            self.logger.error("Timeout ao renovar token durante sync (30s)")
+            return False
         except Exception as e:
-            self.logger.error(f"Erro ao renovar token durante sync: {e}")
+            self.logger.error(f"Erro ao renovar token durante sync: {type(e).__name__}")
             return False
 
     async def _get_valid_credentials(self) -> Credentials | None:
@@ -161,6 +168,12 @@ class CalendarReminderBridge:
                 self.logger.info(f"Fetched {len(events)} upcoming events from Google Calendar")
                 return events
 
+        except httpx.TimeoutException:
+            self.logger.error("Timeout ao conectar com Google Calendar durante sync")
+            return []
+        except (httpx.ConnectError, httpx.NetworkError) as e:
+            self.logger.error(f"Erro de conexão com Google Calendar durante sync: {type(e).__name__}")
+            return []
         except httpx.HTTPStatusError as e:
             self.logger.error(f"HTTP error ao buscar eventos: {e.response.status_code}")
             return []

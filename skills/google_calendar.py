@@ -275,6 +275,18 @@ class GoogleCalendarSkill(BaseSkill):
                 "Google Calendar não configurado. Configure GCAL_CLIENT_ID e GCAL_CLIENT_SECRET no .env"
             )
 
+        # Normalize auth_code - filter out invalid LLM-generated placeholders
+        if auth_code:
+            auth_code = auth_code.strip()
+            # Common invalid placeholders from LLM
+            invalid_placeholders = [
+                'none', 'nenhum', 'nenhum código', 'nenhum código fornecido',
+                'n/a', 'null', 'sem código', 'não fornecido', '[seu_codigo]',
+                '[codigo]', 'seu codigo', 'código', 'codigo'
+            ]
+            if auth_code.lower() in invalid_placeholders or len(auth_code) < 10:
+                auth_code = None
+
         # Check if already authenticated
         creds = await self._get_valid_credentials()
         if creds:

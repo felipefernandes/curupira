@@ -21,6 +21,10 @@ from skills.memory import DB_FILE
 from skills.reminders import ReminderManager
 from core.config import GCAL_CALENDAR_ID
 
+# Security module for token encryption
+import json
+from core.token_encryption import TokenCipher
+
 
 # Google Calendar API scopes
 # Must match google_calendar.py since both share the same OAuth token
@@ -54,13 +58,36 @@ class CalendarReminderBridge:
         self.reminder_manager = ReminderManager(db_path=str(DB_FILE))
 
     def _load_token(self) -> Credentials | None:
-        """Loads OAuth2 credentials from token file."""
+        """
+        Loads OAuth2 credentials from encrypted token file.
+
+        Security:
+            - Tokens are encrypted at rest using Fernet (AES-128-CBC + HMAC-SHA256)
+            - Shared encryption with google_calendar.py for consistency
+            - If decryption fails, returns None (silent failure)
+        """
         if not TOKEN_FILE.exists():
             return None
 
         try:
-            creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), SCOPES)
+            # Read encrypted data
+            with open(TOKEN_FILE, "rb") as f:
+                encrypted_data = f.read()
+
+            # Decrypt token JSON
+            token_json = TokenCipher.decrypt_token(encrypted_data)
+
+            if not token_json:
+                self.logger.error("Falha ao descriptografar token")
+                return None
+
+            # Parse JSON and create Credentials
+            creds = Credentials.from_authorized_user_info(
+                json.loads(token_json),
+                SCOPES
+            )
             return creds
+
         except Exception as e:
             self.logger.error(f"Erro ao carregar token: {type(e).__name__}")
             return None
@@ -178,6 +205,15 @@ class CalendarReminderBridge:
             return []
         except httpx.HTTPStatusError as e:
             self.logger.error(f"HTTP error ao buscar eventos: {e.response.status_code}")
+
+            # SECURITY: Log apenas erro estruturado, não response body completo
+            try:
+                error_data = e.response.json()
+                error_message = error_data.get("error", {}).get("message", "unknown")
+                self.logger.error(f"Erro da API Calendar: {error_message}")
+            except Exception:
+                pass  # Se resposta não for JSON, apenas status code já foi logado
+
             return []
         except Exception as e:
             self.logger.error(f"Erro ao buscar eventos do calendário: {e}")

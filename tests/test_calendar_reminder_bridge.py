@@ -140,6 +140,39 @@ class TestEventReminderCreation:
                 assert abs(delay - expected_delay) < 5  # Tolerância de 5 segundos
 
     @pytest.mark.asyncio
+    async def test_create_event_reminder_with_explicit_timezone(self, bridge):
+        """Verifica que parsing de datetime com timezone explícito funciona (sem 'Z')."""
+        # Simular evento com timezone explícito (formato alternativo do Google Calendar)
+        future_time = datetime.now(timezone.utc) + timedelta(hours=2)
+        event = {
+            "id": "test_event_tz",
+            "iCalUID": "test-ical-uid-tz",
+            "summary": "Reunião com timezone explícito",
+            "start": future_time.isoformat(),  # Formato: 2026-03-10T15:30:00+00:00 (sem substituir por Z)
+        }
+
+        with patch.object(bridge.reminder_manager, 'add_reminder', return_value=2) as mock_add:
+            with patch('aiosqlite.connect') as mock_connect:
+                # Mock database connection
+                mock_db = AsyncMock()
+                mock_db.execute = AsyncMock()
+                mock_db.commit = AsyncMock()
+                mock_connect.return_value.__aenter__.return_value = mock_db
+
+                await bridge._create_event_reminder(event)
+
+                # Verifica que add_reminder foi chamado
+                assert mock_add.call_count == 1
+                call_kwargs = mock_add.call_args[1]
+
+                # Verifica que mensagem contém [AGENDA] prefix
+                assert call_kwargs["message"] == "[AGENDA] Reunião com timezone explícito"
+                # Verifica que delay_seconds é aproximadamente 110 minutos (120 min - 10 min reminder)
+                delay = call_kwargs["delay_seconds"]
+                expected_delay = int((future_time - datetime.now(timezone.utc) - timedelta(minutes=10)).total_seconds())
+                assert abs(delay - expected_delay) < 5  # Tolerância de 5 segundos
+
+    @pytest.mark.asyncio
     async def test_create_event_reminder_past_event_skipped(self, bridge):
         """Verifica que eventos no passado não geram reminders."""
         # Evento que já aconteceu (1 hora atrás)

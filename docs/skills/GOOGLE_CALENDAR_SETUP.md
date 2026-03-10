@@ -199,12 +199,74 @@ Curupira: ⏰ Lembrete: [AGENDA] Reunião com o time
 3. Confirme que há eventos nas próximas 4 horas no Google Calendar
 4. Verifique se o intervalo de sync está configurado: `GCAL_SYNC_INTERVAL_MINUTES=30`
 
-## 🔒 Segurança
+## 🔒 Segurança OAuth2
 
-- **Tokens**: Armazenados localmente em `data/google_token.json` (nunca no Git)
-- **Escopo**: Acesso apenas ao calendário (não a emails ou outros dados)
-- **Usuário único**: Apenas o `AUTHORIZED_USER_ID` pode usar a skill
-- **Refresh automático**: Tokens são renovados automaticamente quando expiram
+A integração com Google Calendar usa **5 camadas de proteção** para garantir a segurança dos seus dados:
+
+### Como Seus Dados São Protegidos
+
+#### 1. **PKCE (Proof Key for Code Exchange)**
+- Proteção contra ataques de interceptação de código de autorização
+- Códigos temporários (10 minutos) que expiram automaticamente
+- Uso único (deletados após autenticação bem-sucedida)
+- Conformidade com RFC 7636 (padrão de indústria)
+
+#### 2. **Tokens Criptografados em Disco**
+- Tokens OAuth2 são criptografados antes de salvar em disco
+- Algoritmo: Fernet (AES-128-CBC + HMAC-SHA256)
+- Chave derivada via PBKDF2 com 100.000 iterações
+- Proteção se backup for exposto acidentalmente
+
+**⚠️ Importante**: Se você mudar `TELEGRAM_TOKEN` no `.env`, precisará re-autenticar o calendário.
+
+#### 3. **Audit Logging**
+- Todos os eventos OAuth2 são registrados em formato estruturado
+- Log dedicado: `logs/security_audit.log`
+- Rastreamento de autenticações, falhas e renovações de token
+- Detecção de anomalias (múltiplas falhas = possível ataque)
+
+#### 4. **Client Secret Seguro**
+- Armazenado em `.env` (nunca no Git, protegido por .gitignore)
+- Enviado apenas via HTTPS POST (criptografado em trânsito)
+- Nunca aparece em URLs ou logs
+- Conformidade com RFC 6749 (OAuth 2.0)
+
+#### 5. **Escopo Mínimo**
+- Permissão apenas para calendário: `https://www.googleapis.com/auth/calendar`
+- Não acessa emails, contatos, drive ou outros dados
+- Você pode revogar acesso a qualquer momento
+
+### Revogando Acesso
+
+Para revogar o acesso do Curupira ao seu Google Calendar:
+
+1. Acesse [Google Account Permissions](https://myaccount.google.com/permissions)
+2. Encontre "Curupira Bot" na lista
+3. Clique em **"Remover Acesso"**
+4. Delete `data/google_token.json` no servidor do Curupira
+5. Pronto! O bot não terá mais acesso ao seu calendário
+
+### Proteção de Dados
+
+- **Armazenamento Local**: Tokens ficam no servidor do Curupira (`data/google_token.json`)
+- **Nunca no Git**: `.gitignore` protege tokens, credenciais e logs de audit
+- **Usuário Único**: Apenas `AUTHORIZED_USER_ID` (você) pode usar a skill
+- **Refresh Automático**: Tokens são renovados quando expiram (sem interrupção)
+- **Logging Sanitizado**: Erros de API nunca expõem informações sensíveis
+
+### Compliance e Standards
+
+A implementação segue rigorosamente:
+- ✅ **RFC 6749**: OAuth 2.0 Authorization Framework
+- ✅ **RFC 7636**: Proof Key for Code Exchange (PKCE)
+- ✅ **NIST 800-111**: Guide to Storage Encryption
+- ✅ **NIST 800-92**: Guide to Computer Security Log Management
+- ✅ **OWASP OAuth Security Cheat Sheet**
+
+### Documentação Técnica
+
+Para detalhes técnicos completos sobre a arquitetura de segurança, veja:
+- [GOOGLE_CALENDAR_OAUTH2_SECURITY.md](./GOOGLE_CALENDAR_OAUTH2_SECURITY.md)
 
 ## 📚 Referências
 

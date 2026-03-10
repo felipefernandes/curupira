@@ -79,6 +79,11 @@ class CalendarReminderBridge:
 
             if not token_json:
                 self.logger.error("Falha ao descriptografar token")
+                self.logger.warning("Deletando token corrompido - usuário precisará re-autenticar")
+                try:
+                    TOKEN_FILE.unlink()
+                except Exception as del_err:
+                    self.logger.error(f"Erro ao deletar token corrompido: {del_err}")
                 return None
 
             # Parse JSON and create Credentials
@@ -90,6 +95,13 @@ class CalendarReminderBridge:
 
         except Exception as e:
             self.logger.error(f"Erro ao carregar token: {type(e).__name__}")
+            # Delete corrupted token file to force re-authentication
+            if TOKEN_FILE.exists():
+                self.logger.warning("Deletando token inválido - usuário precisará re-autenticar")
+                try:
+                    TOKEN_FILE.unlink()
+                except Exception as del_err:
+                    self.logger.error(f"Erro ao deletar token: {del_err}")
             return None
 
     async def _refresh_token(self, creds: Credentials) -> bool:

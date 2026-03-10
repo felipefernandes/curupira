@@ -251,6 +251,24 @@ class TestParseFailedGeneration:
         assert fn_name == "google_calendar"
         assert fn_args == {"action": "add_calendar_event", "summary": "Teste"}
 
+    def test_direct_json_format(self):
+        """Match <function=name{"args"...}> (nome colado direto no JSON)."""
+        gen = '<function=google_calendar{"action": "list_calendar_events", "time_range": "tomorrow"}</function>'
+        result = AgentBrain._parse_failed_generation(gen)
+        assert result is not None
+        fn_name, fn_args = result
+        assert fn_name == "google_calendar"
+        assert fn_args == {"action": "list_calendar_events", "time_range": "tomorrow"}
+
+    def test_double_equals_format(self):
+        """Match <function=name={"args"...}> (dois sinais de igual)."""
+        gen = '<function=google_calendar={"action": "setup_calendar", "auth_code": "4/0AX4XfWi9LfV4j8x8j8xj8"}</function>'
+        result = AgentBrain._parse_failed_generation(gen)
+        assert result is not None
+        fn_name, fn_args = result
+        assert fn_name == "google_calendar"
+        assert fn_args == {"action": "setup_calendar", "auth_code": "4/0AX4XfWi9LfV4j8x8j8xj8"}
+
     def test_invalid_json_args(self):
         """Falls back to empty dict when args are not valid JSON."""
         gen = '<function=test(not-json)></function>'

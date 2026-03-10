@@ -26,6 +26,8 @@ class AgentBrain:
     _RE_FUNC_ANGLES = re.compile(r'<function=([a-zA-Z0-9_]+)>(\{.*?\})</function>', re.DOTALL)      # <function=name>{"args":...}</function>
     _RE_FUNC_COLON  = re.compile(r'<function=(\w+)":\s*(.*?)</function>', re.DOTALL)  # <function=name":args</function>
     _RE_FUNC_SLASH  = re.compile(r'<function/([a-zA-Z0-9_]+)(\{.*?\})></function>', re.DOTALL)   # <function/name{...}></function> (novo formato)
+    _RE_FUNC_DIRECT_JSON = re.compile(r'<function=([a-zA-Z0-9_]+)(\{.*?\})</function>', re.DOTALL)  # <function=name{"args":...}> (nome colado direto no JSON)
+    _RE_FUNC_DOUBLE_EQUALS = re.compile(r'<function=([a-zA-Z0-9_]+)=(\{.*?\})</function>', re.DOTALL)  # <function=name={"args":...}> (dois sinais de igual)
 
     # Compiled patterns to strip CoT reasoning blocks (Qwen3, DeepSeek-R1, etc.)
     _RE_THINK_BLOCK = re.compile(r'<think>(?:.*?</think>|.*$)', re.DOTALL)
@@ -227,6 +229,12 @@ class AgentBrain:
         if not match:
             # <function/name{...}> (novo formato)
             match = AgentBrain._RE_FUNC_SLASH.search(failed_gen)
+        if not match:
+            # <function=name={"args":...}> (dois sinais de igual)
+            match = AgentBrain._RE_FUNC_DOUBLE_EQUALS.search(failed_gen)
+        if not match:
+            # <function=name{"args":...}> (nome colado direto no JSON)
+            match = AgentBrain._RE_FUNC_DIRECT_JSON.search(failed_gen)
         if not match:
             return None
 
@@ -658,6 +666,10 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                                 match = self._RE_FUNC_PARENS.search(content)  # <function=name(...)></function>
                             if not match:
                                 match = self._RE_FUNC_COLON.search(content)  # <function=name":...></function>
+                            if not match:
+                                match = self._RE_FUNC_DOUBLE_EQUALS.search(content)  # <function=name={"args":...}>
+                            if not match:
+                                match = self._RE_FUNC_DIRECT_JSON.search(content)  # <function=name{"args":...}>
 
                             if match:
                                 fn_name = match.group(1)

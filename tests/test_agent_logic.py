@@ -269,6 +269,15 @@ class TestParseFailedGeneration:
         assert fn_name == "google_calendar"
         assert fn_args == {"action": "setup_calendar", "auth_code": "4/0AX4XfWi9LfV4j8x8j8xj8"}
 
+    def test_with_spaces_format(self):
+        """Match <function=name {"args":...} </function> (com espaços ao redor do JSON)."""
+        gen = '<function=google_calendar {"action": "list_calendar_events", "time_range": "today"} </function>'
+        result = AgentBrain._parse_failed_generation(gen)
+        assert result is not None
+        fn_name, fn_args = result
+        assert fn_name == "google_calendar"
+        assert fn_args == {"action": "list_calendar_events", "time_range": "today"}
+
     def test_invalid_json_args(self):
         """Falls back to empty dict when args are not valid JSON."""
         gen = '<function=test(not-json)></function>'
@@ -776,6 +785,41 @@ async def test_llama_xml_double_equals_format_fallback(agent, mock_groq_client):
     assert response == "Calendar configured!"
     # Should execute the skill with parsed JSON args
     mock_skill.execute.assert_called_once_with({}, action="setup_calendar")
+
+
+@pytest.mark.asyncio
+async def test_llama_xml_with_spaces_format_fallback(agent):
+    """Test Groq fallback with <function=name {"args":...} </function> (espaços ao redor do JSON)."""
+    agent.provider = "groq"
+    mock_groq_client = MagicMock()
+
+    # Simulate malformed XML with spaces around JSON
+    msg_xml = MagicMock()
+    msg_xml.content = '<function=google_calendar {"action": "list_calendar_events", "time_range": "today"} </function>'
+    msg_xml.tool_calls = None
+
+    # Final response after skill execution
+    msg_final = MagicMock()
+    msg_final.content = "Você tem 3 eventos hoje!"
+    msg_final.tool_calls = None
+
+    agent.client = mock_groq_client
+    # Use AsyncMock para criar responses assíncronos
+    mock_groq_client.chat.completions.create = AsyncMock(side_effect=[
+        MagicMock(choices=[MagicMock(message=msg_xml)]),
+        MagicMock(choices=[MagicMock(message=msg_final)])
+    ])
+
+    mock_skill = AsyncMock()
+    mock_skill.name = "google_calendar"
+    mock_skill.execute.return_value = {"status": "ok", "events": []}
+    agent.register_skill(mock_skill)
+
+    response = await agent.process("Show my events today", {})
+
+    assert response == "Você tem 3 eventos hoje!"
+    # Should execute the skill with parsed JSON args (espaços foram ignorados)
+    mock_skill.execute.assert_called_once_with({}, action="list_calendar_events", time_range="today")
 
 
 @pytest.mark.asyncio

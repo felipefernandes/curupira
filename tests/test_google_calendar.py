@@ -192,17 +192,19 @@ class TestTokenManagement:
         assert skill._load_token() is None
 
     def test_save_and_load_token(self, skill, cleanup_token_file, mock_credentials):
-        """Verifica que save + load preserva credentials."""
-        # Save
+        """Verifica que save + load preserva credentials (com encryption)."""
+        # Save (criptografado)
         skill._save_token(mock_credentials)
 
-        # Load
-        with patch('skills.google_calendar.Credentials.from_authorized_user_file') as mock_from_file:
-            mock_from_file.return_value = mock_credentials
-            loaded_creds = skill._load_token()
+        # Verificar que arquivo existe
+        assert TOKEN_FILE.exists()
+
+        # Load (descriptografa)
+        loaded_creds = skill._load_token()
 
         assert loaded_creds is not None
-        mock_from_file.assert_called_once()
+        # Verificar que credenciais foram recuperadas corretamente
+        assert loaded_creds.token == mock_credentials.token
 
     def test_load_token_corrupted_file(self, skill, cleanup_token_file):
         """Verifica que _load_token retorna None se arquivo estiver corrompido."""
@@ -220,14 +222,21 @@ class TestTokenManagement:
 
         assert TOKEN_FILE.exists()
 
-    def test_save_token_content_is_json(self, skill, cleanup_token_file, mock_credentials):
-        """Verifica que _save_token salva JSON válido."""
+    def test_save_token_content_is_encrypted(self, skill, cleanup_token_file, mock_credentials):
+        """Verifica que _save_token salva token criptografado (não plaintext JSON)."""
         skill._save_token(mock_credentials)
 
-        with open(TOKEN_FILE, "r") as f:
-            data = json.load(f)  # Não deve levantar exceção
+        # Ler como bytes (arquivo criptografado)
+        with open(TOKEN_FILE, "rb") as f:
+            encrypted_data = f.read()
 
-        assert "token" in data
+        # Verificar que é bytes (não JSON plaintext)
+        assert isinstance(encrypted_data, bytes)
+        assert len(encrypted_data) > 0
+
+        # Verificar que NÃO é JSON plaintext
+        with pytest.raises(Exception):  # Deve falhar ao tentar parsear como JSON
+            json.loads(encrypted_data)
 
 
 class TestGetValidCredentials:
@@ -321,7 +330,7 @@ class TestExecuteDispatch:
         result = await skill.execute({})
 
         assert result["status"] == "error"
-        assert "não especificada" in result["message"].lower()
+        assert "não especificada" in result["error"].lower()
 
     @pytest.mark.asyncio
     async def test_execute_unknown_action(self, skill):
@@ -329,7 +338,7 @@ class TestExecuteDispatch:
         result = await skill.execute({}, action="invalid_action")
 
         assert result["status"] == "error"
-        assert "desconhecida" in result["message"].lower()
+        assert "desconhecida" in result["error"].lower()
 
     @pytest.mark.asyncio
     async def test_execute_dispatches_to_setup_calendar(self, skill):
@@ -375,7 +384,7 @@ class TestSetupCalendar:
         result = await skill._setup_calendar()
 
         assert result["status"] == "error"
-        assert "não configurado" in result["message"].lower()
+        assert "não configurado" in result["error"].lower()
 
     @pytest.mark.asyncio
     @patch('skills.google_calendar.GCAL_CLIENT_ID', 'test_client_id')
@@ -431,7 +440,8 @@ class TestGetClient:
             client = await skill._get_client()
 
         assert client is not None
-        assert client.base_url == "https://www.googleapis.com/calendar/v3"
+        # httpx retorna base_url como objeto URL, não string
+        assert str(client.base_url).rstrip('/') == "https://www.googleapis.com/calendar/v3"
         assert "Authorization" in client.headers
         assert f"Bearer {mock_credentials.token}" in client.headers["Authorization"]
 
@@ -478,7 +488,7 @@ class TestEdgeCases:
             result = await skill.execute({}, action="setup_calendar")
 
         assert result["status"] == "error"
-        assert "falha" in result["message"].lower()
+        assert "falha" in result["error"].lower()
 
     def test_validate_auth_code_unicode_characters(self, skill):
         """Verifica que auth_code com Unicode é rejeitado."""

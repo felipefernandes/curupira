@@ -84,6 +84,11 @@ class GoogleCalendarSkill(BaseSkill):
                 "Google Calendar not configured. Set GCAL_CLIENT_ID and GCAL_CLIENT_SECRET in .env"
             )
 
+        # Initialize context and user_id for audit logging
+        # These will be populated by execute() method
+        self.context: Dict[str, Any] = {}
+        self.user_id: int = 0
+
     @property
     def name(self) -> str:
         return "google_calendar"

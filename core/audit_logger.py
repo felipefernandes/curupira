@@ -64,7 +64,7 @@ class AuditLogger:
              "user_id": 123456789, "success": true, "details": {}}
         """
         log_entry = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(datetime.UTC).isoformat().replace('+00:00', 'Z'),
             "event": event_type,
             "user_id": user_id,
             "success": success,
@@ -119,3 +119,8 @@ def log_oauth2_token_refresh(user_id: int, success: bool):
         user_id,
         success
     )
+
+
+# Garantir que diretório de logs existe quando módulo é importado
+# Isso previne erros no CI quando os testes rodam
+LOGS_DIR.mkdir(parents=True, exist_ok=True)

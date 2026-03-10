@@ -23,10 +23,19 @@ from urllib.parse import urlencode
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 
 from skills.base import BaseSkill
 from core.config import GCAL_CLIENT_ID, GCAL_CLIENT_SECRET, GCAL_CALENDAR_ID
+
+# Security modules for OAuth2 hardening
+from skills.oauth_pkce_state import PKCEState
+from core.token_encryption import TokenCipher
+from core.audit_logger import (
+    log_oauth2_auth_start,
+    log_oauth2_auth_success,
+    log_oauth2_auth_failed,
+    log_oauth2_token_refresh
+)
 
 
 # Google Calendar API scopes
@@ -74,6 +83,11 @@ class GoogleCalendarSkill(BaseSkill):
             self.logger.warning(
                 "Google Calendar not configured. Set GCAL_CLIENT_ID and GCAL_CLIENT_SECRET in .env"
             )
+
+        # Initialize context and user_id for audit logging
+        # These will be populated by execute() method
+        self.context: Dict[str, Any] = {}
+        self.user_id: int = 0
 
     @property
     def name(self) -> str:
@@ -146,6 +160,10 @@ class GoogleCalendarSkill(BaseSkill):
         Returns:
             Dict with status, data, and optional message
         """
+        # Save context for audit logging
+        self.context = context
+        self.user_id = context.get("user_id", 0)  # Default to 0 if not available
+
         action = kwargs.get("action")
 
         if not action:
@@ -176,23 +194,60 @@ class GoogleCalendarSkill(BaseSkill):
     # ── Internal Methods (OAuth2 & Token Management) ───────────────────────
 
     def _load_token(self) -> Optional[Credentials]:
-        """Loads OAuth2 credentials from token file."""
+        """
+        Loads OAuth2 credentials from encrypted token file.
+
+        Security:
+            - Tokens are encrypted at rest using Fernet (AES-128-CBC + HMAC-SHA256)
+            - Encryption key derived from TELEGRAM_TOKEN via PBKDF2 (100k iterations)
+            - If decryption fails (e.g., TELEGRAM_TOKEN changed), returns None (forces re-auth)
+        """
         if not TOKEN_FILE.exists():
             return None
 
         try:
-            creds = Credentials.from_authorized_user_file(str(TOKEN_FILE), SCOPES)
+            # Read encrypted data
+            with open(TOKEN_FILE, "rb") as f:
+                encrypted_data = f.read()
+
+            # Decrypt token JSON
+            token_json = TokenCipher.decrypt_token(encrypted_data)
+
+            if not token_json:
+                self.logger.error("Falha ao descriptografar token (chave inválida ou dados corrompidos)")
+                return None
+
+            # Parse JSON and create Credentials
+            creds = Credentials.from_authorized_user_info(
+                json.loads(token_json),
+                SCOPES
+            )
             return creds
+
         except Exception as e:
             self.logger.error(f"Erro ao carregar token: {type(e).__name__}")
             return None
 
     def _save_token(self, creds: Credentials):
-        """Saves OAuth2 credentials to token file."""
+        """
+        Saves OAuth2 credentials to encrypted token file.
+
+        Security:
+            - Tokens are encrypted before writing to disk using Fernet
+            - Encryption key derived from TELEGRAM_TOKEN
+            - Protects tokens if data/ directory is exposed (backup, physical access)
+        """
         try:
-            with open(TOKEN_FILE, "w") as f:
-                f.write(creds.to_json())
-            self.logger.info("Token salvo com sucesso")
+            token_json = creds.to_json()
+
+            # Encrypt before saving
+            encrypted_data = TokenCipher.encrypt_token(token_json)
+
+            # Write encrypted bytes
+            with open(TOKEN_FILE, "wb") as f:
+                f.write(encrypted_data)
+
+            self.logger.info("Token salvo com sucesso (encrypted)")
         except Exception as e:
             self.logger.error(f"Erro ao salvar token: {type(e).__name__}")
             raise
@@ -203,6 +258,11 @@ class GoogleCalendarSkill(BaseSkill):
 
         Returns:
             True if refresh successful, False otherwise
+
+        Security:
+            - Logs refresh attempts to audit log
+            - Timeout protection (30s max)
+            - Encrypted token storage after refresh
         """
         try:
             # Add timeout to prevent indefinite blocking
@@ -212,12 +272,18 @@ class GoogleCalendarSkill(BaseSkill):
             )
             self._save_token(creds)
             self.logger.info("Token renovado com sucesso")
+
+            # Audit log: token refresh success
+            log_oauth2_token_refresh(self.user_id, success=True)
+
             return True
         except asyncio.TimeoutError:
             self.logger.error("Timeout ao renovar token (30s)")
+            log_oauth2_token_refresh(self.user_id, success=False)
             return False
         except Exception as e:
             self.logger.error(f"Erro ao renovar token: {type(e).__name__}")
+            log_oauth2_token_refresh(self.user_id, success=False)
             return False
 
     async def _get_valid_credentials(self) -> Optional[Credentials]:
@@ -349,82 +415,152 @@ class GoogleCalendarSkill(BaseSkill):
 
         # If no auth_code provided, generate authorization URL
         if not auth_code:
-            # Create OAuth flow for "Desktop app" type
-            # Using "urn:ietf:wg:oauth:2.0:oob" (Out-of-Band) redirect_uri:
-            # - Standard for CLI/desktop apps without web server
-            # - User authorizes in browser, Google displays auth code
-            # - User manually copies code back to the app (via Telegram)
-            # - Approved method for Google Cloud "Desktop app" OAuth clients
-            client_config = {
-                "installed": {
-                    "client_id": GCAL_CLIENT_ID,
-                    "client_secret": GCAL_CLIENT_SECRET,
-                    "redirect_uris": ["urn:ietf:wg:oauth:2.0:oob"],
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                }
+            # Build OAuth2 authorization URL with PKCE (RFC 7636)
+            # Security improvements:
+            # 1. PKCE: Protects against authorization code interception attacks
+            # 2. State: CSRF protection
+            # 3. Code challenge: SHA-256 hash of code_verifier (stored for token exchange)
+            #
+            # Using Out-of-Band (OOB) flow for CLI/desktop apps:
+            # - redirect_uri: "urn:ietf:wg:oauth:2.0:oob" displays code in browser
+            # - access_type=offline: Requests refresh token for long-term access
+            # - prompt=consent: Forces approval screen (ensures refresh token)
+
+            # Generate PKCE pair (code_verifier, code_challenge, state)
+            pkce_pair = PKCEState.generate_pkce_pair()
+
+            # Save code_verifier for later token exchange (TTL: 10 min)
+            PKCEState.save_pkce_state(pkce_pair["state"], pkce_pair["code_verifier"])
+
+            # Audit log: OAuth flow started
+            log_oauth2_auth_start(self.user_id)
+
+            redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
+            scope = " ".join(SCOPES)
+
+            params = {
+                "client_id": GCAL_CLIENT_ID,
+                "redirect_uri": redirect_uri,
+                "response_type": "code",
+                "scope": scope,
+                "access_type": "offline",
+                "prompt": "consent",
+                "state": pkce_pair["state"],  # CSRF protection
+                "code_challenge": pkce_pair["code_challenge"],  # PKCE
+                "code_challenge_method": "S256",  # SHA-256 hash
             }
 
-            flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
-
-            # IMPORTANT: Must set redirect_uri explicitly on flow object
-            # - Without this, library won't include redirect_uri in authorization URL
-            # - Google will reject with "Missing required parameter: redirect_uri"
-            # - Using "urn:ietf:wg:oauth:2.0:oob" for Out-of-Band flow (CLI/desktop apps)
-            flow.redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
-
-            # Generate authorization URL
-            # access_type="offline": Requests refresh token for long-term access
-            #   - Refresh token stored securely in data/google_token.json (gitignored)
-            #   - Allows auto-refresh without re-authentication
-            #   - Security: Only authorized user_id can trigger this flow
-            auth_url, _ = flow.authorization_url(
-                prompt="consent",
-                access_type="offline"
-            )
+            auth_url = f"https://accounts.google.com/o/oauth2/auth?{urlencode(params)}"
 
             return self.success(
-                {"auth_url": auth_url},
+                {"auth_url": auth_url, "state": pkce_pair["state"]},
                 message=(
                     f"Autenticação necessária. Acesse:\n{auth_url}\n\n"
                     "Após autorizar, copie o código e envie: 'Configure calendário com código: [SEU_CODIGO]'"
                 )
             )
 
-        # Exchange auth_code for tokens
+        # Exchange auth_code for tokens with PKCE
         try:
-            client_config = {
-                "installed": {
-                    "client_id": GCAL_CLIENT_ID,
-                    "client_secret": GCAL_CLIENT_SECRET,
-                    "redirect_uris": ["urn:ietf:wg:oauth:2.0:oob"],
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                }
+            # Load PKCE state from file (single-user bot, so safe to load latest)
+            # This retrieves the code_verifier saved during URL generation
+            from pathlib import Path
+            pkce_state_file = Path(__file__).parent.parent / "data" / "pkce_state.json"
+
+            code_verifier = None
+            if pkce_state_file.exists():
+                try:
+                    import json
+                    from datetime import datetime as dt
+
+                    with open(pkce_state_file, "r") as f:
+                        pkce_data = json.load(f)
+
+                    # Verificar expiração
+                    expires_at = dt.fromisoformat(pkce_data["expires_at"])
+                    if dt.now() < expires_at:
+                        code_verifier = pkce_data["code_verifier"]
+
+                        # Single-use: remover após leitura
+                        pkce_state_file.unlink()
+                    else:
+                        self.logger.warning("PKCE state expired")
+                        pkce_state_file.unlink()
+                except Exception as e:
+                    self.logger.error(f"Erro ao carregar PKCE state: {type(e).__name__}")
+
+            if not code_verifier:
+                # Fallback: sem PKCE (backward compatibility)
+                self.logger.warning("Sem PKCE state - fazendo token exchange sem code_verifier")
+
+            redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
+            token_url = "https://oauth2.googleapis.com/token"
+
+            # Token exchange payload with PKCE
+            token_data = {
+                "code": auth_code,
+                "client_id": GCAL_CLIENT_ID,
+                "client_secret": GCAL_CLIENT_SECRET,
+                "redirect_uri": redirect_uri,
+                "grant_type": "authorization_code",
             }
 
-            flow = InstalledAppFlow.from_client_config(client_config, SCOPES)
+            # Incluir code_verifier se disponível (PKCE)
+            if code_verifier:
+                token_data["code_verifier"] = code_verifier
 
-            # Set redirect_uri explicitly (must match the one used in authorization URL)
-            flow.redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
+            # Exchange code for tokens with timeout
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(token_url, data=token_data)
+                response.raise_for_status()
+                token_response = response.json()
 
-            # Fetch token using authorization code with timeout
-            await asyncio.wait_for(
-                asyncio.to_thread(flow.fetch_token, code=auth_code),
-                timeout=30.0
+            # Create credentials from token response
+            creds = Credentials(
+                token=token_response.get("access_token"),
+                refresh_token=token_response.get("refresh_token"),
+                token_uri=token_url,
+                client_id=GCAL_CLIENT_ID,
+                client_secret=GCAL_CLIENT_SECRET,
+                scopes=SCOPES,
             )
-            creds = flow.credentials
 
-            # Save credentials
+            # Save encrypted credentials
             self._save_token(creds)
+
+            # Audit log: authentication success
+            log_oauth2_auth_success(self.user_id, provider="google_calendar")
 
             return self.success(
                 {"status": "authenticated"},
                 message="✅ Autenticação concluída com sucesso! Você pode usar o Google Calendar agora."
             )
 
+        except httpx.HTTPStatusError as e:
+            self.logger.error(f"HTTP error durante token exchange: {e.response.status_code}")
+
+            # SECURITY: Não logar response.text completo - pode conter detalhes técnicos
+            # RFC 6749 §5.2: Error responses podem incluir error_description sensível
+            # Logar apenas o campo "error" (enum padronizado) é seguro
+            try:
+                error_data = e.response.json()
+                error_type = error_data.get("error", "unknown")
+                self.logger.error(f"Tipo de erro OAuth2: {error_type}")
+
+                # Audit log: authentication failed
+                log_oauth2_auth_failed(self.user_id, error_type, provider="google_calendar")
+            except Exception:
+                # Se resposta não for JSON válido, apenas status code já foi logado
+                log_oauth2_auth_failed(self.user_id, "HTTPStatusError", provider="google_calendar")
+
+            return self.error("Falha na autenticação. Verifique o código fornecido.")
+        except httpx.TimeoutException:
+            self.logger.error("Timeout durante token exchange")
+            log_oauth2_auth_failed(self.user_id, "TimeoutException", provider="google_calendar")
+            return self.error("Timeout ao autenticar. Tente novamente.")
         except Exception as e:
             self.logger.error(f"Erro na autenticação OAuth2: {type(e).__name__}")
+            log_oauth2_auth_failed(self.user_id, type(e).__name__, provider="google_calendar")
             return self.error("Falha na autenticação. Verifique o código fornecido.")
 
     async def _list_calendar_events(self, time_range: str) -> Dict[str, Any]:

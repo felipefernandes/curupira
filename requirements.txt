@@ -11,5 +11,6 @@ iara-reviewer>=1.5.1
 mcp[cli]
 google-auth>=2.23.0
 google-auth-oauthlib>=1.1.0
+cryptography>=41.0.0
 
 

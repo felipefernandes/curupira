@@ -28,6 +28,7 @@ class AgentBrain:
     _RE_FUNC_SLASH  = re.compile(r'<function/([a-zA-Z0-9_]+)(\{.*?\})></function>', re.DOTALL)   # <function/name{...}></function> (novo formato)
     _RE_FUNC_DIRECT_JSON = re.compile(r'<function=([a-zA-Z0-9_]+)(\{.*?\})</function>', re.DOTALL)  # <function=name{"args":...}> (nome colado direto no JSON)
     _RE_FUNC_DOUBLE_EQUALS = re.compile(r'<function=([a-zA-Z0-9_]+)=(\{.*?\})</function>', re.DOTALL)  # <function=name={"args":...}> (dois sinais de igual)
+    _RE_FUNC_WITH_SPACES = re.compile(r'<function=([a-zA-Z0-9_]+)\s+(\{.*?\})\s*</function>', re.DOTALL)  # <function=name {"args":...} </function> (com espaços)
 
     # Compiled patterns to strip CoT reasoning blocks (Qwen3, DeepSeek-R1, etc.)
     _RE_THINK_BLOCK = re.compile(r'<think>(?:.*?</think>|.*$)', re.DOTALL)
@@ -235,6 +236,9 @@ class AgentBrain:
         if not match:
             # <function=name{"args":...}> (nome colado direto no JSON)
             match = AgentBrain._RE_FUNC_DIRECT_JSON.search(failed_gen)
+        if not match:
+            # <function=name {"args":...} </function> (com espaços)
+            match = AgentBrain._RE_FUNC_WITH_SPACES.search(failed_gen)
         if not match:
             return None
 
@@ -670,6 +674,8 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                                 match = self._RE_FUNC_DOUBLE_EQUALS.search(content)  # <function=name={"args":...}>
                             if not match:
                                 match = self._RE_FUNC_DIRECT_JSON.search(content)  # <function=name{"args":...}>
+                            if not match:
+                                match = self._RE_FUNC_WITH_SPACES.search(content)  # <function=name {"args":...} </function>
 
                             if match:
                                 fn_name = match.group(1)

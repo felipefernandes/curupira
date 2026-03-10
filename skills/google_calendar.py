@@ -36,6 +36,7 @@ from core.audit_logger import (
     log_oauth2_auth_failed,
     log_oauth2_token_refresh
 )
+from skills.oauth_http_server import OAuthCallbackServer, extract_code_from_url
 
 
 # Google Calendar API scopes
@@ -414,8 +415,18 @@ class GoogleCalendarSkill(BaseSkill):
                 "Google Calendar não configurado. Configure GCAL_CLIENT_ID e GCAL_CLIENT_SECRET no .env"
             )
 
-        # Validate and normalize auth_code using centralized helper
-        auth_code = self._validate_auth_code(auth_code)
+        # Validate auth_code se fornecido
+        if auth_code:
+            # Tenta extrair código de URL (fallback manual)
+            extracted = extract_code_from_url(auth_code)
+            if extracted:
+                auth_code = extracted
+                self.logger.info("Código extraído de URL fornecida pelo usuário")
+
+            # Valida código
+            auth_code = self._validate_auth_code(auth_code)
+            if not auth_code:
+                return self.error("Código de autorização inválido. Tente novamente.")
 
         # Check if already authenticated
         creds = await self._get_valid_credentials()
@@ -427,49 +438,80 @@ class GoogleCalendarSkill(BaseSkill):
 
         # If no auth_code provided, generate authorization URL
         if not auth_code:
-            # Build OAuth2 authorization URL WITHOUT PKCE
-            #
-            # IMPORTANT: PKCE is NOT compatible with OOB (out-of-band) flow
-            # Google returns "400: invalid_request" when using PKCE with urn:ietf:wg:oauth:2.0:oob
-            #
-            # Security considerations:
-            # - PKCE is OPTIONAL for Confidential Clients (RFC 7636 §1.1)
-            # - Curupira has client_secret = Confidential Client
-            # - PKCE is MANDATORY only for Public Clients (mobile apps, SPAs)
-            # - For OOB flow, client_secret provides sufficient security
-            #
-            # Using Out-of-Band (OOB) flow for CLI/desktop apps:
-            # - redirect_uri: "urn:ietf:wg:oauth:2.0:oob" displays code in browser
-            # - access_type=offline: Requests refresh token for long-term access
-            # - prompt=consent: Forces approval screen (ensures refresh token)
+            try:
+                # Build OAuth2 authorization URL WITH PKCE (localhost redirect)
+                #
+                # IMPORTANT: Using localhost redirect (127.0.0.1) instead of OOB
+                # Google descontinuou OOB flow em janeiro de 2023
+                #
+                # Security improvements:
+                # 1. PKCE: Protects against authorization code interception attacks
+                # 2. Localhost redirect: Google OAuth 2.0 compliant method
+                # 3. 127.0.0.1 instead of localhost: Google allows HTTP for IP loopback
+                #
+                # Using Localhost Redirect flow:
+                # - redirect_uri: "http://127.0.0.1:8080/callback" (servidor HTTP local)
+                # - Servidor captura código automaticamente
+                # - Fallback manual: usuário cola URL completa se servidor inacessível
+                # - access_type=offline: Requests refresh token for long-term access
+                # - prompt=consent: Forces approval screen (ensures refresh token)
 
-            # Audit log: OAuth flow started
-            log_oauth2_auth_start(self.user_id)
+                # Generate PKCE pair
+                pkce_pair = PKCEState.generate_pkce_pair()
 
-            redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
-            scope = " ".join(SCOPES)
+                # Save code_verifier for token exchange
+                PKCEState.save_pkce_state(pkce_pair["state"], pkce_pair["code_verifier"])
 
-            params = {
-                "client_id": GCAL_CLIENT_ID,
-                "redirect_uri": redirect_uri,
-                "response_type": "code",
-                "scope": scope,
-                "access_type": "offline",
-                "prompt": "consent",
-            }
+                # Start local HTTP server
+                server = OAuthCallbackServer(port=8080, timeout=300)  # 5 min timeout
+                callback_url = await server.start()
 
-            auth_url = f"https://accounts.google.com/o/oauth2/auth?{urlencode(params)}"
+                # Audit log: OAuth flow started
+                log_oauth2_auth_start(self.user_id)
 
-            return self.success(
-                {"auth_url": auth_url},
-                message=(
-                    f"Autenticação necessária. Acesse:\n{auth_url}\n\n"
-                    "Após autorizar, copie o código e envie: 'Configure calendário com código: [SEU_CODIGO]'"
+                # Build authorization URL
+                scope = " ".join(SCOPES)
+                params = {
+                    "client_id": GCAL_CLIENT_ID,
+                    "redirect_uri": callback_url,  # http://127.0.0.1:8080/callback
+                    "response_type": "code",
+                    "scope": scope,
+                    "access_type": "offline",
+                    "prompt": "consent",
+                    "state": pkce_pair["state"],
+                    "code_challenge": pkce_pair["code_challenge"],
+                    "code_challenge_method": "S256",
+                }
+
+                auth_url = f"https://accounts.google.com/o/oauth2/auth?{urlencode(params)}"
+
+                # Save server instance for later use
+                self._oauth_server = server
+
+                return self.success(
+                    {"auth_url": auth_url, "callback_url": callback_url},
+                    message=(
+                        f"🔐 **Autenticação Google Calendar**\n\n"
+                        f"**Passo 1:** Abra este link:\n{auth_url}\n\n"
+                        f"**Passo 2:** Autorize o Curupira\n\n"
+                        f"**Passo 3:** O código será capturado automaticamente!\n\n"
+                        f"_Caso o navegador mostre erro de conexão:_\n"
+                        f"Copie a URL completa da barra de endereço e envie aqui."
+                    )
                 )
-            )
+
+            except Exception as e:
+                self.logger.error(f"Erro ao iniciar OAuth flow: {e}")
+                return self.error("Falha ao iniciar autenticação. Tente novamente.")
 
         # Exchange auth_code for tokens with PKCE
         try:
+            # Stop OAuth callback server if running
+            if hasattr(self, '_oauth_server') and self._oauth_server:
+                await self._oauth_server.stop()
+                delattr(self, '_oauth_server')
+                self.logger.info("OAuth callback server stopped")
+
             # Load PKCE state from file (single-user bot, so safe to load latest)
             # This retrieves the code_verifier saved during URL generation
             from pathlib import Path
@@ -501,7 +543,7 @@ class GoogleCalendarSkill(BaseSkill):
                 # Fallback: sem PKCE (backward compatibility)
                 self.logger.warning("Sem PKCE state - fazendo token exchange sem code_verifier")
 
-            redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
+            redirect_uri = "http://127.0.0.1:8080/callback"
             token_url = "https://oauth2.googleapis.com/token"
 
             # Token exchange payload with PKCE

@@ -31,6 +31,7 @@ Baseado na **Arquitetura da Restrição** e no **Conceito Diet**, ele transforma
 *   **🔌 Multi-Provedor de IA**: Suporte nativo para **Groq** (LLaMA 3 - *default para velocidade*) e **Google Gemini** (Flash - *para janelas de contexto maiores*).
 *   **🌡️ Monitoramento de Hardware**: Pergunte *"Como está o sistema?"* para ver uso de CPU, RAM, Disco e Temperatura do Raspberry Pi em tempo real.
 *   **📰 RSS Reader**: Peça *"Quais são as notícias de hoje?"* e o Curupira busca as últimas manchetes de feeds RSS/Atom configurados.
+*   **📅 Google Calendar**: Integração completa com OAuth2 para listar, adicionar e cancelar eventos. Sincronização automática que transforma eventos em lembretes proativos.
 
 ## 🛠️ Tecnologias
 

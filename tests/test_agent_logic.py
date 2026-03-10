@@ -216,13 +216,22 @@ class TestParseFailedGeneration:
     """Tests for AgentBrain._parse_failed_generation."""
 
     def test_parens_format(self):
-        """Match <function=name(args)></function>."""
-        gen = '<function=rss_read({"url": "https://example.com/feed", "limit": 5})></function>'
+        """Match <function=name(args)</function> (formato correto SEM > extra)."""
+        # Formato simples
+        gen = '<function=rss_read({"url": "https://example.com/feed", "limit": 5})</function>'
         result = AgentBrain._parse_failed_generation(gen)
         assert result is not None
         fn_name, fn_args = result
         assert fn_name == "rss_read"
         assert fn_args == {"url": "https://example.com/feed", "limit": 5}
+
+        # Formato com auth_code (como no erro reportado)
+        gen2 = '<function=google_calendar({"action": "setup_calendar", "auth_code": "4/0AX4XfWi9OYf3X4jdsjfk3jF"})</function>'
+        result2 = AgentBrain._parse_failed_generation(gen2)
+        assert result2 is not None
+        fn_name2, fn_args2 = result2
+        assert fn_name2 == "google_calendar"
+        assert fn_args2 == {"action": "setup_calendar", "auth_code": "4/0AX4XfWi9OYf3X4jdsjfk3jF"}
 
     def test_angle_bracket_format(self):
         """Match <function=name>args</function>."""
@@ -243,13 +252,21 @@ class TestParseFailedGeneration:
         assert fn_args == {"message": "Notícias", "when": "08:00"}
 
     def test_slash_format(self):
-        """Match <function/name{args}></function> (novo formato)."""
-        gen = '<function/google_calendar{"action": "add_calendar_event", "summary": "Teste"}></function>'
+        """Match <function/name{args}</function> (formato correto SEM > extra)."""
+        gen = '<function/google_calendar{"action": "add_calendar_event", "summary": "Teste"}</function>'
         result = AgentBrain._parse_failed_generation(gen)
         assert result is not None
         fn_name, fn_args = result
         assert fn_name == "google_calendar"
         assert fn_args == {"action": "add_calendar_event", "summary": "Teste"}
+
+        # Caso reportado pelo usuário (setup_calendar)
+        gen2 = '<function/google_calendar{"action": "setup_calendar"}</function>'
+        result2 = AgentBrain._parse_failed_generation(gen2)
+        assert result2 is not None
+        fn_name2, fn_args2 = result2
+        assert fn_name2 == "google_calendar"
+        assert fn_args2 == {"action": "setup_calendar"}
 
     def test_direct_json_format(self):
         """Match <function=name{"args"...}> (nome colado direto no JSON)."""
@@ -280,7 +297,7 @@ class TestParseFailedGeneration:
 
     def test_invalid_json_args(self):
         """Falls back to empty dict when args are not valid JSON."""
-        gen = '<function=test(not-json)></function>'
+        gen = '<function=test(not-json)</function>'
         result = AgentBrain._parse_failed_generation(gen)
         assert result is not None
         fn_name, fn_args = result
@@ -333,7 +350,7 @@ async def test_groq_failed_generation_recovery(agent, mock_groq_client):
             "message": "Failed to call a function.",
             "type": "invalid_request_error",
             "code": "tool_use_failed",
-            "failed_generation": '<function=rss_read({"url": "https://example.com/feed", "limit": 5})></function>'
+            "failed_generation": '<function=rss_read({"url": "https://example.com/feed", "limit": 5})</function>'
         }
     }
 
@@ -628,7 +645,7 @@ async def test_llama_xml_slash_format_fallback(agent, mock_groq_client):
     # LLM returns malformed <function/name{...}> format in content
     msg_xml = MagicMock()
     msg_xml.role = "assistant"
-    msg_xml.content = "Creating event...\n<function/google_calendar{\"action\": \"add_event\"}></function>"
+    msg_xml.content = "Creating event...\n<function/google_calendar{\"action\": \"add_event\"}</function>"
     msg_xml.tool_calls = None
 
     msg_final = MagicMock()
@@ -663,7 +680,7 @@ async def test_llama_xml_slash_format_with_invalid_json(agent, mock_groq_client)
     """Test <function/name{...}> with invalid JSON args - should fallback to empty dict."""
     msg_xml = MagicMock()
     msg_xml.role = "assistant"
-    msg_xml.content = "<function/test_skill{not-valid-json}></function>"
+    msg_xml.content = "<function/test_skill{not-valid-json}</function>"
     msg_xml.tool_calls = None
 
     msg_final = MagicMock()
@@ -694,7 +711,7 @@ async def test_llama_xml_slash_intermediate_reply_exception(agent, mock_groq_cli
     """Test that exception in on_intermediate_reply doesn't crash the agent (slash format)."""
     msg_xml = MagicMock()
     msg_xml.role = "assistant"
-    msg_xml.content = "Preamble text\n<function/test_skill{\"arg\": 1}></function>"
+    msg_xml.content = "Preamble text\n<function/test_skill{\"arg\": 1}</function>"
     msg_xml.tool_calls = None
 
     msg_final = MagicMock()

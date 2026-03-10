@@ -65,8 +65,8 @@
     - [x] Screenshots for OAuth consent screen configuration.
     - [x] How to obtain Client ID and Client Secret.
     - [x] How to run `/setup_calendar` in Telegram.
-  - [ ] Update `ROADMAP.md` marking Google Calendar skill as completed.
-  - [ ] Update `README.md` adding Google Calendar to features list.
+  - [x] Update `ROADMAP.md` marking Google Calendar skill as completed.
+  - [x] Update `README.md` adding Google Calendar to features list.
 
 - [ ] **Validation**
   - [x] Run `openspec validate implement-google-calendar-skill --strict`.

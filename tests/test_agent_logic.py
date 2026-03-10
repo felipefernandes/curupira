@@ -242,6 +242,15 @@ class TestParseFailedGeneration:
         assert fn_name == "add_reminder"
         assert fn_args == {"message": "Notícias", "when": "08:00"}
 
+    def test_slash_format(self):
+        """Match <function/name{args}></function> (novo formato)."""
+        gen = '<function/google_calendar{"action": "add_calendar_event", "summary": "Teste"}></function>'
+        result = AgentBrain._parse_failed_generation(gen)
+        assert result is not None
+        fn_name, fn_args = result
+        assert fn_name == "google_calendar"
+        assert fn_args == {"action": "add_calendar_event", "summary": "Teste"}
+
     def test_invalid_json_args(self):
         """Falls back to empty dict when args are not valid JSON."""
         gen = '<function=test(not-json)></function>'

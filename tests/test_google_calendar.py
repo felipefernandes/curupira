@@ -458,8 +458,9 @@ class TestSetupCalendar:
         with patch.object(skill, '_get_valid_credentials', return_value=None):
             result = await skill._setup_calendar(auth_code="none")
 
-        # Deve gerar URL novamente em vez de processar código inválido
-        assert "auth_url" in result.get("data", {})
+        # Deve retornar erro para código inválido
+        assert result["status"] == "error"
+        assert "inválido" in result["error"].lower()
 
 
 class TestGetClient:

@@ -20,10 +20,28 @@ from core.audit_logger import (
 
 @pytest.fixture
 def cleanup_audit_log():
-    """Remove arquivo de audit log antes e depois de cada teste."""
+    """Remove arquivo de audit log e reseta singleton antes/depois de cada teste."""
+    import core.audit_logger
+
+    # Fechar e resetar singleton antes do teste
+    if core.audit_logger._audit_logger_instance is not None:
+        # Fechar todos os handlers para liberar o arquivo
+        for handler in core.audit_logger._audit_logger_instance.logger.handlers[:]:
+            handler.close()
+            core.audit_logger._audit_logger_instance.logger.removeHandler(handler)
+    core.audit_logger._audit_logger_instance = None
+
     if AUDIT_LOG_FILE.exists():
         AUDIT_LOG_FILE.unlink()
     yield
+
+    # Fechar e resetar singleton depois do teste
+    if core.audit_logger._audit_logger_instance is not None:
+        for handler in core.audit_logger._audit_logger_instance.logger.handlers[:]:
+            handler.close()
+            core.audit_logger._audit_logger_instance.logger.removeHandler(handler)
+    core.audit_logger._audit_logger_instance = None
+
     if AUDIT_LOG_FILE.exists():
         AUDIT_LOG_FILE.unlink()
 

@@ -57,21 +57,11 @@ Este guia explica como conectar o Curupira ao seu Google Calendar para gerenciar
 7. Clique em **"DOWNLOAD JSON"** (opcional, para backup)
 8. Clique em **"OK"**
 
-### Passo 5: Configurar Redirect URIs
+**✅ Pronto!** Não é necessário configurar redirect URIs manualmente.
 
-**⚠️ Importante**: Esta etapa é obrigatória para o funcionamento da autenticação.
+**📝 Por que não precisa configurar redirect URIs?**
 
-1. Na página **"Credentials"**, clique no nome do OAuth 2.0 Client ID que você acabou de criar
-2. Em **"Authorized redirect URIs"**, clique em **"+ ADD URI"**
-3. Adicione exatamente:
-   ```
-   http://127.0.0.1:8080/callback
-   ```
-4. Clique em **"SAVE"**
-
-**📝 Por que 127.0.0.1 e não localhost?**
-
-Google permite HTTP para `127.0.0.1` (IP loopback) mas bloqueia para `localhost` por questões de segurança OAuth2. Esta é uma peculiaridade da política do Google.
+Para aplicações do tipo **"Desktop app"**, o Google **automaticamente permite** redirecionamentos para `http://localhost:*` e `http://127.0.0.1:*` em qualquer porta, sem necessidade de registro explícito. Isso é parte da política OAuth 2.0 for Desktop Apps do Google.
 
 ## ⚙️ Configuração no Curupira
 
@@ -229,30 +219,26 @@ Curupira: ⏰ Lembrete: [AGENDA] Reunião com o time
 
 ### "Erro 400: redirect_uri_mismatch"
 
-**Causa**: A Redirect URI não está registrada no Google Cloud Console ou está com formato incorreto.
+**Causa**: Você criou o OAuth Client ID como **"Web application"** em vez de **"Desktop app"**.
 
 **Sintomas**:
 - Durante a autenticação, o Google mostra erro 400
 - Mensagem: "The redirect URI in the request does not match..."
 
-**Solução**:
+**Solução Recomendada**:
+1. Delete o Client ID atual (tipo Web application)
+2. Crie um novo seguindo o **Passo 4** usando tipo **"Desktop app"**
+3. Desktop apps não precisam registrar redirect URIs para localhost/127.0.0.1
+
+**Solução Alternativa** (se preferir manter Web application):
 1. Acesse [Google Cloud Console](https://console.cloud.google.com/)
 2. Vá em **"APIs & Services"** → **"Credentials"**
 3. Clique no seu OAuth 2.0 Client ID
-4. Em **"Authorized redirect URIs"**, verifique se existe **exatamente**:
+4. Em **"Authorized redirect URIs"**, adicione:
    ```
    http://127.0.0.1:8080/callback
    ```
-5. Se não existir ou estiver diferente, adicione/corrija
-6. Clique em **"SAVE"**
-7. Aguarde 1-2 minutos para propagação
-8. Tente autenticar novamente
-
-**⚠️ Atenção aos detalhes**:
-- Use `127.0.0.1` (não `localhost`)
-- Use `http` (não `https`)
-- Porta `8080`
-- Path `/callback`
+5. Clique em **"SAVE"** e aguarde 1-2 minutos para propagação
 
 ### "Erro 400: invalid_request" (OOB Deprecation)
 

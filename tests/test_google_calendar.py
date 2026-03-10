@@ -216,6 +216,46 @@ class TestTokenManagement:
 
         assert result is None
 
+    def test_load_token_corrupted_file_auto_deletes(self, skill, cleanup_token_file):
+        """Verifica que _load_token deleta token corrompido automaticamente."""
+        # Criar arquivo corrompido (não criptografado)
+        with open(TOKEN_FILE, "w") as f:
+            f.write("invalid json {{{")
+
+        assert TOKEN_FILE.exists()
+
+        result = skill._load_token()
+
+        # Verifica que retornou None
+        assert result is None
+        # Verifica que arquivo foi deletado automaticamente
+        assert not TOKEN_FILE.exists()
+
+    def test_load_token_deletion_failure_logged(self, skill, cleanup_token_file):
+        """Verifica que falha ao deletar token corrompido é logada."""
+        from unittest.mock import patch
+        from pathlib import Path
+
+        # Criar arquivo corrompido
+        with open(TOKEN_FILE, "w") as f:
+            f.write("corrupted data")
+
+        # Mockar Path.unlink() para lançar exceção quando chamado em TOKEN_FILE
+        original_unlink = Path.unlink
+        def mock_unlink(self, *args, **kwargs):
+            if str(self) == str(TOKEN_FILE):
+                raise PermissionError("Access denied")
+            return original_unlink(self, *args, **kwargs)
+
+        with patch.object(Path, 'unlink', mock_unlink):
+            with patch.object(skill.logger, 'error') as mock_error:
+                result = skill._load_token()
+
+                # Verifica que retornou None
+                assert result is None
+                # Verifica que erro foi logado
+                assert any("Erro ao deletar token corrompido" in str(call) for call in mock_error.call_args_list)
+
     def test_save_token_creates_file(self, skill, cleanup_token_file, mock_credentials):
         """Verifica que _save_token cria arquivo."""
         skill._save_token(mock_credentials)

@@ -427,22 +427,21 @@ class GoogleCalendarSkill(BaseSkill):
 
         # If no auth_code provided, generate authorization URL
         if not auth_code:
-            # Build OAuth2 authorization URL with PKCE (RFC 7636)
-            # Security improvements:
-            # 1. PKCE: Protects against authorization code interception attacks
-            # 2. State: CSRF protection
-            # 3. Code challenge: SHA-256 hash of code_verifier (stored for token exchange)
+            # Build OAuth2 authorization URL WITHOUT PKCE
+            #
+            # IMPORTANT: PKCE is NOT compatible with OOB (out-of-band) flow
+            # Google returns "400: invalid_request" when using PKCE with urn:ietf:wg:oauth:2.0:oob
+            #
+            # Security considerations:
+            # - PKCE is OPTIONAL for Confidential Clients (RFC 7636 §1.1)
+            # - Curupira has client_secret = Confidential Client
+            # - PKCE is MANDATORY only for Public Clients (mobile apps, SPAs)
+            # - For OOB flow, client_secret provides sufficient security
             #
             # Using Out-of-Band (OOB) flow for CLI/desktop apps:
             # - redirect_uri: "urn:ietf:wg:oauth:2.0:oob" displays code in browser
             # - access_type=offline: Requests refresh token for long-term access
             # - prompt=consent: Forces approval screen (ensures refresh token)
-
-            # Generate PKCE pair (code_verifier, code_challenge, state)
-            pkce_pair = PKCEState.generate_pkce_pair()
-
-            # Save code_verifier for later token exchange (TTL: 10 min)
-            PKCEState.save_pkce_state(pkce_pair["state"], pkce_pair["code_verifier"])
 
             # Audit log: OAuth flow started
             log_oauth2_auth_start(self.user_id)
@@ -457,15 +456,12 @@ class GoogleCalendarSkill(BaseSkill):
                 "scope": scope,
                 "access_type": "offline",
                 "prompt": "consent",
-                "state": pkce_pair["state"],  # CSRF protection
-                "code_challenge": pkce_pair["code_challenge"],  # PKCE
-                "code_challenge_method": "S256",  # SHA-256 hash
             }
 
             auth_url = f"https://accounts.google.com/o/oauth2/auth?{urlencode(params)}"
 
             return self.success(
-                {"auth_url": auth_url, "state": pkce_pair["state"]},
+                {"auth_url": auth_url},
                 message=(
                     f"Autenticação necessária. Acesse:\n{auth_url}\n\n"
                     "Após autorizar, copie o código e envie: 'Configure calendário com código: [SEU_CODIGO]'"

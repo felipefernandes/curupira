@@ -242,6 +242,15 @@ class TestParseFailedGeneration:
         assert fn_name == "add_reminder"
         assert fn_args == {"message": "Notícias", "when": "08:00"}
 
+    def test_slash_format(self):
+        """Match <function/name{args}></function> (novo formato)."""
+        gen = '<function/google_calendar{"action": "add_calendar_event", "summary": "Teste"}></function>'
+        result = AgentBrain._parse_failed_generation(gen)
+        assert result is not None
+        fn_name, fn_args = result
+        assert fn_name == "google_calendar"
+        assert fn_args == {"action": "add_calendar_event", "summary": "Teste"}
+
     def test_invalid_json_args(self):
         """Falls back to empty dict when args are not valid JSON."""
         gen = '<function=test(not-json)></function>'
@@ -580,10 +589,111 @@ async def test_llama_xml_intermediate_reply_logic(agent, mock_groq_client):
     mock_intermediate = AsyncMock()
     
     response = await agent.process("Do XML", {}, on_intermediate_reply=mock_intermediate)
-    
+
     assert response == "Done XML!"
     # It should extract the preamble before the <function=>
     mock_intermediate.assert_called_once_with("Wait a second...")
+
+
+@pytest.mark.asyncio
+async def test_llama_xml_slash_format_fallback(agent, mock_groq_client):
+    """Test the <function/name{...}> fallback detection in Groq content."""
+    # LLM returns malformed <function/name{...}> format in content
+    msg_xml = MagicMock()
+    msg_xml.role = "assistant"
+    msg_xml.content = "Creating event...\n<function/google_calendar{\"action\": \"add_event\"}></function>"
+    msg_xml.tool_calls = None
+
+    msg_final = MagicMock()
+    msg_final.role = "assistant"
+    msg_final.content = "Event created!"
+    msg_final.tool_calls = None
+
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.side_effect = [
+        MagicMock(choices=[MagicMock(message=msg_xml)]),
+        MagicMock(choices=[MagicMock(message=msg_final)])
+    ]
+
+    mock_skill = AsyncMock()
+    mock_skill.name = "google_calendar"
+    mock_skill.execute.return_value = {"status": "ok"}
+    agent.register_skill(mock_skill)
+
+    mock_intermediate = AsyncMock()
+
+    response = await agent.process("Add event", {}, on_intermediate_reply=mock_intermediate)
+
+    assert response == "Event created!"
+    # Should extract preamble before <function/
+    mock_intermediate.assert_called_once_with("Creating event...")
+    # Should execute the skill
+    mock_skill.execute.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_llama_xml_slash_format_with_invalid_json(agent, mock_groq_client):
+    """Test <function/name{...}> with invalid JSON args - should fallback to empty dict."""
+    msg_xml = MagicMock()
+    msg_xml.role = "assistant"
+    msg_xml.content = "<function/test_skill{not-valid-json}></function>"
+    msg_xml.tool_calls = None
+
+    msg_final = MagicMock()
+    msg_final.role = "assistant"
+    msg_final.content = "Done!"
+    msg_final.tool_calls = None
+
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.side_effect = [
+        MagicMock(choices=[MagicMock(message=msg_xml)]),
+        MagicMock(choices=[MagicMock(message=msg_final)])
+    ]
+
+    mock_skill = AsyncMock()
+    mock_skill.name = "test_skill"
+    mock_skill.execute.return_value = {"status": "ok"}
+    agent.register_skill(mock_skill)
+
+    response = await agent.process("Test", {})
+
+    assert response == "Done!"
+    # Should call with empty dict when JSON is invalid
+    mock_skill.execute.assert_called_once_with({})
+
+
+@pytest.mark.asyncio
+async def test_llama_xml_slash_intermediate_reply_exception(agent, mock_groq_client):
+    """Test that exception in on_intermediate_reply doesn't crash the agent (slash format)."""
+    msg_xml = MagicMock()
+    msg_xml.role = "assistant"
+    msg_xml.content = "Preamble text\n<function/test_skill{\"arg\": 1}></function>"
+    msg_xml.tool_calls = None
+
+    msg_final = MagicMock()
+    msg_final.role = "assistant"
+    msg_final.content = "Done!"
+    msg_final.tool_calls = None
+
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.side_effect = [
+        MagicMock(choices=[MagicMock(message=msg_xml)]),
+        MagicMock(choices=[MagicMock(message=msg_final)])
+    ]
+
+    mock_skill = AsyncMock()
+    mock_skill.name = "test_skill"
+    mock_skill.execute.return_value = {"status": "ok"}
+    agent.register_skill(mock_skill)
+
+    # Callback that raises exception
+    mock_intermediate = AsyncMock(side_effect=Exception("Callback crashed"))
+
+    response = await agent.process("Test", {}, on_intermediate_reply=mock_intermediate)
+
+    # Should continue despite callback exception
+    assert response == "Done!"
+    mock_skill.execute.assert_called_once()
 
 
 @pytest.mark.asyncio

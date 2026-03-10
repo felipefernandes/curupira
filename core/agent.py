@@ -25,6 +25,7 @@ class AgentBrain:
     _RE_FUNC_PARENS = re.compile(r'<function=(\w+)\((.*?)\)></function>', re.DOTALL)  # <function=name(args)></function>
     _RE_FUNC_ANGLES = re.compile(r'<function=([a-zA-Z0-9_]+)>(\{.*?\})</function>', re.DOTALL)      # <function=name>{"args":...}</function>
     _RE_FUNC_COLON  = re.compile(r'<function=(\w+)":\s*(.*?)</function>', re.DOTALL)  # <function=name":args</function>
+    _RE_FUNC_SLASH  = re.compile(r'<function/([a-zA-Z0-9_]+)(\{.*?\})></function>', re.DOTALL)   # <function/name{...}></function> (novo formato)
 
     # Compiled patterns to strip CoT reasoning blocks (Qwen3, DeepSeek-R1, etc.)
     _RE_THINK_BLOCK = re.compile(r'<think>(?:.*?</think>|.*$)', re.DOTALL)
@@ -212,7 +213,7 @@ class AgentBrain:
 
         Returns None if the string does not contain a recognisable tool call.
         """
-        if not failed_gen or '<function=' not in failed_gen:
+        if not failed_gen or ('<function=' not in failed_gen and '<function/' not in failed_gen):
             return None
 
         # <function=name(args)></function>
@@ -223,6 +224,9 @@ class AgentBrain:
         if not match:
             # <function=name":args</function>  (Llama colon-quote format)
             match = AgentBrain._RE_FUNC_COLON.search(failed_gen)
+        if not match:
+            # <function/name{...}> (novo formato)
+            match = AgentBrain._RE_FUNC_SLASH.search(failed_gen)
         if not match:
             return None
 
@@ -644,22 +648,29 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
 
                     # Fallback: Check for Llama-3 style <function> XML in content if no tool_calls
                     content = msg.content or ""
-                    if "<function=" in content:
+                    if "<function=" in content or "<function/" in content:
                         try:
-                            # Regex to capture name and args: <function=name>(args)</function>
-                            match = self._RE_FUNC_ANGLES.search(content)
+                            # Try multiple regex patterns to detect malformed tool calls
+                            match = self._RE_FUNC_ANGLES.search(content)  # <function=name>{...}</function>
+                            if not match:
+                                match = self._RE_FUNC_SLASH.search(content)  # <function/name{...}>
+                            if not match:
+                                match = self._RE_FUNC_PARENS.search(content)  # <function=name(...)></function>
+                            if not match:
+                                match = self._RE_FUNC_COLON.search(content)  # <function=name":...></function>
+
                             if match:
                                 fn_name = match.group(1)
                                 args_str = match.group(2)
-                                self.logger.warning(f"Detected Llama-3 XML tool call in content: {fn_name}")
-                                
+                                self.logger.warning(f"Detected malformed XML tool call in content: {fn_name}")
+
                                 preamble = content[:match.start()].strip()
                                 if preamble and on_intermediate_reply:
                                     try:
                                         await on_intermediate_reply(preamble)
                                     except Exception as cb_err:
                                         self.logger.error(f"Error in on_intermediate_reply (Llama XML): {cb_err}")
-                                
+
                                 try:
                                     # Try to parse strict JSON first
                                     fn_args = json.loads(args_str)
@@ -667,13 +678,13 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                                     # Sometimes args are not quoted keys? Just pass empty for safety if complex
                                     self.logger.warning(f"Could not parse args from XML: {args_str}")
                                     fn_args = {}
-                                
+
                                 result_str = await self._execute_tool_call(fn_name, fn_args, context)
-                                
+
                                 # CRITICAL FIX: Rewrite history to look like a VALID tool call
                                 # Groq API rejects <function> tags in content on next turn
                                 fake_tool_id = f"call_{uuid.uuid4().hex[:8]}"
-                                
+
                                 # Create a synthetic assistant message with proper tool_calls
                                 synthetic_msg = {
                                     "role": "assistant",
@@ -688,7 +699,7 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                                     }]
                                 }
                                 messages.append(synthetic_msg)
-                                
+
                                 messages.append({
                                     "role": "tool",
                                     "tool_call_id": fake_tool_id,

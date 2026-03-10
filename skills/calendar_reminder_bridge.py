@@ -10,7 +10,7 @@ import asyncio
 import aiosqlite
 import httpx
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -167,10 +167,10 @@ class CalendarReminderBridge:
             self.logger.warning("Calendário não autenticado - pulando sync")
             return []
 
-        # Fetch events for next 4 hours
-        now = datetime.now()
-        time_min = now.isoformat() + "Z"
-        time_max = (now + timedelta(hours=4)).isoformat() + "Z"
+        # Fetch events for next 4 hours (use UTC timezone-aware datetime)
+        now = datetime.now(timezone.utc)
+        time_min = now.isoformat().replace("+00:00", "Z")
+        time_max = (now + timedelta(hours=4)).isoformat().replace("+00:00", "Z")
 
         try:
             async with httpx.AsyncClient(
@@ -266,18 +266,26 @@ class CalendarReminderBridge:
             if not start_str:
                 return
 
-            # Parse datetime
-            start_dt = datetime.fromisoformat(start_str.replace("Z", ""))
+            # Parse datetime with timezone support
+            # Google Calendar returns: 2026-03-10T14:30:00Z (UTC)
+            if start_str.endswith("Z"):
+                # Convert "Z" to "+00:00" for proper UTC timezone parsing
+                start_dt = datetime.fromisoformat(start_str.replace("Z", "+00:00"))
+            else:
+                start_dt = datetime.fromisoformat(start_str)
 
             # Calculate reminder time (10 minutes before event)
             remind_at = start_dt - timedelta(minutes=10)
 
+            # Get current time in UTC (timezone-aware)
+            now = datetime.now(timezone.utc)
+
             # Don't create if reminder time is in the past
-            if remind_at < datetime.now():
+            if remind_at < now:
                 return
 
             # Calculate delay in seconds
-            delay_seconds = int((remind_at - datetime.now()).total_seconds())
+            delay_seconds = int((remind_at - now).total_seconds())
 
             # Create reminder message with [AGENDA] prefix
             message = f"[AGENDA] {event.get('summary', 'Evento')}"

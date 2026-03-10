@@ -12,7 +12,7 @@ Benefícios:
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Optional, Any
 
@@ -64,7 +64,7 @@ class AuditLogger:
              "user_id": 123456789, "success": true, "details": {}}
         """
         log_entry = {
-            "timestamp": datetime.now(datetime.UTC).isoformat().replace('+00:00', 'Z'),
+            "timestamp": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
             "event": event_type,
             "user_id": user_id,
             "success": success,

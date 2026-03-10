@@ -715,6 +715,70 @@ async def test_llama_xml_slash_intermediate_reply_exception(agent, mock_groq_cli
 
 
 @pytest.mark.asyncio
+async def test_llama_xml_direct_json_format_fallback(agent, mock_groq_client):
+    """Test the <function=name{"args"...}> fallback (nome colado direto no JSON)."""
+    # LLM returns malformed <function=name{...}> format (no > between name and JSON)
+    msg_xml = MagicMock()
+    msg_xml.role = "assistant"
+    msg_xml.content = '<function=google_calendar{"action": "list_events"}</function>'
+    msg_xml.tool_calls = None
+
+    msg_final = MagicMock()
+    msg_final.role = "assistant"
+    msg_final.content = "Events listed!"
+    msg_final.tool_calls = None
+
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.side_effect = [
+        MagicMock(choices=[MagicMock(message=msg_xml)]),
+        MagicMock(choices=[MagicMock(message=msg_final)])
+    ]
+
+    mock_skill = AsyncMock()
+    mock_skill.name = "google_calendar"
+    mock_skill.execute.return_value = {"status": "ok"}
+    agent.register_skill(mock_skill)
+
+    response = await agent.process("List events", {})
+
+    assert response == "Events listed!"
+    # Should execute the skill with parsed JSON args
+    mock_skill.execute.assert_called_once_with({}, action="list_events")
+
+
+@pytest.mark.asyncio
+async def test_llama_xml_double_equals_format_fallback(agent, mock_groq_client):
+    """Test the <function=name={"args"...}> fallback (dois sinais de igual)."""
+    # LLM returns malformed <function=name={...}> format (double equals)
+    msg_xml = MagicMock()
+    msg_xml.role = "assistant"
+    msg_xml.content = '<function=google_calendar={"action": "setup_calendar"}</function>'
+    msg_xml.tool_calls = None
+
+    msg_final = MagicMock()
+    msg_final.role = "assistant"
+    msg_final.content = "Calendar configured!"
+    msg_final.tool_calls = None
+
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.side_effect = [
+        MagicMock(choices=[MagicMock(message=msg_xml)]),
+        MagicMock(choices=[MagicMock(message=msg_final)])
+    ]
+
+    mock_skill = AsyncMock()
+    mock_skill.name = "google_calendar"
+    mock_skill.execute.return_value = {"status": "ok"}
+    agent.register_skill(mock_skill)
+
+    response = await agent.process("Setup calendar", {})
+
+    assert response == "Calendar configured!"
+    # Should execute the skill with parsed JSON args
+    mock_skill.execute.assert_called_once_with({}, action="setup_calendar")
+
+
+@pytest.mark.asyncio
 async def test_gemini_intermediate_reply_exception(agent):
     """Test that if on_intermediate_reply raises an exception in Gemini, the process continues."""
     agent.provider = "gemini"

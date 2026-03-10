@@ -251,6 +251,24 @@ class TestParseFailedGeneration:
         assert fn_name == "google_calendar"
         assert fn_args == {"action": "add_calendar_event", "summary": "Teste"}
 
+    def test_direct_json_format(self):
+        """Match <function=name{"args"...}> (nome colado direto no JSON)."""
+        gen = '<function=google_calendar{"action": "list_calendar_events", "time_range": "tomorrow"}</function>'
+        result = AgentBrain._parse_failed_generation(gen)
+        assert result is not None
+        fn_name, fn_args = result
+        assert fn_name == "google_calendar"
+        assert fn_args == {"action": "list_calendar_events", "time_range": "tomorrow"}
+
+    def test_double_equals_format(self):
+        """Match <function=name={"args"...}> (dois sinais de igual)."""
+        gen = '<function=google_calendar={"action": "setup_calendar", "auth_code": "4/0AX4XfWi9LfV4j8x8j8xj8"}</function>'
+        result = AgentBrain._parse_failed_generation(gen)
+        assert result is not None
+        fn_name, fn_args = result
+        assert fn_name == "google_calendar"
+        assert fn_args == {"action": "setup_calendar", "auth_code": "4/0AX4XfWi9LfV4j8x8j8xj8"}
+
     def test_invalid_json_args(self):
         """Falls back to empty dict when args are not valid JSON."""
         gen = '<function=test(not-json)></function>'
@@ -694,6 +712,70 @@ async def test_llama_xml_slash_intermediate_reply_exception(agent, mock_groq_cli
     # Should continue despite callback exception
     assert response == "Done!"
     mock_skill.execute.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_llama_xml_direct_json_format_fallback(agent, mock_groq_client):
+    """Test the <function=name{"args"...}> fallback (nome colado direto no JSON)."""
+    # LLM returns malformed <function=name{...}> format (no > between name and JSON)
+    msg_xml = MagicMock()
+    msg_xml.role = "assistant"
+    msg_xml.content = '<function=google_calendar{"action": "list_events"}</function>'
+    msg_xml.tool_calls = None
+
+    msg_final = MagicMock()
+    msg_final.role = "assistant"
+    msg_final.content = "Events listed!"
+    msg_final.tool_calls = None
+
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.side_effect = [
+        MagicMock(choices=[MagicMock(message=msg_xml)]),
+        MagicMock(choices=[MagicMock(message=msg_final)])
+    ]
+
+    mock_skill = AsyncMock()
+    mock_skill.name = "google_calendar"
+    mock_skill.execute.return_value = {"status": "ok"}
+    agent.register_skill(mock_skill)
+
+    response = await agent.process("List events", {})
+
+    assert response == "Events listed!"
+    # Should execute the skill with parsed JSON args
+    mock_skill.execute.assert_called_once_with({}, action="list_events")
+
+
+@pytest.mark.asyncio
+async def test_llama_xml_double_equals_format_fallback(agent, mock_groq_client):
+    """Test the <function=name={"args"...}> fallback (dois sinais de igual)."""
+    # LLM returns malformed <function=name={...}> format (double equals)
+    msg_xml = MagicMock()
+    msg_xml.role = "assistant"
+    msg_xml.content = '<function=google_calendar={"action": "setup_calendar"}</function>'
+    msg_xml.tool_calls = None
+
+    msg_final = MagicMock()
+    msg_final.role = "assistant"
+    msg_final.content = "Calendar configured!"
+    msg_final.tool_calls = None
+
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.side_effect = [
+        MagicMock(choices=[MagicMock(message=msg_xml)]),
+        MagicMock(choices=[MagicMock(message=msg_final)])
+    ]
+
+    mock_skill = AsyncMock()
+    mock_skill.name = "google_calendar"
+    mock_skill.execute.return_value = {"status": "ok"}
+    agent.register_skill(mock_skill)
+
+    response = await agent.process("Setup calendar", {})
+
+    assert response == "Calendar configured!"
+    # Should execute the skill with parsed JSON args
+    mock_skill.execute.assert_called_once_with({}, action="setup_calendar")
 
 
 @pytest.mark.asyncio

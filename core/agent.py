@@ -528,7 +528,9 @@ class AgentBrain:
 
         if gcal_skill and hasattr(gcal_skill, '_awaiting_auth') and gcal_skill._awaiting_auth:
             # Timeout check (5 minutes)
-            if hasattr(gcal_skill, '_auth_start_time') and gcal_skill._auth_start_time:
+            if (hasattr(gcal_skill, '_auth_start_time') and
+                gcal_skill._auth_start_time and
+                isinstance(gcal_skill._auth_start_time, (int, float))):
                 elapsed = time.time() - gcal_skill._auth_start_time
                 if elapsed > 300:  # 5 minutes
                     # Timeout expired

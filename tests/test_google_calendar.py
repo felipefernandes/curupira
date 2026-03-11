@@ -540,5 +540,116 @@ class TestEdgeCases:
         assert result is None
 
 
-# NOTA: Testes para _list_calendar_events, _add_calendar_event e _cancel_calendar_event
-# requerem mock de httpx.AsyncClient e são mais complexos. Serão adicionados em seguida.
+class TestListCalendarEvents:
+    """Testa _list_calendar_events."""
+
+    @pytest.mark.asyncio
+    async def test_list_calendar_events_filters_all_day_events_from_yesterday(self, skill, mock_credentials):
+        """Verifica que eventos all-day de ontem são filtrados ao listar eventos de hoje."""
+        # Cenário: Listar eventos de "today" (2026-03-11)
+        # - Evento all-day de ontem (2026-03-10 00:00 - 23:59) tem end.date = 2026-03-11
+        # - Google Calendar API retorna esse evento porque end dentro do range
+        # - Filtro deve remover esse evento (end <= range_start)
+
+        # Mock Google Calendar API response
+        mock_api_response = {
+            "items": [
+                {
+                    "id": "event_yesterday",
+                    "summary": "Evento de Ontem (All-Day)",
+                    "start": {"date": "2026-03-10"},  # Ontem
+                    "end": {"date": "2026-03-11"},    # Hoje (all-day end = start + 1 day)
+                    "description": "Evento que iniciou ontem"
+                },
+                {
+                    "id": "event_today",
+                    "summary": "Evento de Hoje (All-Day)",
+                    "start": {"date": "2026-03-11"},  # Hoje
+                    "end": {"date": "2026-03-12"},    # Amanhã
+                    "description": "Evento de hoje"
+                },
+                {
+                    "id": "event_timed",
+                    "summary": "Reunião às 14h",
+                    "start": {"dateTime": "2026-03-11T14:00:00-03:00"},
+                    "end": {"dateTime": "2026-03-11T15:00:00-03:00"},
+                    "description": "Evento com horário"
+                }
+            ]
+        }
+
+        # Mock httpx.AsyncClient
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_api_response
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.aclose = AsyncMock()
+
+        with patch.object(skill, '_get_client', return_value=mock_client):
+            result = await skill._list_calendar_events(time_range="today")
+
+        # Verificar resultado
+        assert result["status"] == "success"
+        assert "events" in result["data"]
+        events = result["data"]["events"]
+
+        # Deve ter apenas 2 eventos (evento de ontem filtrado)
+        assert len(events) == 2
+
+        # Verificar que evento de ontem foi filtrado
+        event_ids = [e["id"] for e in events]
+        assert "event_yesterday" not in event_ids, "Evento all-day de ontem deveria ser filtrado"
+
+        # Verificar que eventos de hoje estão presentes
+        assert "event_today" in event_ids
+        assert "event_timed" in event_ids
+
+    @pytest.mark.asyncio
+    async def test_list_calendar_events_includes_all_day_events_from_today(self, skill, mock_credentials):
+        """Verifica que eventos all-day de hoje são incluídos."""
+        # Mock Google Calendar API response
+        mock_api_response = {
+            "items": [
+                {
+                    "id": "event_today",
+                    "summary": "Evento de Hoje",
+                    "start": {"date": "2026-03-11"},  # Hoje
+                    "end": {"date": "2026-03-12"},    # Amanhã (all-day)
+                    "description": "Evento de hoje"
+                }
+            ]
+        }
+
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_api_response
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.aclose = AsyncMock()
+
+        with patch.object(skill, '_get_client', return_value=mock_client):
+            result = await skill._list_calendar_events(time_range="today")
+
+        # Verificar que evento de hoje está presente
+        assert result["status"] == "success"
+        events = result["data"]["events"]
+        assert len(events) == 1
+        assert events[0]["id"] == "event_today"
+
+    @pytest.mark.asyncio
+    async def test_list_calendar_events_not_authenticated(self, skill):
+        """Verifica que retorna erro se não autenticado."""
+        with patch.object(skill, '_get_client', return_value=None):
+            result = await skill._list_calendar_events(time_range="today")
+
+        assert result["status"] == "error"
+        assert "não autenticado" in result["error"].lower()
+
+
+# NOTA: Testes para _add_calendar_event e _cancel_calendar_event
+# requerem mock de httpx.AsyncClient e serão adicionados conforme necessário.

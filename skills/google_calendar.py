@@ -90,6 +90,12 @@ class GoogleCalendarSkill(BaseSkill):
         self.context: Dict[str, Any] = {}
         self.user_id: int = 0
 
+        # OAuth state tracking (dual-channel approach)
+        # Allows simultaneous listening for HTTP callback OR Telegram message
+        self._oauth_server: Optional[OAuthCallbackServer] = None
+        self._awaiting_auth: bool = False
+        self._auth_start_time: Optional[float] = None
+
     @property
     def name(self) -> str:
         return "google_calendar"
@@ -400,6 +406,216 @@ class GoogleCalendarSkill(BaseSkill):
 
     # ── Tool Implementations ───────────────────────────────────────────────
 
+    async def _send_telegram_message(self, text: str):
+        """
+        Sends message to user via Telegram.
+
+        This integrates with the bot's message sending system.
+        Implementation depends on bot architecture.
+
+        Args:
+            text: Message to send to user
+
+        TODO: Implement integration with bot.py
+        Options:
+        - Callback function passed in context
+        - Async queue for outgoing messages
+        - Direct Telegram API call with user_id
+        """
+        self.logger.info(f"[TELEGRAM] Would send message: {text[:50]}...")
+        # Placeholder - needs integration with bot.py
+        # await self.context.get('send_message_callback')(text)
+        pass
+
+    async def _start_oauth_server_background(self):
+        """
+        Background task that waits for authorization code via HTTP callback.
+
+        When code is captured, automatically:
+        1. Performs token exchange
+        2. Sends success/error message to user via Telegram
+        3. Cleans up state (_awaiting_auth = False)
+
+        This is the "auto-capture" channel in dual-channel approach.
+        Runs in parallel with message handler (fallback manual channel).
+
+        Returns:
+            None (runs in background via asyncio.create_task)
+        """
+        if not self._oauth_server:
+            self.logger.error("Cannot start background task: no OAuth server instance")
+            return
+
+        try:
+            self.logger.info("Background task: waiting for authorization code via HTTP callback...")
+
+            # Wait for code with 5-minute timeout
+            code = await self._oauth_server.wait_for_code()
+
+            if code:
+                self.logger.info("✅ Code captured automatically via HTTP callback")
+
+                # Perform token exchange
+                result = await self._exchange_code_for_tokens(code)
+
+                if result["status"] == "success":
+                    await self._send_telegram_message(
+                        "✅ Autenticação concluída com sucesso!\n"
+                        "Você pode usar o Google Calendar agora."
+                    )
+                else:
+                    await self._send_telegram_message(
+                        f"❌ Erro na autenticação: {result.get('error')}"
+                    )
+
+                # Clean up state
+                self._awaiting_auth = False
+                self._auth_start_time = None
+
+        except asyncio.TimeoutError:
+            self.logger.warning("⏱️ Timeout waiting for authorization code (5 min)")
+            await self._send_telegram_message(
+                "⏱️ Tempo esgotado para autenticação.\n"
+                "Tente novamente: 'configure calendário'"
+            )
+            self._awaiting_auth = False
+            self._auth_start_time = None
+
+        except Exception as e:
+            self.logger.error(f"Error in background task: {type(e).__name__}: {e}")
+            self._awaiting_auth = False
+            self._auth_start_time = None
+
+        finally:
+            # Always close server
+            if self._oauth_server:
+                try:
+                    await self._oauth_server.stop()
+                except Exception as e:
+                    self.logger.error(f"Error stopping OAuth server: {e}")
+                self._oauth_server = None
+
+    async def _exchange_code_for_tokens(self, auth_code: str) -> Dict[str, Any]:
+        """
+        Exchanges authorization code for access/refresh tokens.
+
+        Shared function used by both:
+        - Auto-capture (background task via HTTP callback)
+        - Manual fallback (user pastes URL via Telegram)
+
+        Args:
+            auth_code: Authorization code from Google OAuth redirect
+
+        Returns:
+            {"status": "success"/"error", "error": error_message (if error)}
+
+        Security:
+            - Loads and validates PKCE code_verifier
+            - Single-use PKCE state (deleted after read)
+            - Encrypted token storage
+            - Audit logging for all outcomes
+        """
+        try:
+            # Stop OAuth callback server if running
+            if hasattr(self, '_oauth_server') and self._oauth_server:
+                await self._oauth_server.stop()
+                self._oauth_server = None
+                self.logger.info("OAuth callback server stopped")
+
+            # Load PKCE state from file (single-user bot, so safe to load latest)
+            pkce_state_file = Path(__file__).parent.parent / "data" / "pkce_state.json"
+
+            code_verifier = None
+            if pkce_state_file.exists():
+                try:
+                    import json
+                    from datetime import datetime as dt
+
+                    with open(pkce_state_file, "r") as f:
+                        pkce_data = json.load(f)
+
+                    # Check expiration
+                    expires_at = dt.fromisoformat(pkce_data["expires_at"])
+                    if dt.now() < expires_at:
+                        code_verifier = pkce_data["code_verifier"]
+
+                        # Single-use: delete after reading
+                        pkce_state_file.unlink()
+                        self.logger.info("PKCE state loaded and deleted (single-use)")
+                    else:
+                        self.logger.warning("PKCE state expired")
+                        pkce_state_file.unlink()
+                except Exception as e:
+                    self.logger.error(f"Error loading PKCE state: {type(e).__name__}")
+
+            if not code_verifier:
+                # Fallback: sem PKCE (backward compatibility)
+                self.logger.warning("No PKCE state - token exchange without code_verifier")
+
+            redirect_uri = "http://127.0.0.1:8080/callback"
+            token_url = "https://oauth2.googleapis.com/token"
+
+            # Token exchange payload with PKCE
+            token_data = {
+                "code": auth_code,
+                "client_id": GCAL_CLIENT_ID,
+                "client_secret": GCAL_CLIENT_SECRET,
+                "redirect_uri": redirect_uri,
+                "grant_type": "authorization_code",
+            }
+
+            # Include code_verifier if available (PKCE)
+            if code_verifier:
+                token_data["code_verifier"] = code_verifier
+
+            # Exchange code for tokens with timeout
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(token_url, data=token_data)
+                response.raise_for_status()
+                token_response = response.json()
+
+            # Create credentials from token response
+            creds = Credentials(
+                token=token_response.get("access_token"),
+                refresh_token=token_response.get("refresh_token"),
+                token_uri=token_url,
+                client_id=GCAL_CLIENT_ID,
+                client_secret=GCAL_CLIENT_SECRET,
+                scopes=SCOPES,
+            )
+
+            # Save encrypted credentials
+            self._save_token(creds)
+
+            # Audit log: authentication success
+            log_oauth2_auth_success(self.user_id, provider="google_calendar")
+
+            return {"status": "success"}
+
+        except httpx.HTTPStatusError as e:
+            error_type = "unknown"
+            try:
+                error_data = e.response.json()
+                error_type = error_data.get("error", "unknown")
+                self.logger.error(f"OAuth2 error type: {error_type}")
+            except Exception:
+                pass
+
+            self.logger.error(f"HTTP error {e.response.status_code} during token exchange")
+            log_oauth2_auth_failed(self.user_id, error_type, provider="google_calendar")
+
+            return {"status": "error", "error": f"Authentication failed ({error_type})"}
+
+        except httpx.TimeoutException:
+            self.logger.error("Timeout during token exchange")
+            log_oauth2_auth_failed(self.user_id, "TimeoutException", provider="google_calendar")
+            return {"status": "error", "error": "Timeout during authentication"}
+
+        except Exception as e:
+            self.logger.error(f"Error in token exchange: {type(e).__name__}")
+            log_oauth2_auth_failed(self.user_id, type(e).__name__, provider="google_calendar")
+            return {"status": "error", "error": "Authentication failed"}
+
     async def _setup_calendar(self, auth_code: Optional[str] = None) -> Dict[str, Any]:
         """
         Handles OAuth2 authentication flow.
@@ -488,6 +704,14 @@ class GoogleCalendarSkill(BaseSkill):
                 # Save server instance for later use
                 self._oauth_server = server
 
+                # Mark state as awaiting authentication (dual-channel)
+                self._awaiting_auth = True
+                import time
+                self._auth_start_time = time.time()
+
+                # Start background task to wait for HTTP callback (auto-capture channel)
+                asyncio.create_task(self._start_oauth_server_background())
+
                 return self.success(
                     {"auth_url": auth_url, "callback_url": callback_url},
                     message=(
@@ -505,113 +729,19 @@ class GoogleCalendarSkill(BaseSkill):
                 return self.error("Falha ao iniciar autenticação. Tente novamente.")
 
         # Exchange auth_code for tokens with PKCE
-        try:
-            # Stop OAuth callback server if running
-            if hasattr(self, '_oauth_server') and self._oauth_server:
-                await self._oauth_server.stop()
-                delattr(self, '_oauth_server')
-                self.logger.info("OAuth callback server stopped")
+        result = await self._exchange_code_for_tokens(auth_code)
 
-            # Load PKCE state from file (single-user bot, so safe to load latest)
-            # This retrieves the code_verifier saved during URL generation
-            from pathlib import Path
-            pkce_state_file = Path(__file__).parent.parent / "data" / "pkce_state.json"
+        # Clean up authentication state (manual fallback channel won)
+        self._awaiting_auth = False
+        self._auth_start_time = None
 
-            code_verifier = None
-            if pkce_state_file.exists():
-                try:
-                    import json
-                    from datetime import datetime as dt
-
-                    with open(pkce_state_file, "r") as f:
-                        pkce_data = json.load(f)
-
-                    # Verificar expiração
-                    expires_at = dt.fromisoformat(pkce_data["expires_at"])
-                    if dt.now() < expires_at:
-                        code_verifier = pkce_data["code_verifier"]
-
-                        # Single-use: remover após leitura
-                        pkce_state_file.unlink()
-                    else:
-                        self.logger.warning("PKCE state expired")
-                        pkce_state_file.unlink()
-                except Exception as e:
-                    self.logger.error(f"Erro ao carregar PKCE state: {type(e).__name__}")
-
-            if not code_verifier:
-                # Fallback: sem PKCE (backward compatibility)
-                self.logger.warning("Sem PKCE state - fazendo token exchange sem code_verifier")
-
-            redirect_uri = "http://127.0.0.1:8080/callback"
-            token_url = "https://oauth2.googleapis.com/token"
-
-            # Token exchange payload with PKCE
-            token_data = {
-                "code": auth_code,
-                "client_id": GCAL_CLIENT_ID,
-                "client_secret": GCAL_CLIENT_SECRET,
-                "redirect_uri": redirect_uri,
-                "grant_type": "authorization_code",
-            }
-
-            # Incluir code_verifier se disponível (PKCE)
-            if code_verifier:
-                token_data["code_verifier"] = code_verifier
-
-            # Exchange code for tokens with timeout
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(token_url, data=token_data)
-                response.raise_for_status()
-                token_response = response.json()
-
-            # Create credentials from token response
-            creds = Credentials(
-                token=token_response.get("access_token"),
-                refresh_token=token_response.get("refresh_token"),
-                token_uri=token_url,
-                client_id=GCAL_CLIENT_ID,
-                client_secret=GCAL_CLIENT_SECRET,
-                scopes=SCOPES,
-            )
-
-            # Save encrypted credentials
-            self._save_token(creds)
-
-            # Audit log: authentication success
-            log_oauth2_auth_success(self.user_id, provider="google_calendar")
-
+        if result["status"] == "success":
             return self.success(
                 {"status": "authenticated"},
                 message="✅ Autenticação concluída com sucesso! Você pode usar o Google Calendar agora."
             )
-
-        except httpx.HTTPStatusError as e:
-            self.logger.error(f"HTTP error durante token exchange: {e.response.status_code}")
-
-            # SECURITY: Não logar response.text completo - pode conter detalhes técnicos
-            # RFC 6749 §5.2: Error responses podem incluir error_description sensível
-            # Logar apenas o campo "error" (enum padronizado) é seguro
-            try:
-                error_data = e.response.json()
-                error_type = error_data.get("error", "unknown")
-                self.logger.error(f"Tipo de erro OAuth2: {error_type}")
-
-                # Audit log: authentication failed
-                log_oauth2_auth_failed(self.user_id, error_type, provider="google_calendar")
-            except Exception:
-                # Se resposta não for JSON válido, apenas status code já foi logado
-                log_oauth2_auth_failed(self.user_id, "HTTPStatusError", provider="google_calendar")
-
-            return self.error("Falha na autenticação. Verifique o código fornecido.")
-        except httpx.TimeoutException:
-            self.logger.error("Timeout durante token exchange")
-            log_oauth2_auth_failed(self.user_id, "TimeoutException", provider="google_calendar")
-            return self.error("Timeout ao autenticar. Tente novamente.")
-        except Exception as e:
-            self.logger.error(f"Erro na autenticação OAuth2: {type(e).__name__}")
-            log_oauth2_auth_failed(self.user_id, type(e).__name__, provider="google_calendar")
-            return self.error("Falha na autenticação. Verifique o código fornecido.")
+        else:
+            return self.error(result.get("error", "Falha na autenticação. Verifique o código fornecido."))
 
     async def _list_calendar_events(self, time_range: str) -> Dict[str, Any]:
         """

@@ -14,7 +14,9 @@ from skills.mcp_skill import MCPSkill
 from skills.introspection import IntrospectionSkill
 from skills.rss import RssReadSkill, RssListSkill
 from skills.google_calendar import GoogleCalendarSkill
+from skills.oauth_http_server import extract_code_from_url
 import random
+import time
 
 # NOTE: Providers are lazy-loaded to save memory
 
@@ -518,6 +520,68 @@ class AgentBrain:
         if not user_msg:
             return "..."
 
+        # ── Dual-Channel OAuth Handler ─────────────────────────────────────
+        # Check if Google Calendar skill is awaiting authentication
+        # This implements the "manual fallback" channel in dual-channel approach
+        # If user pastes OAuth callback URL, extract code and process token exchange
+        gcal_skill = self.skills.get("google_calendar")
+
+        if gcal_skill and hasattr(gcal_skill, '_awaiting_auth') and gcal_skill._awaiting_auth:
+            # Timeout check (5 minutes)
+            if hasattr(gcal_skill, '_auth_start_time') and gcal_skill._auth_start_time:
+                elapsed = time.time() - gcal_skill._auth_start_time
+                if elapsed > 300:  # 5 minutes
+                    # Timeout expired
+                    gcal_skill._awaiting_auth = False
+                    gcal_skill._auth_start_time = None
+
+                    # Stop OAuth server if running
+                    if hasattr(gcal_skill, '_oauth_server') and gcal_skill._oauth_server:
+                        try:
+                            await gcal_skill._oauth_server.stop()
+                        except Exception as e:
+                            self.logger.error(f"Error stopping OAuth server on timeout: {e}")
+                        gcal_skill._oauth_server = None
+
+                    return "⏱️ Tempo esgotado para autenticação.\nTente novamente: 'configure calendário'"
+
+            # Try to extract authorization code from message
+            extracted_code = extract_code_from_url(user_msg)
+
+            if extracted_code:
+                self.logger.info("✅ Authorization code extracted from user message (manual fallback channel)")
+
+                # Stop OAuth server (manual channel won the race)
+                if hasattr(gcal_skill, '_oauth_server') and gcal_skill._oauth_server:
+                    try:
+                        await gcal_skill._oauth_server.stop()
+                    except Exception as e:
+                        self.logger.error(f"Error stopping OAuth server: {e}")
+                    gcal_skill._oauth_server = None
+
+                # Process token exchange
+                try:
+                    result = await gcal_skill._exchange_code_for_tokens(extracted_code)
+
+                    # Clean up state
+                    gcal_skill._awaiting_auth = False
+                    gcal_skill._auth_start_time = None
+
+                    if result["status"] == "success":
+                        return "✅ Autenticação concluída com sucesso!\nVocê pode usar o Google Calendar agora."
+                    else:
+                        return f"❌ Erro na autenticação: {result.get('error', 'Falha desconhecida')}"
+
+                except Exception as e:
+                    self.logger.error(f"Error in manual OAuth fallback: {e}")
+                    gcal_skill._awaiting_auth = False
+                    gcal_skill._auth_start_time = None
+                    return "❌ Erro ao processar código de autenticação. Tente novamente."
+
+            # If code extraction failed, continue with normal message processing
+            # (message might be unrelated to OAuth)
+
+        # ── End of Dual-Channel OAuth Handler ──────────────────────────────
 
         # Dynamic Tool Injection
         available_tools_desc = []

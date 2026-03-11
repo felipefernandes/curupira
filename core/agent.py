@@ -31,6 +31,7 @@ class AgentBrain:
     _RE_FUNC_DIRECT_JSON = re.compile(r'<function=([a-zA-Z0-9_]+)(\{.*?\})</function>', re.DOTALL)  # <function=name{"args":...}> (nome colado direto no JSON)
     _RE_FUNC_DOUBLE_EQUALS = re.compile(r'<function=([a-zA-Z0-9_]+)=(\{.*?\})</function>', re.DOTALL)  # <function=name={"args":...}> (dois sinais de igual)
     _RE_FUNC_WITH_SPACES = re.compile(r'<function=([a-zA-Z0-9_]+)\s+(\{.*?\})\s*</function>', re.DOTALL)  # <function=name {"args":...} </function> (com espaços)
+    _RE_FUNC_AMPERSAND = re.compile(r'<function=name:([a-zA-Z0-9_]+)&(.+?)</function>', re.DOTALL)  # <function=name:google_calendar&action:list&time_range:today</function>
 
     # Compiled patterns to strip CoT reasoning blocks (Qwen3, DeepSeek-R1, etc.)
     _RE_THINK_BLOCK = re.compile(r'<think>(?:.*?</think>|.*$)', re.DOTALL)
@@ -241,6 +242,19 @@ class AgentBrain:
         if not match:
             # <function=name {"args":...} </function> (com espaços)
             match = AgentBrain._RE_FUNC_WITH_SPACES.search(failed_gen)
+        if not match:
+            # <function=name:google_calendar&action:list&time_range:today</function>
+            match = AgentBrain._RE_FUNC_AMPERSAND.search(failed_gen)
+            if match:
+                fn_name = match.group(1)
+                # Parse ampersand-separated key:value pairs
+                args_str = match.group(2)
+                fn_args = {}
+                for pair in args_str.split('&'):
+                    if ':' in pair:
+                        key, value = pair.split(':', 1)
+                        fn_args[key.strip()] = value.strip()
+                return fn_name, fn_args
         if not match:
             return None
 
@@ -742,6 +756,55 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                                 match = self._RE_FUNC_DIRECT_JSON.search(content)  # <function=name{"args":...}>
                             if not match:
                                 match = self._RE_FUNC_WITH_SPACES.search(content)  # <function=name {"args":...} </function>
+
+                            # Special handling for ampersand format
+                            if not match:
+                                ampersand_match = self._RE_FUNC_AMPERSAND.search(content)
+                                if ampersand_match:
+                                    fn_name = ampersand_match.group(1)
+                                    args_str = ampersand_match.group(2)
+                                    self.logger.warning(f"Detected ampersand-format XML tool call: {fn_name}")
+
+                                    preamble = content[:ampersand_match.start()].strip()
+                                    if preamble and on_intermediate_reply:
+                                        try:
+                                            await on_intermediate_reply(preamble)
+                                        except Exception as cb_err:
+                                            self.logger.error(f"Error in on_intermediate_reply (Ampersand): {cb_err}")
+
+                                    # Parse ampersand-separated key:value pairs
+                                    fn_args = {}
+                                    for pair in args_str.split('&'):
+                                        if ':' in pair:
+                                            key, value = pair.split(':', 1)
+                                            fn_args[key.strip()] = value.strip()
+
+                                    result_str = await self._execute_tool_call(fn_name, fn_args, context)
+
+                                    # CRITICAL FIX: Rewrite history to look like a VALID tool call
+                                    fake_tool_id = f"call_{uuid.uuid4().hex[:8]}"
+
+                                    synthetic_msg = {
+                                        "role": "assistant",
+                                        "content": None,
+                                        "tool_calls": [{
+                                            "id": fake_tool_id,
+                                            "type": "function",
+                                            "function": {
+                                                "name": fn_name,
+                                                "arguments": json.dumps(fn_args)
+                                            }
+                                        }]
+                                    }
+                                    messages.append(synthetic_msg)
+
+                                    messages.append({
+                                        "role": "tool",
+                                        "tool_call_id": fake_tool_id,
+                                        "name": fn_name,
+                                        "content": result_str
+                                    })
+                                    continue # Loop back to get final response
 
                             if match:
                                 fn_name = match.group(1)

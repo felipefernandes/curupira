@@ -795,11 +795,31 @@ class GoogleCalendarSkill(BaseSkill):
 
             events = []
             for item in data.get("items", []):
+                # Extract start/end (dateTime for timed events, date for all-day)
+                start_datetime = item.get("start", {}).get("dateTime")
+                start_date = item.get("start", {}).get("date")
+                end_datetime = item.get("end", {}).get("dateTime")
+                end_date = item.get("end", {}).get("date")
+
+                # Filter out all-day events that ended before the requested range
+                # All-day events have end.date = start.date + 1 day
+                # So an all-day event from yesterday (2026-03-10) has end.date = 2026-03-11
+                # We need to filter it out when listing "today" (2026-03-11)
+                if start_date and end_date:
+                    # Parse dates for comparison
+                    from datetime import datetime as dt
+                    event_end = dt.fromisoformat(end_date)
+                    range_start = dt.fromisoformat(start.isoformat().split('T')[0])  # Extract date part
+
+                    # Filter: if all-day event ended before range start, skip it
+                    if event_end <= range_start:
+                        continue
+
                 event = {
                     "id": item.get("id"),
                     "summary": item.get("summary", "Sem título"),
-                    "start": item.get("start", {}).get("dateTime") or item.get("start", {}).get("date"),
-                    "end": item.get("end", {}).get("dateTime") or item.get("end", {}).get("date"),
+                    "start": start_datetime or start_date,
+                    "end": end_datetime or end_date,
                     "description": item.get("description", ""),
                 }
                 events.append(event)

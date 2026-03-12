@@ -109,10 +109,6 @@ if config.skill_enabled("usage_report"):
 else:
     logging.info("Skill 'usage_report' desabilitada pela configuração.")
 
-# Skill: GitHub (via MCP)
-from skills.github import configure as configure_github
-configure_github()  # Carrega apenas se o token estiver disponível
-
 # Onboarding States
 WAITING_NAME = 1
 WAITING_SURNAME = 2

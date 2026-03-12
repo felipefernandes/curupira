@@ -31,7 +31,11 @@ class IntrospectionSkill(BaseSkill):
 
     @property
     def description(self) -> str:
-        return "Lista as capacidades e parâmetros das ferramentas do sistema."
+        return (
+            "Lista as capacidades e parâmetros das ferramentas do sistema. "
+            "Quando chamada sem argumentos, retorna o campo 'message' com a lista "
+            "formatada — apresente-a diretamente ao usuário sem reformatar."
+        )
 
     @property
     def parameters(self) -> Dict[str, Any]:
@@ -75,7 +79,8 @@ class IntrospectionSkill(BaseSkill):
             desc = self._describe_skill(skill_name)
             return self.success(desc)
         else:
-            return self.success(self._list_all_skills())
+            data = self._list_all_skills()
+            return self.success(data, message=self._format_groups_summary(data["groups"]))
 
     def _list_all_skills(self) -> Dict[str, Any]:
         """Returns a grouped summary of all registered skills, one entry per skill_group."""
@@ -149,8 +154,8 @@ class IntrospectionSkill(BaseSkill):
         }
 
     def _format_groups_summary(self, groups: List[Dict]) -> str:
-        """Formats a grouped skills list into a human-readable string."""
+        """Formats a grouped skills list into a human-readable string using HTML tags."""
         lines = ["Aqui estão as capacidades disponíveis:"]
         for g in groups:
-            lines.append(f"{g['emoji']} *{g['group'].capitalize()}* — {g['summary']}")
+            lines.append(f"{g['emoji']} <b>{g['group'].capitalize()}</b> — {g['summary']}")
         return "\n".join(lines)

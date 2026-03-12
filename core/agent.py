@@ -29,7 +29,7 @@ class AgentBrain:
     _RE_FUNC_COLON  = re.compile(r'<function=(\w+)":\s*(.*?)</function>', re.DOTALL)  # <function=name":args</function>
     _RE_FUNC_SLASH  = re.compile(r'<function/([a-zA-Z0-9_]+)(\{.*?\})</function>', re.DOTALL)   # <function/name{...}></function> (CORRIGIDO: sem > extra antes de </function>)
     _RE_FUNC_DIRECT_JSON = re.compile(r'<function=([a-zA-Z0-9_]+)(\{.*?\})</function>', re.DOTALL)  # <function=name{"args":...}> (nome colado direto no JSON)
-    _RE_FUNC_DOUBLE_EQUALS = re.compile(r'<function=([a-zA-Z0-9_]+)=(\{.*?\})</function>', re.DOTALL)  # <function=name={"args":...}> (dois sinais de igual)
+    _RE_FUNC_DOUBLE_EQUALS = re.compile(r'<function=([a-zA-Z0-9_]+)=(\{.*?\})>?</function>', re.DOTALL)  # <function=name={"args":...}> (dois sinais de igual)
     _RE_FUNC_WITH_SPACES = re.compile(r'<function=([a-zA-Z0-9_]+)\s+(\{.*?\})\s*</function>', re.DOTALL)  # <function=name {"args":...} </function> (com espaços)
     _RE_FUNC_AMPERSAND = re.compile(r'<function=name:([a-zA-Z0-9_]+)&(.+?)</function>', re.DOTALL)  # <function=name:google_calendar&action:list&time_range:today</function>
 

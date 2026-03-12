@@ -47,7 +47,7 @@ iara_review*.*
 debug_output.*
 test_debug*.*
 
-.claude/settings.local.json
+.claude/
 cov*.*
 
 # Temp files

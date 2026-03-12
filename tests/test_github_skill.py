@@ -251,7 +251,7 @@ class TestGithubCreateIssue:
     async def test_error_missing_title(self, skill):
         result = await skill.execute({}, action="create_issue", repo_name="user/repo", title="")
         assert result["status"] == "error"
-        assert "título" in result["error"]
+        assert "title" in result["error"]
 
     @pytest.mark.asyncio
     async def test_error_invalid_repo(self, skill):

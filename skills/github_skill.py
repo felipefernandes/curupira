@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 GITHUB_API_BASE = "https://api.github.com"
 _REPO_RE = re.compile(r"^[\w.-]+/[\w.-]+$")
 
+_ACTIONS_REQUIRING_REPO = {"list_issues", "create_issue"}
+
 
 class GithubSkill(BaseSkill):
     """
@@ -30,6 +32,10 @@ class GithubSkill(BaseSkill):
 
     def __init__(self):
         self.logger = logging.getLogger("GithubSkill")
+        # Persistent client: reused across calls to leverage connection pooling.
+        # Headers are rebuilt lazily when the token changes (supports token rotation).
+        self._client: httpx.AsyncClient | None = None
+        self._cached_token: str | None = None
 
     # ── Metadata ────────────────────────────────────────────────────────────
 
@@ -96,6 +102,20 @@ class GithubSkill(BaseSkill):
 
     # ── Entry point ──────────────────────────────────────────────────────────
 
+    def _get_client(self, token: str) -> httpx.AsyncClient:
+        """Returns a persistent AsyncClient, rebuilding it only if the token changed."""
+        if self._client is None or self._cached_token != token:
+            self._client = httpx.AsyncClient(
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/vnd.github.v3+json",
+                    "User-Agent": "CurupiraBot",
+                },
+                timeout=15.0,
+            )
+            self._cached_token = token
+        return self._client
+
     async def execute(self, context: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         action = kwargs.get("action")
         if not action:
@@ -107,32 +127,38 @@ class GithubSkill(BaseSkill):
                 "Token GitHub não configurado (GITHUB_PERSONAL_ACCESS_TOKEN ausente)."
             )
 
-        headers = {
-            "Authorization": f"Bearer {token}",
-            "Accept": "application/vnd.github.v3+json",
-            "User-Agent": "CurupiraBot",
-        }
+        # Early validation: repo_name is required for actions that target a repository
+        repo_name = kwargs.get("repo_name", "")
+        if action in _ACTIONS_REQUIRING_REPO and not repo_name:
+            return self.error(
+                f"Parâmetro 'repo_name' é obrigatório para a action '{action}'. "
+                "Use o formato 'owner/repo'."
+            )
+
+        # Early validation: title is required to create an issue
+        if action == "create_issue" and not kwargs.get("title", "").strip():
+            return self.error("Parâmetro 'title' é obrigatório para a action 'create_issue'.")
 
         try:
-            async with httpx.AsyncClient(headers=headers, timeout=15.0) as client:
-                if action == "list_repos":
-                    return await self._list_repos(client, kwargs.get("limit", 10))
-                elif action == "list_issues":
-                    return await self._list_issues(
-                        client,
-                        kwargs.get("repo_name", ""),
-                        kwargs.get("state", "open"),
-                        kwargs.get("limit", 10),
-                    )
-                elif action == "create_issue":
-                    return await self._create_issue(
-                        client,
-                        kwargs.get("repo_name", ""),
-                        kwargs.get("title", ""),
-                        kwargs.get("body", ""),
-                    )
-                else:
-                    return self.error(f"Action desconhecida: '{action}'.")
+            client = self._get_client(token)
+            if action == "list_repos":
+                return await self._list_repos(client, kwargs.get("limit", 10))
+            elif action == "list_issues":
+                return await self._list_issues(
+                    client,
+                    repo_name,
+                    kwargs.get("state", "open"),
+                    kwargs.get("limit", 10),
+                )
+            elif action == "create_issue":
+                return await self._create_issue(
+                    client,
+                    repo_name,
+                    kwargs.get("title", ""),
+                    kwargs.get("body", ""),
+                )
+            else:
+                return self.error(f"Action desconhecida: '{action}'.")
         except Exception as e:
             self.logger.error(f"Erro inesperado na GithubSkill [{action}]: {e}")
             return self.error(f"Falha ao comunicar com o GitHub: {str(e)}")

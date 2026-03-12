@@ -69,6 +69,11 @@ class TestSkillInitialization:
         """Verifica que descrição está presente."""
         assert "Google Calendar" in skill.description or "Google Agenda" in skill.description
 
+    def test_skill_group(self, skill):
+        """Verifica skill_group e skill_group_emoji."""
+        assert skill.skill_group == "calendar"
+        assert skill.skill_group_emoji == "📅"
+
     def test_data_directory_creation(self):
         """Verifica que diretório data/ é criado na inicialização."""
         # Remover temporariamente se existir

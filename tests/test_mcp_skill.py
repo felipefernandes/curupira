@@ -56,6 +56,30 @@ class TestMCPSkillDisplayName:
         assert skill.description == "A test tool"
         assert "arg1" in skill.parameters["properties"]
 
+    def test_skill_group_derives_from_prefix(self):
+        """github_list_repos -> skill_group == 'github'"""
+        client = MagicMock()
+        skill = MCPSkill(client, {"name": "github_list_repos"})
+        assert skill.skill_group == "github"
+
+    def test_skill_group_no_underscore(self):
+        """'search' (no underscore) -> skill_group == 'search'"""
+        client = MagicMock()
+        skill = MCPSkill(client, {"name": "search"})
+        assert skill.skill_group == "search"
+
+    def test_skill_group_emoji_github(self):
+        """github tools should use the octopus emoji."""
+        client = MagicMock()
+        skill = MCPSkill(client, {"name": "github_create_issue"})
+        assert skill.skill_group_emoji == "🐙"
+
+    def test_skill_group_emoji_unknown_defaults_to_link(self):
+        """Unknown prefixes should fall back to the generic link emoji."""
+        client = MagicMock()
+        skill = MCPSkill(client, {"name": "notion_create_page"})
+        assert skill.skill_group_emoji == "🔗"
+
     @pytest.mark.asyncio
     async def test_mcp_skill_execute_calls_client(self):
         """Test that execute delegates to client.call_tool."""

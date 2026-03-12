@@ -92,6 +92,8 @@ class TestSaveFactSkill:
         assert skill.name == "save_user_fact"
         assert "Salvar Fato" in skill.display_name
         assert "Persiste um fato" in skill.description
+        assert skill.skill_group == "system"
+        assert skill.skill_group_emoji == "🖥️"
 
     def test_skill_parameters_has_required_fields(self, skill):
         params = skill.parameters

@@ -154,3 +154,34 @@ class TestIntrospectionSkill:
         assert "weather" in error_lower
         assert "github" in error_lower
         assert "describe_capabilities" not in result["error"]  # Self excluded
+
+    @pytest.mark.asyncio
+    async def test_describe_skill_by_exact_tool_name_fallback(self):
+        """Fallback: describe a tool by its exact name when no group name matches."""
+        # "get_weather" is an exact tool name; no skill has skill_group == "get_weather"
+        result = await self.skill.execute({}, skill_name="get_weather")
+
+        assert result["status"] == "success"
+        data = result["data"]
+        assert len(data["tools"]) == 1
+        assert data["tools"][0]["name"] == "get_weather"
+
+    @pytest.mark.asyncio
+    async def test_list_all_skills_truncates_long_description(self):
+        """Descriptions combined beyond 120 chars should be truncated with '...'."""
+        long_skill = _make_mock_skill(
+            "verbose_tool",
+            "A" * 130,  # Forces the truncation branch (>120 chars)
+            skill_group="verbose",
+            skill_group_emoji="🔤",
+        )
+        self.mock_agent.skills["verbose_tool"] = long_skill
+
+        result = await self.skill.execute({})
+
+        assert result["status"] == "success"
+        verbose_group = next(
+            g for g in result["data"]["groups"] if g["group"] == "verbose"
+        )
+        assert verbose_group["summary"].endswith("...")
+        assert len(verbose_group["summary"]) <= 120

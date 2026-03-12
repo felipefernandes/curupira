@@ -16,6 +16,8 @@ class TestSystemControlSkill:
         assert "sistema" in self.skill.description.lower()
         assert self.skill.parameters["type"] == "object"
         assert "action" in self.skill.parameters["properties"]
+        assert self.skill.skill_group == "system"
+        assert self.skill.skill_group_emoji == "🖥️"
 
     def test_parameters_schema(self):
         """Test that all expected actions are in parameters."""

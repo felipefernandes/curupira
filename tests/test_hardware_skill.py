@@ -13,6 +13,8 @@ class TestHardwareMonitoringSkill:
         assert "Monitoramento" in self.skill.display_name
         assert "hardware" in self.skill.description.lower()
         assert self.skill.parameters["type"] == "object"
+        assert self.skill.skill_group == "system"
+        assert self.skill.skill_group_emoji == "🖥️"
 
     @pytest.mark.asyncio
     @patch("skills.hardware.psutil")

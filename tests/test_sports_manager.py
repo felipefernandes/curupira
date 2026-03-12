@@ -45,6 +45,8 @@ def test_sports_skill_properties(sports_skill):
     assert "Busca resultados" in sports_skill.description
     assert "action" in sports_skill.parameters["required"]
     assert sports_skill.parameters["type"] == "object"
+    assert sports_skill.skill_group == "sports"
+    assert sports_skill.skill_group_emoji == "⚽"
 
 
 def test_sports_skill_parameters_schema(sports_skill):

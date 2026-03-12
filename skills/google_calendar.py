@@ -105,6 +105,14 @@ class GoogleCalendarSkill(BaseSkill):
         return "📅 Google Agenda"
 
     @property
+    def skill_group(self) -> str:
+        return "calendar"
+
+    @property
+    def skill_group_emoji(self) -> str:
+        return "📅"
+
+    @property
     def description(self) -> str:
         return (
             "Gerencia eventos no Google Calendar: listar, criar e cancelar eventos. "

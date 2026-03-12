@@ -336,6 +336,14 @@ class AddReminderSkill(BaseSkill):
     @property
     def display_name(self) -> str:
         return "📝 Criar Lembrete"
+
+    @property
+    def skill_group(self) -> str:
+        return "reminders"
+
+    @property
+    def skill_group_emoji(self) -> str:
+        return "⏰"
     
     @property
     def description(self) -> str:
@@ -580,6 +588,14 @@ class ListRemindersSkill(BaseSkill):
     @property
     def display_name(self) -> str:
         return "📋 Listar Lembretes"
+
+    @property
+    def skill_group(self) -> str:
+        return "reminders"
+
+    @property
+    def skill_group_emoji(self) -> str:
+        return "⏰"
     
     @property
     def description(self) -> str:
@@ -716,6 +732,14 @@ class DeleteReminderSkill(BaseSkill):
         return "🗑️ Deletar Lembrete"
 
     @property
+    def skill_group(self) -> str:
+        return "reminders"
+
+    @property
+    def skill_group_emoji(self) -> str:
+        return "⏰"
+
+    @property
     def description(self) -> str:
         return "Cancelar/Deletar um lembrete existente pelo ID. Use list_reminders primeiro se não souber o ID."
 
@@ -777,6 +801,14 @@ class UpdateReminderSkill(BaseSkill):
     @property
     def display_name(self) -> str:
         return "✏️ Atualizar Lembrete"
+
+    @property
+    def skill_group(self) -> str:
+        return "reminders"
+
+    @property
+    def skill_group_emoji(self) -> str:
+        return "⏰"
 
     @property
     def description(self) -> str:

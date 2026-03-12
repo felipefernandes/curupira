@@ -40,6 +40,14 @@ class JobHunterRunSearchSkill(BaseSkill):
         return "🔍 Buscar Vagas"
 
     @property
+    def skill_group(self) -> str:
+        return "jobs"
+
+    @property
+    def skill_group_emoji(self) -> str:
+        return "💼"
+
+    @property
     def description(self) -> str:
         return "Busca, avalia via IA e notifica vagas de emprego baseadas nas configurações atuais."
 
@@ -147,6 +155,14 @@ class JobHunterGetDefaultsSkill(BaseSkill):
     @property
     def display_name(self) -> str:
         return "⚙️ Config Padrão de Vagas"
+
+    @property
+    def skill_group(self) -> str:
+        return "jobs"
+
+    @property
+    def skill_group_emoji(self) -> str:
+        return "💼"
 
     @property
     def description(self) -> str:

@@ -153,6 +153,18 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Timeout", result["error"])
 
 
+class TestRssSkillGroup(unittest.TestCase):
+    def test_rss_read_skill_group(self):
+        skill = RssReadSkill()
+        self.assertEqual(skill.skill_group, "rss")
+        self.assertEqual(skill.skill_group_emoji, "📰")
+
+    def test_rss_list_skill_group(self):
+        skill = RssListSkill()
+        self.assertEqual(skill.skill_group, "rss")
+        self.assertEqual(skill.skill_group_emoji, "📰")
+
+
 class TestRssListSkill(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.skill = RssListSkill()

@@ -10,12 +10,15 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from skills.introspection import IntrospectionSkill
 
 
-def _make_mock_skill(name, description, display_name=None, parameters=None):
+def _make_mock_skill(name, description, display_name=None, parameters=None,
+                     skill_group=None, skill_group_emoji="🔧"):
     """Helper to create a mock skill with properties."""
     skill = MagicMock()
     type(skill).name = PropertyMock(return_value=name)
     type(skill).display_name = PropertyMock(return_value=display_name or name)
     type(skill).description = PropertyMock(return_value=description)
+    type(skill).skill_group = PropertyMock(return_value=skill_group or name)
+    type(skill).skill_group_emoji = PropertyMock(return_value=skill_group_emoji)
     type(skill).parameters = PropertyMock(return_value=parameters or {
         "type": "object",
         "properties": {},
@@ -36,6 +39,8 @@ class TestIntrospectionSkill:
             "get_weather",
             "Gets weather forecast for a city.",
             display_name="🌦️ Previsão do Tempo",
+            skill_group="weather",
+            skill_group_emoji="🌦️",
             parameters={
                 "type": "object",
                 "properties": {
@@ -48,6 +53,8 @@ class TestIntrospectionSkill:
             "github_list_issues",
             "Lists open issues in a GitHub repository.",
             display_name="🔗 Github List Issues",
+            skill_group="github",
+            skill_group_emoji="🐙",
             parameters={
                 "type": "object",
                 "properties": {
@@ -79,49 +86,57 @@ class TestIntrospectionSkill:
 
         assert result["status"] == "success"
         data = result["data"]
-        
-        assert data["total"] == 2  # Excludes itself
-        skill_names = [s["name"] for s in data["skills"]]
-        assert "get_weather" in skill_names
-        assert "github_list_issues" in skill_names
-        assert "describe_capabilities" not in skill_names  # Self excluded
 
-        # Verify display_name is present
-        for s in data["skills"]:
-            assert "display_name" in s
+        assert data["total_groups"] == 2  # Excludes itself; 2 groups: weather + github
+        group_names = [g["group"] for g in data["groups"]]
+        assert "weather" in group_names
+        assert "github" in group_names
+        assert "describe_capabilities" not in group_names  # Self excluded
+
+        # Verify emoji and summary are present per group
+        for g in data["groups"]:
+            assert "emoji" in g
+            assert "summary" in g
 
     @pytest.mark.asyncio
     async def test_describe_specific_skill(self):
-        """Test describing a specific skill."""
-        result = await self.skill.execute({}, skill_name="get_weather")
+        """Test describing a skill group by group name."""
+        result = await self.skill.execute({}, skill_name="weather")
 
         assert result["status"] == "success"
         data = result["data"]
 
-        assert data["name"] == "get_weather"
-        assert data["display_name"] == "🌦️ Previsão do Tempo"
-        assert "weather" in data["description"].lower()
-        assert len(data["parameters"]) == 1
-        assert data["parameters"][0]["name"] == "city"
-        assert data["parameters"][0]["required"] is True
+        assert data["group"] == "weather"
+        assert data["emoji"] == "🌦️"
+        assert len(data["tools"]) == 1
+        tool = data["tools"][0]
+        assert tool["name"] == "get_weather"
+        assert tool["display_name"] == "🌦️ Previsão do Tempo"
+        assert "weather" in tool["description"].lower()
+        assert len(tool["parameters"]) == 1
+        assert tool["parameters"][0]["name"] == "city"
+        assert tool["parameters"][0]["required"] is True
 
     @pytest.mark.asyncio
     async def test_describe_skill_with_multiple_params(self):
-        """Test describing a skill with multiple parameters."""
-        result = await self.skill.execute({}, skill_name="github_list_issues")
+        """Test describing a skill group that has a tool with multiple parameters."""
+        result = await self.skill.execute({}, skill_name="github")
 
         assert result["status"] == "success"
         data = result["data"]
 
-        assert data["name"] == "github_list_issues"
-        assert len(data["parameters"]) == 2
-        
-        param_names = [p["name"] for p in data["parameters"]]
+        assert data["group"] == "github"
+        assert len(data["tools"]) == 1
+        tool = data["tools"][0]
+        assert tool["name"] == "github_list_issues"
+        assert len(tool["parameters"]) == 2
+
+        param_names = [p["name"] for p in tool["parameters"]]
         assert "repo_name" in param_names
         assert "state" in param_names
 
         # Check required flag
-        for p in data["parameters"]:
+        for p in tool["parameters"]:
             if p["name"] == "repo_name":
                 assert p["required"] is True
             elif p["name"] == "state":
@@ -134,5 +149,39 @@ class TestIntrospectionSkill:
 
         assert result["status"] == "error"
         assert "fly" in result["error"]
-        assert "get_weather" in result["error"]
+        # Error message shows grouped summary (group names are capitalized for display)
+        error_lower = result["error"].lower()
+        assert "weather" in error_lower
+        assert "github" in error_lower
         assert "describe_capabilities" not in result["error"]  # Self excluded
+
+    @pytest.mark.asyncio
+    async def test_describe_skill_by_exact_tool_name_fallback(self):
+        """Fallback: describe a tool by its exact name when no group name matches."""
+        # "get_weather" is an exact tool name; no skill has skill_group == "get_weather"
+        result = await self.skill.execute({}, skill_name="get_weather")
+
+        assert result["status"] == "success"
+        data = result["data"]
+        assert len(data["tools"]) == 1
+        assert data["tools"][0]["name"] == "get_weather"
+
+    @pytest.mark.asyncio
+    async def test_list_all_skills_truncates_long_description(self):
+        """Descriptions combined beyond 120 chars should be truncated with '...'."""
+        long_skill = _make_mock_skill(
+            "verbose_tool",
+            "A" * 130,  # Forces the truncation branch (>120 chars)
+            skill_group="verbose",
+            skill_group_emoji="🔤",
+        )
+        self.mock_agent.skills["verbose_tool"] = long_skill
+
+        result = await self.skill.execute({})
+
+        assert result["status"] == "success"
+        verbose_group = next(
+            g for g in result["data"]["groups"] if g["group"] == "verbose"
+        )
+        assert verbose_group["summary"].endswith("...")
+        assert len(verbose_group["summary"]) <= 120

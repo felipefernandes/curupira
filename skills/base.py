@@ -24,6 +24,19 @@ class BaseSkill(ABC):
         """Human-friendly name for display to users (e.g., '🌦️ Previsão do Tempo').
         Defaults to the technical name. Override in subclasses for friendlier labels."""
         return self.name
+
+    @property
+    def skill_group(self) -> str:
+        """Group identifier for this skill tool (e.g., 'github', 'reminders').
+        Tools sharing the same group are condensed into one entry in the capabilities summary.
+        Defaults to the tool's own name (no grouping)."""
+        return self.name
+
+    @property
+    def skill_group_emoji(self) -> str:
+        """Emoji representing this skill group in the capabilities summary.
+        Defaults to a generic wrench emoji."""
+        return "🔧"
     
     @property
     @abstractmethod

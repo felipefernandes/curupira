@@ -29,6 +29,14 @@ class UsageReportSkill(BaseSkill):
         return "📊 Relatório de Consumo"
 
     @property
+    def skill_group(self) -> str:
+        return "usage"
+
+    @property
+    def skill_group_emoji(self) -> str:
+        return "📊"
+
+    @property
     def description(self) -> str:
         return "Consulta o banco de dados e retorna um resumo acumulado do gasto de tokens (prompt e output) e custos estimados separados por provedor de IA."
 

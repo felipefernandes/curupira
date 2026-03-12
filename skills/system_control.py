@@ -193,6 +193,14 @@ class SystemControlSkill(BaseSkill):
         return "🖥️ Controle do Sistema"
 
     @property
+    def skill_group(self) -> str:
+        return "system"
+
+    @property
+    def skill_group_emoji(self) -> str:
+        return "🖥️"
+
+    @property
     def description(self) -> str:
         return (
             "Fornece acesso seguro a informações e controles do sistema operacional. "

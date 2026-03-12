@@ -65,6 +65,14 @@ class WeatherSkill(BaseSkill):
         return "🌦️ Previsão do Tempo"
 
     @property
+    def skill_group(self) -> str:
+        return "weather"
+
+    @property
+    def skill_group_emoji(self) -> str:
+        return "🌦️"
+
+    @property
     def description(self) -> str:
         return "Obtém a previsão do tempo atual para uma cidade."
 

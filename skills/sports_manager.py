@@ -178,6 +178,14 @@ class SportsManagerSkill(BaseSkill):
         return "⚽ Resultados Esportivos"
 
     @property
+    def skill_group(self) -> str:
+        return "sports"
+
+    @property
+    def skill_group_emoji(self) -> str:
+        return "⚽"
+
+    @property
     def description(self) -> str:
         return "Busca resultados, calendário e classificação de esportes tradicionais e eSports"
 

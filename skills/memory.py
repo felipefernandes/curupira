@@ -243,6 +243,14 @@ class SaveFactSkill(BaseSkill):
         return "🧠 Salvar Fato do Usuário"
 
     @property
+    def skill_group(self) -> str:
+        return "system"
+
+    @property
+    def skill_group_emoji(self) -> str:
+        return "🖥️"
+
+    @property
     def description(self) -> str:
         return "Persiste um fato importante sobre o usuário no banco de longo prazo (ex: nome, idades, rotinas ou preferências)."
 

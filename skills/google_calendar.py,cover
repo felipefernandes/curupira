@@ -1,0 +1,792 @@
+> """
+> Google Calendar Skill for Curupira
+> ===================================
+> Manages Google Calendar events via natural language using the Google Calendar API v3.
+  
+> Features:
+> - OAuth2 authentication and token management
+> - List, create, and cancel calendar events
+> - Proactive reminders for upcoming events (via bridge)
+  
+> Follows Curupira MCP-Lite framework (single skill, multiple tools).
+> """
+  
+> import asyncio
+> import httpx
+> import json
+> import logging
+> import re
+> from datetime import datetime, timedelta
+> from pathlib import Path
+> from typing import Any, Dict, Optional
+> from urllib.parse import urlencode
+  
+> from google.auth.transport.requests import Request
+> from google.oauth2.credentials import Credentials
+  
+> from skills.base import BaseSkill
+> from core.config import GCAL_CLIENT_ID, GCAL_CLIENT_SECRET, GCAL_CALENDAR_ID
+  
+  # Security modules for OAuth2 hardening
+> from skills.oauth_pkce_state import PKCEState
+> from core.token_encryption import TokenCipher
+> from core.audit_logger import (
+>     log_oauth2_auth_start,
+>     log_oauth2_auth_success,
+>     log_oauth2_auth_failed,
+>     log_oauth2_token_refresh
+> )
+  
+  
+  # Google Calendar API scopes
+  # Using https://www.googleapis.com/auth/calendar (read/write access)
+  # - Required for: create, update, delete calendar events
+  # - calendar.readonly would be insufficient for full functionality
+  # - Same scope must be used in calendar_reminder_bridge.py (shared token)
+> SCOPES = ["https://www.googleapis.com/auth/calendar"]
+  
+  # Token storage path
+> DATA_DIR = Path(__file__).parent.parent / "data"
+> TOKEN_FILE = DATA_DIR / "google_token.json"
+  
+  # Invalid auth_code placeholders that LLMs commonly generate
+  # Using set for O(1) lookup performance
+> INVALID_AUTH_CODE_PLACEHOLDERS = frozenset({
+>     'none', 'nenhum', 'nenhum código', 'nenhum código fornecido',
+>     'n/a', 'null', 'sem código', 'não fornecido', '[seu_codigo]',
+>     '[codigo]', 'seu codigo', 'código', 'codigo', 'placeholder',
+>     'seu_código', '[seu código]', 'example', 'exemplo', 'test',
+>     'teste', 'invalid', 'inválido'
+> })
+  
+  
+> class GoogleCalendarSkill(BaseSkill):
+>     """
+>     Skill for managing Google Calendar events.
+  
+>     Provides multi-tool access to Google Calendar API:
+>     - setup_calendar: OAuth2 authentication flow
+>     - list_calendar_events: List events for a time range
+>     - add_calendar_event: Create new events
+>     - cancel_calendar_event: Delete events
+>     """
+  
+>     def __init__(self):
+>         self.logger = logging.getLogger("GoogleCalendarSkill")
+  
+          # Ensure data directory exists
+>         if not DATA_DIR.exists():
+!             DATA_DIR.mkdir(parents=True, exist_ok=True)
+  
+          # Validate configuration
+>         if not GCAL_CLIENT_ID or not GCAL_CLIENT_SECRET:
+!             self.logger.warning(
+!                 "Google Calendar not configured. Set GCAL_CLIENT_ID and GCAL_CLIENT_SECRET in .env"
+!             )
+  
+          # Initialize context and user_id for audit logging
+          # These will be populated by execute() method
+>         self.context: Dict[str, Any] = {}
+>         self.user_id: int = 0
+  
+>     @property
+>     def name(self) -> str:
+!         return "google_calendar"
+  
+>     @property
+>     def display_name(self) -> str:
+!         return "📅 Google Agenda"
+  
+>     @property
+>     def description(self) -> str:
+!         return (
+!             "Gerencia eventos no Google Calendar: listar, criar e cancelar eventos. "
+!             "Use 'setup_calendar' para configurar autenticação inicial."
+!         )
+  
+>     @property
+>     def parameters(self) -> Dict[str, Any]:
+!         return {
+!             "type": "object",
+!             "properties": {
+!                 "action": {
+!                     "type": "string",
+!                     "enum": ["setup_calendar", "list_calendar_events", "add_calendar_event", "cancel_calendar_event"],
+!                     "description": (
+!                         "Ação a executar: setup_calendar (autenticação), list_calendar_events (listar), "
+!                         "add_calendar_event (criar), cancel_calendar_event (cancelar)"
+!                     ),
+!                 },
+!                 "time_range": {
+!                     "type": "string",
+!                     "description": "Período para listar (list_calendar_events): 'today', 'tomorrow', 'week'",
+!                 },
+!                 "summary": {
+!                     "type": "string",
+!                     "description": "Título do evento (add_calendar_event)",
+!                 },
+!                 "start_time": {
+!                     "type": "string",
+!                     "description": "Início do evento ISO8601 (add_calendar_event). Ex: '2026-03-10T15:00:00'",
+!                 },
+!                 "end_time": {
+!                     "type": "string",
+!                     "description": "Fim do evento ISO8601 (add_calendar_event). Ex: '2026-03-10T16:00:00'",
+!                 },
+!                 "description": {
+!                     "type": "string",
+!                     "description": "Descrição do evento (add_calendar_event, opcional)",
+!                 },
+!                 "event_id": {
+!                     "type": "string",
+!                     "description": "ID do evento para cancelar (cancel_calendar_event)",
+!                 },
+!                 "auth_code": {
+!                     "type": "string",
+!                     "description": "Código de autorização OAuth2 (setup_calendar)",
+!                 },
+!             },
+!             "required": ["action"],
+!         }
+  
+>     async def execute(self, context: Dict[str, Any], **kwargs) -> Dict[str, Any]:
+>         """
+>         Executes the requested calendar action.
+  
+>         Args:
+>             context: Execution context (user_id, etc.)
+>             **kwargs: Action parameters
+  
+>         Returns:
+>             Dict with status, data, and optional message
+>         """
+          # Save context for audit logging
+!         self.context = context
+!         self.user_id = context.get("user_id", 0)  # Default to 0 if not available
+  
+!         action = kwargs.get("action")
+  
+!         if not action:
+!             return self.error("Ação não especificada")
+  
+          # Dispatch to appropriate handler
+!         try:
+!             if action == "setup_calendar":
+!                 return await self._setup_calendar(kwargs.get("auth_code"))
+!             elif action == "list_calendar_events":
+!                 return await self._list_calendar_events(kwargs.get("time_range", "today"))
+!             elif action == "add_calendar_event":
+!                 return await self._add_calendar_event(
+!                     kwargs.get("summary"),
+!                     kwargs.get("start_time"),
+!                     kwargs.get("end_time"),
+!                     kwargs.get("description"),
+!                 )
+!             elif action == "cancel_calendar_event":
+!                 return await self._cancel_calendar_event(kwargs.get("event_id"))
+!             else:
+!                 return self.error(f"Ação desconhecida: {action}")
+  
+!         except Exception as e:
+!             self.logger.error(f"Erro em {action}: {e}", exc_info=True)
+!             return self.error(f"Falha ao executar {action}: {str(e)}")
+  
+      # ── Internal Methods (OAuth2 & Token Management) ───────────────────────
+  
+>     def _load_token(self) -> Optional[Credentials]:
+>         """
+>         Loads OAuth2 credentials from encrypted token file.
+  
+>         Security:
+>             - Tokens are encrypted at rest using Fernet (AES-128-CBC + HMAC-SHA256)
+>             - Encryption key derived from TELEGRAM_TOKEN via PBKDF2 (100k iterations)
+>             - If decryption fails (e.g., TELEGRAM_TOKEN changed), returns None (forces re-auth)
+>         """
+>         if not TOKEN_FILE.exists():
+>             return None
+  
+>         try:
+              # Read encrypted data
+>             with open(TOKEN_FILE, "rb") as f:
+>                 encrypted_data = f.read()
+  
+              # Decrypt token JSON
+>             token_json = TokenCipher.decrypt_token(encrypted_data)
+  
+>             if not token_json:
+>                 self.logger.error("Falha ao descriptografar token (chave inválida ou dados corrompidos)")
+>                 self.logger.warning("Deletando token corrompido - usuário precisará re-autenticar")
+>                 try:
+>                     TOKEN_FILE.unlink()
+>                 except Exception as del_err:
+>                     self.logger.error(f"Erro ao deletar token corrompido: {del_err}")
+>                 return None
+  
+              # Parse JSON and create Credentials
+>             creds = Credentials.from_authorized_user_info(
+>                 json.loads(token_json),
+>                 SCOPES
+>             )
+>             return creds
+  
+!         except Exception as e:
+!             self.logger.error(f"Erro ao carregar token: {type(e).__name__}")
+              # Delete corrupted token file to force re-authentication
+!             if TOKEN_FILE.exists():
+!                 self.logger.warning("Deletando token inválido - usuário precisará re-autenticar")
+!                 try:
+!                     TOKEN_FILE.unlink()
+!                 except Exception as del_err:
+!                     self.logger.error(f"Erro ao deletar token: {del_err}")
+!             return None
+  
+>     def _save_token(self, creds: Credentials):
+>         """
+>         Saves OAuth2 credentials to encrypted token file.
+  
+>         Security:
+>             - Tokens are encrypted before writing to disk using Fernet
+>             - Encryption key derived from TELEGRAM_TOKEN
+>             - Protects tokens if data/ directory is exposed (backup, physical access)
+>         """
+>         try:
+>             token_json = creds.to_json()
+  
+              # Encrypt before saving
+>             encrypted_data = TokenCipher.encrypt_token(token_json)
+  
+              # Write encrypted bytes
+>             with open(TOKEN_FILE, "wb") as f:
+>                 f.write(encrypted_data)
+  
+>             self.logger.info("Token salvo com sucesso (encrypted)")
+!         except Exception as e:
+!             self.logger.error(f"Erro ao salvar token: {type(e).__name__}")
+!             raise
+  
+>     async def _refresh_token(self, creds: Credentials) -> bool:
+>         """
+>         Refreshes expired access token using refresh token.
+  
+>         Returns:
+>             True if refresh successful, False otherwise
+  
+>         Security:
+>             - Logs refresh attempts to audit log
+>             - Timeout protection (30s max)
+>             - Encrypted token storage after refresh
+>         """
+!         try:
+              # Add timeout to prevent indefinite blocking
+!             await asyncio.wait_for(
+!                 asyncio.to_thread(creds.refresh, Request()),
+!                 timeout=30.0
+!             )
+!             self._save_token(creds)
+!             self.logger.info("Token renovado com sucesso")
+  
+              # Audit log: token refresh success
+!             log_oauth2_token_refresh(self.user_id, success=True)
+  
+!             return True
+!         except asyncio.TimeoutError:
+!             self.logger.error("Timeout ao renovar token (30s)")
+!             log_oauth2_token_refresh(self.user_id, success=False)
+!             return False
+!         except Exception as e:
+!             self.logger.error(f"Erro ao renovar token: {type(e).__name__}")
+!             log_oauth2_token_refresh(self.user_id, success=False)
+!             return False
+  
+>     async def _get_valid_credentials(self) -> Optional[Credentials]:
+>         """
+>         Gets valid credentials, refreshing if needed.
+  
+>         Returns:
+>             Credentials object or None if authentication required
+>         """
+!         creds = self._load_token()
+  
+!         if not creds:
+!             return None
+  
+!         if not creds.valid:
+!             if creds.expired and creds.refresh_token:
+                  # Try to refresh
+!                 if await self._refresh_token(creds):
+!                     return creds
+!                 else:
+!                     return None
+!             else:
+                  # Token invalid and can't refresh
+!                 return None
+  
+!         return creds
+  
+>     def _validate_auth_code(self, auth_code: Optional[str]) -> Optional[str]:
+>         """
+>         Validates and normalizes auth_code parameter.
+  
+>         Filters out common LLM-generated placeholders and malformed values.
+  
+>         Args:
+>             auth_code: Raw authorization code from LLM tool call
+  
+>         Returns:
+>             Normalized auth_code or None if invalid
+  
+>         Security:
+>             - Prevents processing of placeholder/dummy values
+>             - Validates basic format constraints for OAuth2 codes
+>             - Google OAuth codes are typically 40-100 chars, alphanumeric with hyphens/underscores
+>         """
+!         if not auth_code:
+!             return None
+  
+          # Normalize whitespace
+!         normalized = auth_code.strip()
+  
+          # Check against known invalid placeholders (O(1) lookup with frozenset)
+!         if normalized.lower() in INVALID_AUTH_CODE_PLACEHOLDERS:
+!             self.logger.warning(f"Rejected invalid placeholder auth_code: {normalized[:20]}...")
+!             return None
+  
+          # Basic format validation for OAuth2 authorization codes
+          # Google codes are typically:
+          # - 40-100 characters long
+          # - Alphanumeric with allowed special chars: - _ / =
+          # - No spaces or other special characters
+  
+!         if len(normalized) < 20:
+!             self.logger.warning(f"auth_code too short ({len(normalized)} chars), likely invalid")
+!             return None
+  
+!         if len(normalized) > 512:
+!             self.logger.warning(f"auth_code too long ({len(normalized)} chars), likely invalid")
+!             return None
+  
+          # Check for suspicious characters (spaces, quotes, brackets, etc.)
+          # Valid chars: alphanumeric + - _ / =
+!         if not re.match(r'^[A-Za-z0-9\-_/=]+$', normalized):
+!             self.logger.warning("auth_code contains invalid characters")
+!             return None
+  
+!         return normalized
+  
+>     async def _get_client(self) -> Optional[httpx.AsyncClient]:
+>         """
+>         Gets authenticated HTTP client for Google Calendar API.
+  
+>         Returns:
+>             httpx.AsyncClient or None if not authenticated
+>         """
+!         creds = await self._get_valid_credentials()
+  
+!         if not creds:
+!             return None
+  
+          # Create client with authorization header
+!         headers = {
+!             "Authorization": f"Bearer {creds.token}",
+!             "Content-Type": "application/json",
+!         }
+  
+!         return httpx.AsyncClient(
+!             base_url="https://www.googleapis.com/calendar/v3",
+!             headers=headers,
+!             timeout=10.0,
+!         )
+  
+      # ── Tool Implementations ───────────────────────────────────────────────
+  
+>     async def _setup_calendar(self, auth_code: Optional[str] = None) -> Dict[str, Any]:
+>         """
+>         Handles OAuth2 authentication flow.
+  
+>         Args:
+>             auth_code: Authorization code from Google (optional, for first-time setup)
+  
+>         Returns:
+>             Success with instructions or confirmation
+>         """
+!         if not GCAL_CLIENT_ID or not GCAL_CLIENT_SECRET:
+!             return self.error(
+!                 "Google Calendar não configurado. Configure GCAL_CLIENT_ID e GCAL_CLIENT_SECRET no .env"
+!             )
+  
+          # Validate and normalize auth_code using centralized helper
+!         auth_code = self._validate_auth_code(auth_code)
+  
+          # Check if already authenticated
+!         creds = await self._get_valid_credentials()
+!         if creds:
+!             return self.success(
+!                 {"status": "authenticated"},
+!                 message="Você já está autenticado no Google Calendar"
+!             )
+  
+          # If no auth_code provided, generate authorization URL
+!         if not auth_code:
+              # Build OAuth2 authorization URL with PKCE (RFC 7636)
+              # Security improvements:
+              # 1. PKCE: Protects against authorization code interception attacks
+              # 2. State: CSRF protection
+              # 3. Code challenge: SHA-256 hash of code_verifier (stored for token exchange)
+              #
+              # Using Out-of-Band (OOB) flow for CLI/desktop apps:
+              # - redirect_uri: "urn:ietf:wg:oauth:2.0:oob" displays code in browser
+              # - access_type=offline: Requests refresh token for long-term access
+              # - prompt=consent: Forces approval screen (ensures refresh token)
+  
+              # Generate PKCE pair (code_verifier, code_challenge, state)
+!             pkce_pair = PKCEState.generate_pkce_pair()
+  
+              # Save code_verifier for later token exchange (TTL: 10 min)
+!             PKCEState.save_pkce_state(pkce_pair["state"], pkce_pair["code_verifier"])
+  
+              # Audit log: OAuth flow started
+!             log_oauth2_auth_start(self.user_id)
+  
+!             redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
+!             scope = " ".join(SCOPES)
+  
+!             params = {
+!                 "client_id": GCAL_CLIENT_ID,
+!                 "redirect_uri": redirect_uri,
+!                 "response_type": "code",
+!                 "scope": scope,
+!                 "access_type": "offline",
+!                 "prompt": "consent",
+!                 "state": pkce_pair["state"],  # CSRF protection
+!                 "code_challenge": pkce_pair["code_challenge"],  # PKCE
+!                 "code_challenge_method": "S256",  # SHA-256 hash
+!             }
+  
+!             auth_url = f"https://accounts.google.com/o/oauth2/auth?{urlencode(params)}"
+  
+!             return self.success(
+!                 {"auth_url": auth_url, "state": pkce_pair["state"]},
+!                 message=(
+!                     f"Autenticação necessária. Acesse:\n{auth_url}\n\n"
+!                     "Após autorizar, copie o código e envie: 'Configure calendário com código: [SEU_CODIGO]'"
+!                 )
+!             )
+  
+          # Exchange auth_code for tokens with PKCE
+!         try:
+              # Load PKCE state from file (single-user bot, so safe to load latest)
+              # This retrieves the code_verifier saved during URL generation
+!             from pathlib import Path
+!             pkce_state_file = Path(__file__).parent.parent / "data" / "pkce_state.json"
+  
+!             code_verifier = None
+!             if pkce_state_file.exists():
+!                 try:
+!                     import json
+!                     from datetime import datetime as dt
+  
+!                     with open(pkce_state_file, "r") as f:
+!                         pkce_data = json.load(f)
+  
+                      # Verificar expiração
+!                     expires_at = dt.fromisoformat(pkce_data["expires_at"])
+!                     if dt.now() < expires_at:
+!                         code_verifier = pkce_data["code_verifier"]
+  
+                          # Single-use: remover após leitura
+!                         pkce_state_file.unlink()
+!                     else:
+!                         self.logger.warning("PKCE state expired")
+!                         pkce_state_file.unlink()
+!                 except Exception as e:
+!                     self.logger.error(f"Erro ao carregar PKCE state: {type(e).__name__}")
+  
+!             if not code_verifier:
+                  # Fallback: sem PKCE (backward compatibility)
+!                 self.logger.warning("Sem PKCE state - fazendo token exchange sem code_verifier")
+  
+!             redirect_uri = "urn:ietf:wg:oauth:2.0:oob"
+!             token_url = "https://oauth2.googleapis.com/token"
+  
+              # Token exchange payload with PKCE
+!             token_data = {
+!                 "code": auth_code,
+!                 "client_id": GCAL_CLIENT_ID,
+!                 "client_secret": GCAL_CLIENT_SECRET,
+!                 "redirect_uri": redirect_uri,
+!                 "grant_type": "authorization_code",
+!             }
+  
+              # Incluir code_verifier se disponível (PKCE)
+!             if code_verifier:
+!                 token_data["code_verifier"] = code_verifier
+  
+              # Exchange code for tokens with timeout
+!             async with httpx.AsyncClient(timeout=30.0) as client:
+!                 response = await client.post(token_url, data=token_data)
+!                 response.raise_for_status()
+!                 token_response = response.json()
+  
+              # Create credentials from token response
+!             creds = Credentials(
+!                 token=token_response.get("access_token"),
+!                 refresh_token=token_response.get("refresh_token"),
+!                 token_uri=token_url,
+!                 client_id=GCAL_CLIENT_ID,
+!                 client_secret=GCAL_CLIENT_SECRET,
+!                 scopes=SCOPES,
+!             )
+  
+              # Save encrypted credentials
+!             self._save_token(creds)
+  
+              # Audit log: authentication success
+!             log_oauth2_auth_success(self.user_id, provider="google_calendar")
+  
+!             return self.success(
+!                 {"status": "authenticated"},
+!                 message="✅ Autenticação concluída com sucesso! Você pode usar o Google Calendar agora."
+!             )
+  
+!         except httpx.HTTPStatusError as e:
+!             self.logger.error(f"HTTP error durante token exchange: {e.response.status_code}")
+  
+              # SECURITY: Não logar response.text completo - pode conter detalhes técnicos
+              # RFC 6749 §5.2: Error responses podem incluir error_description sensível
+              # Logar apenas o campo "error" (enum padronizado) é seguro
+!             try:
+!                 error_data = e.response.json()
+!                 error_type = error_data.get("error", "unknown")
+!                 self.logger.error(f"Tipo de erro OAuth2: {error_type}")
+  
+                  # Audit log: authentication failed
+!                 log_oauth2_auth_failed(self.user_id, error_type, provider="google_calendar")
+!             except Exception:
+                  # Se resposta não for JSON válido, apenas status code já foi logado
+!                 log_oauth2_auth_failed(self.user_id, "HTTPStatusError", provider="google_calendar")
+  
+!             return self.error("Falha na autenticação. Verifique o código fornecido.")
+!         except httpx.TimeoutException:
+!             self.logger.error("Timeout durante token exchange")
+!             log_oauth2_auth_failed(self.user_id, "TimeoutException", provider="google_calendar")
+!             return self.error("Timeout ao autenticar. Tente novamente.")
+!         except Exception as e:
+!             self.logger.error(f"Erro na autenticação OAuth2: {type(e).__name__}")
+!             log_oauth2_auth_failed(self.user_id, type(e).__name__, provider="google_calendar")
+!             return self.error("Falha na autenticação. Verifique o código fornecido.")
+  
+>     async def _list_calendar_events(self, time_range: str) -> Dict[str, Any]:
+>         """
+>         Lists calendar events for a time range.
+  
+>         Args:
+>             time_range: "today", "tomorrow", or "week"
+  
+>         Returns:
+>             Success with events list or error
+>         """
+!         client = await self._get_client()
+  
+!         if not client:
+!             return self.error(
+!                 "Não autenticado. Use 'Configure o calendário' para autenticar."
+!             )
+  
+          # Parse time range
+!         now = datetime.now()
+  
+!         if time_range == "today":
+!             start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+!             end = start + timedelta(days=1)
+!         elif time_range == "tomorrow":
+!             start = (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+!             end = start + timedelta(days=1)
+!         elif time_range == "week":
+!             start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+!             end = start + timedelta(days=7)
+!         else:
+!             return self.error(f"Período inválido: {time_range}")
+  
+          # Format as ISO8601
+!         time_min = start.isoformat() + "Z"
+!         time_max = end.isoformat() + "Z"
+  
+!         try:
+!             response = await client.get(
+!                 f"/calendars/{GCAL_CALENDAR_ID}/events",
+!                 params={
+!                     "timeMin": time_min,
+!                     "timeMax": time_max,
+!                     "singleEvents": True,
+!                     "orderBy": "startTime",
+!                     "maxResults": 50,
+!                 },
+!             )
+!             response.raise_for_status()
+!             data = response.json()
+  
+!             events = []
+!             for item in data.get("items", []):
+!                 event = {
+!                     "id": item.get("id"),
+!                     "summary": item.get("summary", "Sem título"),
+!                     "start": item.get("start", {}).get("dateTime") or item.get("start", {}).get("date"),
+!                     "end": item.get("end", {}).get("dateTime") or item.get("end", {}).get("date"),
+!                     "description": item.get("description", ""),
+!                 }
+!                 events.append(event)
+  
+!             await client.aclose()
+  
+!             return self.success(
+!                 {"events": events, "count": len(events), "time_range": time_range},
+!                 message=f"Encontrados {len(events)} evento(s) para {time_range}"
+!             )
+  
+!         except httpx.TimeoutException:
+!             await client.aclose()
+!             self.logger.error("Timeout ao conectar com Google Calendar")
+!             return self.error("Timeout ao acessar o Google Calendar. Tente novamente.")
+!         except (httpx.ConnectError, httpx.NetworkError) as e:
+!             await client.aclose()
+!             self.logger.error(f"Erro de conexão com Google Calendar: {type(e).__name__}")
+!             return self.error("Não foi possível conectar ao Google Calendar. Verifique sua conexão.")
+!         except httpx.HTTPStatusError as e:
+!             await client.aclose()
+!             self.logger.error(f"Erro HTTP ao listar eventos: {e.response.status_code}")
+!             return self.error(f"Falha ao listar eventos: {e.response.status_code}")
+!         except Exception as e:
+!             await client.aclose()
+!             self.logger.error(f"Erro ao listar eventos: {e}")
+!             return self.error(f"Falha ao listar eventos: {str(e)}")
+  
+>     async def _add_calendar_event(
+>         self,
+>         summary: Optional[str],
+>         start_time: Optional[str],
+>         end_time: Optional[str] = None,
+>         description: Optional[str] = None,
+>     ) -> Dict[str, Any]:
+>         """
+>         Creates a new calendar event.
+  
+>         Args:
+>             summary: Event title
+>             start_time: Start time (ISO8601)
+>             end_time: End time (ISO8601, optional - defaults to 1h after start)
+>             description: Event description (optional)
+  
+>         Returns:
+>             Success with event details or error
+>         """
+!         if not summary or not start_time:
+!             return self.error("Título (summary) e horário de início (start_time) são obrigatórios")
+  
+!         client = await self._get_client()
+  
+!         if not client:
+!             return self.error("Não autenticado. Use 'Configure o calendário' para autenticar.")
+  
+          # Default end_time to 1 hour after start if not provided
+!         if not end_time:
+!             try:
+!                 start_dt = datetime.fromisoformat(start_time.replace("Z", ""))
+!                 end_dt = start_dt + timedelta(hours=1)
+!                 end_time = end_dt.isoformat()
+!             except Exception as e:
+!                 return self.error(f"Formato de data inválido: {e}")
+  
+          # Create event payload
+!         event_data = {
+!             "summary": summary,
+!             "start": {"dateTime": start_time, "timeZone": "America/Sao_Paulo"},
+!             "end": {"dateTime": end_time, "timeZone": "America/Sao_Paulo"},
+!         }
+  
+!         if description:
+!             event_data["description"] = description
+  
+!         try:
+!             response = await client.post(
+!                 f"/calendars/{GCAL_CALENDAR_ID}/events",
+!                 json=event_data,
+!             )
+!             response.raise_for_status()
+!             created_event = response.json()
+  
+!             await client.aclose()
+  
+!             return self.success(
+!                 {
+!                     "event_id": created_event.get("id"),
+!                     "summary": created_event.get("summary"),
+!                     "start": created_event.get("start", {}).get("dateTime"),
+!                     "htmlLink": created_event.get("htmlLink"),
+!                 },
+!                 message=f"✅ Evento '{summary}' criado com sucesso"
+!             )
+  
+!         except httpx.TimeoutException:
+!             await client.aclose()
+!             self.logger.error("Timeout ao conectar com Google Calendar")
+!             return self.error("Timeout ao criar evento. Tente novamente.")
+!         except (httpx.ConnectError, httpx.NetworkError) as e:
+!             await client.aclose()
+!             self.logger.error(f"Erro de conexão com Google Calendar: {type(e).__name__}")
+!             return self.error("Não foi possível conectar ao Google Calendar. Verifique sua conexão.")
+!         except httpx.HTTPStatusError as e:
+!             await client.aclose()
+!             self.logger.error(f"Erro HTTP ao criar evento: {e.response.status_code}")
+!             return self.error(f"Falha ao criar evento: {e.response.status_code}")
+!         except Exception as e:
+!             await client.aclose()
+!             self.logger.error(f"Erro ao criar evento: {e}")
+!             return self.error(f"Falha ao criar evento: {str(e)}")
+  
+>     async def _cancel_calendar_event(self, event_id: Optional[str]) -> Dict[str, Any]:
+>         """
+>         Deletes a calendar event.
+  
+>         Args:
+>             event_id: Event ID to delete
+  
+>         Returns:
+>             Success confirmation or error
+>         """
+!         if not event_id:
+!             return self.error("ID do evento (event_id) é obrigatório")
+  
+!         client = await self._get_client()
+  
+!         if not client:
+!             return self.error("Não autenticado. Use 'Configure o calendário' para autenticar.")
+  
+!         try:
+!             response = await client.delete(f"/calendars/{GCAL_CALENDAR_ID}/events/{event_id}")
+!             response.raise_for_status()
+  
+!             await client.aclose()
+  
+!             return self.success(
+!                 {"deleted": event_id},
+!                 message=f"✅ Evento cancelado com sucesso"
+!             )
+  
+!         except httpx.TimeoutException:
+!             await client.aclose()
+!             self.logger.error("Timeout ao conectar com Google Calendar")
+!             return self.error("Timeout ao cancelar evento. Tente novamente.")
+!         except (httpx.ConnectError, httpx.NetworkError) as e:
+!             await client.aclose()
+!             self.logger.error(f"Erro de conexão com Google Calendar: {type(e).__name__}")
+!             return self.error("Não foi possível conectar ao Google Calendar. Verifique sua conexão.")
+!         except httpx.HTTPStatusError as e:
+!             await client.aclose()
+!             if e.response.status_code == 404:
+!                 return self.error("Evento não encontrado")
+!             self.logger.error(f"Erro HTTP ao cancelar evento: {e.response.status_code}")
+!             return self.error(f"Falha ao cancelar evento: {e.response.status_code}")
+!         except Exception as e:
+!             await client.aclose()
+!             self.logger.error(f"Erro ao cancelar evento: {e}")
+!             return self.error(f"Falha ao cancelar evento: {str(e)}")

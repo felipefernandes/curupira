@@ -99,10 +99,8 @@ class IntrospectionSkill(BaseSkill):
 
         summary = []
         for group_data in groups.values():
-            # Condense all tool descriptions into one short summary per group
+            # Combine all tool descriptions into one summary per group
             combined = "; ".join(group_data["descriptions"])
-            if len(combined) > 120:
-                combined = combined[:117] + "..."
             summary.append({
                 "group": group_data["group"],
                 "emoji": group_data["emoji"],

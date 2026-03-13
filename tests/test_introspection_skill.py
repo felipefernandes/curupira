@@ -167,11 +167,12 @@ class TestIntrospectionSkill:
         assert data["tools"][0]["name"] == "get_weather"
 
     @pytest.mark.asyncio
-    async def test_list_all_skills_truncates_long_description(self):
-        """Descriptions combined beyond 120 chars should be truncated with '...'."""
+    async def test_list_all_skills_shows_full_description(self):
+        """Descriptions should be displayed in full without truncation."""
+        long_description = "A" * 130
         long_skill = _make_mock_skill(
             "verbose_tool",
-            "A" * 130,  # Forces the truncation branch (>120 chars)
+            long_description,
             skill_group="verbose",
             skill_group_emoji="🔤",
         )
@@ -183,5 +184,5 @@ class TestIntrospectionSkill:
         verbose_group = next(
             g for g in result["data"]["groups"] if g["group"] == "verbose"
         )
-        assert verbose_group["summary"].endswith("...")
-        assert len(verbose_group["summary"]) <= 120
+        assert verbose_group["summary"] == long_description
+        assert not verbose_group["summary"].endswith("...")

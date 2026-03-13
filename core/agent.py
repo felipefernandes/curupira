@@ -14,6 +14,7 @@ from skills.mcp_skill import MCPSkill
 from skills.introspection import IntrospectionSkill
 from skills.rss import RssReadSkill, RssListSkill
 from skills.google_calendar import GoogleCalendarSkill
+from skills.github_skill import GithubSkill
 from skills.oauth_http_server import extract_code_from_url
 import random
 import time
@@ -71,6 +72,7 @@ class AgentBrain:
         self.register_skill(RssReadSkill())
         self.register_skill(RssListSkill())
         self.register_skill(GoogleCalendarSkill())
+        self.register_skill(GithubSkill())
 
     @staticmethod
     def _sanitize_text(text: str) -> str:

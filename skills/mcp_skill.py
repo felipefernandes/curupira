@@ -38,6 +38,20 @@ class MCPSkill(BaseSkill):
         return f"🔗 {friendly}"
 
     @property
+    def skill_group(self) -> str:
+        """Derives the group from the tool name prefix (e.g., 'github_list_repos' -> 'github')."""
+        raw = self._tool_def.get("name", "")
+        return raw.split("_")[0] if "_" in raw else raw
+
+    @property
+    def skill_group_emoji(self) -> str:
+        """Returns an emoji based on the skill group prefix."""
+        _EMOJI_MAP = {
+            "github": "🐙",
+        }
+        return _EMOJI_MAP.get(self.skill_group, "🔗")
+
+    @property
     def description(self) -> str:
         return self._tool_def.get("description", "No description provided.")
 

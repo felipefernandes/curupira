@@ -24,6 +24,7 @@ from core.config import GCAL_CALENDAR_ID
 # Security module for token encryption
 import json
 from core.token_encryption import TokenCipher
+from core.credential_manager import save_google_credentials
 
 
 # Google Calendar API scopes
@@ -118,9 +119,8 @@ class CalendarReminderBridge:
                 timeout=30.0
             )
 
-            # Save refreshed token
-            with open(TOKEN_FILE, "w") as f:
-                f.write(creds.to_json())
+            # Save refreshed token (encrypted)
+            await asyncio.to_thread(save_google_credentials, creds)
 
             self.logger.info("Token renovado durante sync do calendário")
             return True

@@ -1,49 +1,74 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-import html
 from bot import system_heartbeat
 from core import config
 from telegram.constants import ParseMode
+from telegram.error import TelegramError
 
 @pytest.mark.asyncio
-async def test_system_heartbeat_sends_escaped_proactive_message():
-    """Test that system_heartbeat correctly escapes HTML in the proactive message."""
-    # Mock context
+async def test_system_heartbeat_sends_html_message():
+    """Test that system_heartbeat sends HTML-formatted message directly."""
     mock_context = MagicMock()
     mock_context.bot = AsyncMock()
     mock_context.bot.send_message = AsyncMock()
-    
-    # The message we want the agent to return, containing HTML characters
-    unsafe_message = "Hello! <b>This is bold</b> & I love <script>alert(1)</script>"
-    expected_escaped_message = html.escape(unsafe_message)
 
-    # We need to mock brain.reflect to return our unsafe_message
+    message = "Hello! <b>This is bold</b>"
+
     mock_brain = AsyncMock()
-    mock_brain.reflect.return_value = unsafe_message
+    mock_brain.reflect.return_value = message
 
-    # Mock memory manager
     mock_memory_manager = AsyncMock()
 
     with patch('bot.brain', mock_brain), \
          patch('bot.memory_manager', mock_memory_manager), \
          patch('bot.config.REFLECTION_ENABLED', True), \
          patch('bot.config.AUTHORIZED_USER_ID', 12345):
-         
-        # Execute the heartbeat
+
         await system_heartbeat(mock_context)
 
-        # Verify reflect was called
         mock_brain.reflect.assert_called_once()
-        
-        # Verify the message was sent to the authorized user with escaped HTML
+
+        # Verify the message was sent with HTML parse mode (no escaping)
         mock_context.bot.send_message.assert_called_once_with(
             chat_id=12345,
-            text=expected_escaped_message,
+            text=message,
             parse_mode=ParseMode.HTML
         )
-        
-        # Verify the message was correctly saved to memory
-        mock_memory_manager.log_message.assert_called_once_with(12345, "model", unsafe_message)
+
+        mock_memory_manager.log_message.assert_called_once_with(12345, "model", message)
+
+@pytest.mark.asyncio
+async def test_system_heartbeat_fallback_on_html_error():
+    """Test that system_heartbeat falls back to plain text on HTML parse error."""
+    mock_context = MagicMock()
+    mock_context.bot = AsyncMock()
+
+    message = "Hello <unsupported_tag>world</unsupported_tag>"
+
+    # First call raises TelegramError, second call (fallback) succeeds
+    mock_context.bot.send_message = AsyncMock(
+        side_effect=[TelegramError("unsupported start tag"), None]
+    )
+
+    mock_brain = AsyncMock()
+    mock_brain.reflect.return_value = message
+
+    mock_memory_manager = AsyncMock()
+
+    with patch('bot.brain', mock_brain), \
+         patch('bot.memory_manager', mock_memory_manager), \
+         patch('bot.config.REFLECTION_ENABLED', True), \
+         patch('bot.config.AUTHORIZED_USER_ID', 12345):
+
+        await system_heartbeat(mock_context)
+
+        # Should have been called twice: first with HTML, then fallback without
+        assert mock_context.bot.send_message.call_count == 2
+        # Fallback sends without parse_mode
+        mock_context.bot.send_message.assert_called_with(
+            chat_id=12345,
+            text=message
+        )
 
 @pytest.mark.asyncio
 async def test_system_heartbeat_silence():

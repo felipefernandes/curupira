@@ -14,6 +14,7 @@ from skills.mcp_skill import MCPSkill
 from skills.introspection import IntrospectionSkill
 from skills.rss import RssReadSkill, RssListSkill
 from skills.google_calendar import GoogleCalendarSkill
+from skills.github_skill import GithubSkill
 from skills.oauth_http_server import extract_code_from_url
 import random
 import time
@@ -27,11 +28,15 @@ class AgentBrain:
     _RE_FUNC_PARENS = re.compile(r'<function=(\w+)\((.*?)\)</function>', re.DOTALL)  # <function=name(args)></function> (CORRIGIDO: sem > extra antes de </function>)
     _RE_FUNC_ANGLES = re.compile(r'<function=([a-zA-Z0-9_]+)>(\{.*?\})</function>', re.DOTALL)      # <function=name>{"args":...}</function>
     _RE_FUNC_COLON  = re.compile(r'<function=(\w+)":\s*(.*?)</function>', re.DOTALL)  # <function=name":args</function>
-    _RE_FUNC_SLASH  = re.compile(r'<function/([a-zA-Z0-9_]+)(\{.*?\})</function>', re.DOTALL)   # <function/name{...}></function> (CORRIGIDO: sem > extra antes de </function>)
-    _RE_FUNC_DIRECT_JSON = re.compile(r'<function=([a-zA-Z0-9_]+)(\{.*?\})</function>', re.DOTALL)  # <function=name{"args":...}> (nome colado direto no JSON)
-    _RE_FUNC_DOUBLE_EQUALS = re.compile(r'<function=([a-zA-Z0-9_]+)=(\{.*?\})</function>', re.DOTALL)  # <function=name={"args":...}> (dois sinais de igual)
-    _RE_FUNC_WITH_SPACES = re.compile(r'<function=([a-zA-Z0-9_]+)\s+(\{.*?\})\s*</function>', re.DOTALL)  # <function=name {"args":...} </function> (com espaços)
+    _RE_FUNC_SLASH  = re.compile(r'<function/([a-zA-Z0-9_]+)>?(\{.*?\})</function>', re.DOTALL)   # <function/name>{...}</function> or <function/name{...}</function>
+    _RE_FUNC_DIRECT_JSON = re.compile(r'<function=([a-zA-Z0-9_]+)(\{.*?\})>?</function>', re.DOTALL)  # <function=name{"args":...}> (nome colado direto no JSON)
+    _RE_FUNC_DOUBLE_EQUALS = re.compile(r'<function=([a-zA-Z0-9_]+)=(\{.*?\})>?</function>', re.DOTALL)  # <function=name={"args":...}> (dois sinais de igual)
+    _RE_FUNC_WITH_SPACES = re.compile(r'<function=([a-zA-Z0-9_]+)\s+(\{.*?\})\s*>?</function>', re.DOTALL)  # <function=name {"args":...}></function> (com espaços)
     _RE_FUNC_AMPERSAND = re.compile(r'<function=name:([a-zA-Z0-9_]+)&(.+?)</function>', re.DOTALL)  # <function=name:google_calendar&action:list&time_range:today</function>
+
+    # Catch-all pattern to strip any remaining <function...> tags from final output
+    _RE_FUNC_CLEANUP = re.compile(r'<function[=/][^>]*>.*?</function>', re.DOTALL)
+    _RE_FUNC_UNCLOSED = re.compile(r'<function[=/][^>]*>', re.DOTALL)
 
     # Compiled patterns to strip CoT reasoning blocks (Qwen3, DeepSeek-R1, etc.)
     _RE_THINK_BLOCK = re.compile(r'<think>(?:.*?</think>|.*$)', re.DOTALL)
@@ -71,6 +76,7 @@ class AgentBrain:
         self.register_skill(RssReadSkill())
         self.register_skill(RssListSkill())
         self.register_skill(GoogleCalendarSkill())
+        self.register_skill(GithubSkill())
 
     @staticmethod
     def _sanitize_text(text: str) -> str:
@@ -856,8 +862,13 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                                 continue # Loop back to get final response
                         except Exception as e:
                             self.logger.error(f"Error parsing XML tool call: {e}")
-                    
-                    return content
+
+                    # Sanitize response: remove any remaining <function...> tags
+                    # that weren't caught by regex patterns (compiled constants)
+                    clean_content = self._RE_FUNC_CLEANUP.sub('', content)
+                    clean_content = self._RE_FUNC_UNCLOSED.sub('', clean_content)
+
+                    return clean_content.strip()
                         
                 except Exception as e:
                     # Recover from Groq 400 "tool_use_failed" errors
@@ -990,7 +1001,11 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                          )
                          continue
                      else:
-                         return text_content or ""
+                         # Sanitize response: remove any remaining <function...> tags (compiled constants)
+                        clean_text = self._RE_FUNC_CLEANUP.sub('', text_content)
+                        clean_text = self._RE_FUNC_UNCLOSED.sub('', clean_text)
+
+                        return clean_text.strip() or ""
 
                  except Exception as e:
                      # Try to catch specific Google API errors if available

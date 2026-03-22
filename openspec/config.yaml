@@ -1,0 +1,47 @@
+schema: spec-driven
+
+context: |
+  Project: CurupiraBot — lightweight, proactive personal assistant bot.
+  Target hardware: Raspberry Pi 3 Model B (1GB RAM, headless). All decisions must account for severe resource constraints.
+
+  Tech stack:
+    - Python 3.10+ (async everywhere — never block the event loop)
+    - python-telegram-bot (Async + JobQueue) — the only UI/interface
+    - SQLite + JSON for persistence (no complex databases, no pandas/numpy)
+    - Groq API (LLaMA 3) — default provider for speed
+    - Google Gemini 1.5 Flash — fallback for larger context windows
+    - Open-Meteo for weather (no API key required)
+
+  Architecture:
+    - "Diet" principle: offload heavy processing to AI providers, keep local logic minimal
+    - Skills Framework (MCP-Lite): all new features are self-contained skills in skills/
+      Each skill exposes async functions and registers tool descriptors. See docs/SKILLS_FRAMEWORK.md.
+    - JobQueue (built-in scheduler): handles proactive behaviors, reminders, and heartbeat — no cron dependency
+    - Memory: SQLite-backed, stores user preferences, conversation context, and reminders
+
+  Key constraints:
+    - ALWAYS use async/await — synchronous blocking calls are forbidden
+    - NO heavy libraries locally (pandas, numpy, scipy, etc.)
+    - Prefer SQLite or JSON files over any other persistence layer
+    - All new automations MUST follow the Skills Framework
+
+  Code review: Automated via Iara (DeepSeek V3) on every PR through GitHub Actions.
+  Contribution flow: feature branch → PR → Iara review → iterate → merge to main.
+
+rules:
+  proposal:
+    - State clearly which hardware constraint motivates this change (RAM, CPU, storage, or network)
+    - Include a "Non-goals" section to prevent scope creep
+    - Identify whether this touches core bot logic or is an isolated skill
+  specs:
+    - Write scenarios in Given/When/Then format
+    - Specify memory impact (does this add persistent state?)
+    - Specify whether the feature is synchronous-safe or requires async handling
+  design:
+    - Describe the async flow explicitly (which coroutines, which JobQueue jobs)
+    - If introducing a new skill, show the tool descriptor shape
+    - Highlight any external API dependency and its failure/fallback behavior
+  tasks:
+    - Break tasks into chunks of max 2 hours
+    - Each task must be independently testable or verifiable
+    - Flag any task that requires environment variables or external service setup

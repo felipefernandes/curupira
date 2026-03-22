@@ -68,6 +68,8 @@ class TestRemindersMetadata:
         assert "Criar" in skill.display_name
         assert "lembrete" in skill.description.lower()
         assert "message" in skill.parameters["properties"]
+        assert skill.skill_group == "reminders"
+        assert skill.skill_group_emoji == "⏰"
 
     def test_list_reminders_metadata(self):
         from skills.reminders import ListRemindersSkill
@@ -77,6 +79,8 @@ class TestRemindersMetadata:
         assert "Listar" in skill.display_name
         assert "listar os lembretes" in skill.description.lower()
         assert skill.parameters["type"] == "object"
+        assert skill.skill_group == "reminders"
+        assert skill.skill_group_emoji == "⏰"
 
     def test_delete_reminder_metadata(self):
         from skills.reminders import DeleteReminderSkill
@@ -86,6 +90,8 @@ class TestRemindersMetadata:
         assert "Deletar" in skill.display_name
         assert "cancelar" in skill.description.lower()
         assert "reminder_id" in skill.parameters["properties"]
+        assert skill.skill_group == "reminders"
+        assert skill.skill_group_emoji == "⏰"
 
     def test_update_reminder_metadata(self):
         from skills.reminders import UpdateReminderSkill
@@ -95,4 +101,6 @@ class TestRemindersMetadata:
         assert "Atualizar" in skill.display_name
         assert "atualiza" in skill.description.lower()
         assert "reminder_id" in skill.parameters["properties"]
+        assert skill.skill_group == "reminders"
+        assert skill.skill_group_emoji == "⏰"
 

@@ -24,6 +24,8 @@ class TestJobHunterRunSearchSkill(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.skill.name, "job_hunter_run_search")
         self.assertIn("vaga", self.skill.description.lower())
         self.assertIn("Buscar", self.skill.display_name)
+        self.assertEqual(self.skill.skill_group, "jobs")
+        self.assertEqual(self.skill.skill_group_emoji, "💼")
 
     def test_parameters_all_optional(self):
         params = self.skill.parameters
@@ -245,6 +247,8 @@ class TestJobHunterGetDefaultsSkill(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Config", self.skill.display_name)
         self.assertIn("padrão", self.skill.description.lower())
         self.assertEqual(self.skill.parameters.get("required"), [])
+        self.assertEqual(self.skill.skill_group, "jobs")
+        self.assertEqual(self.skill.skill_group_emoji, "💼")
 
     @patch("skills.job_hunter.config.JOB_HUNTER_URL", "")
     async def test_missing_url_returns_error(self):

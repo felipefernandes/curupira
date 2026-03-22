@@ -21,6 +21,14 @@ class HardwareMonitoringSkill(BaseSkill):
         return "🌡️ Monitoramento de Hardware"
 
     @property
+    def skill_group(self) -> str:
+        return "system"
+
+    @property
+    def skill_group_emoji(self) -> str:
+        return "🖥️"
+
+    @property
     def description(self) -> str:
         return "Retorna o status atual do hardware local (CPU, RAM, Disco, Temperatura)."
 

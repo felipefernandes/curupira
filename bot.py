@@ -4,6 +4,7 @@ from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, Application
 from core import config
 import asyncio
+import re
 from datetime import datetime
 import logging
 from skills.memory import MemoryManager
@@ -109,16 +110,26 @@ if config.skill_enabled("usage_report"):
 else:
     logging.info("Skill 'usage_report' desabilitada pela configuração.")
 
-# Skill: GitHub (via MCP)
-from skills.github import configure as configure_github
-configure_github()  # Carrega apenas se o token estiver disponível
-
 # Onboarding States
 WAITING_NAME = 1
 WAITING_SURNAME = 2
 onboarding_states = {}
 
 logging.info(f"Iniciando bot com provedor: {config.AI_PROVIDER}")
+
+# Telegram HTML supports only: <b>, <i>, <u>, <s>, <code>, <pre>, <a>, <tg-spoiler>, <tg-emoji>
+# Strip any other tags to prevent parse errors while keeping valid formatting.
+_ALLOWED_HTML_TAGS = {'b', 'i', 'u', 's', 'code', 'pre', 'a', 'tg-spoiler', 'tg-emoji'}
+_RE_HTML_TAG = re.compile(r'<(/?)(\w[\w-]*)([^>]*)>')
+
+def _strip_unsupported_html(text: str) -> str:
+    """Remove HTML tags not supported by Telegram, keeping allowed ones intact."""
+    def _replace(m):
+        tag_name = m.group(2).lower()
+        if tag_name in _ALLOWED_HTML_TAGS:
+            return m.group(0)  # Keep allowed tags
+        return ''  # Strip unsupported tags
+    return _RE_HTML_TAG.sub(_replace, text)
 
 # Security Filter
 def is_authorized(user_id):
@@ -214,12 +225,15 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if text and text.strip():
             try:
                 await update.message.reply_text(text.strip(), parse_mode=ParseMode.HTML)
-            except Exception as e:
-                logging.error(f"Erro no intermediate_reply (HTML): {e}")
+            except TelegramError as e:
+                logging.warning(f"Erro no intermediate_reply (HTML): {e}")
+                clean_text = _strip_unsupported_html(text.strip())
                 try:
+                    await update.message.reply_text(clean_text, parse_mode=ParseMode.HTML)
+                except TelegramError:
                     await update.message.reply_text(text.strip())
-                except Exception as inner_e:
-                    logging.error(f"Erro no intermediate_reply (Fallback): {inner_e}")
+            except Exception as e:
+                logging.error(f"Erro no intermediate_reply: {e}")
 
     typing_task = asyncio.create_task(keep_typing())
     try:
@@ -240,10 +254,15 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     try:
         await update.message.reply_text(response_text, parse_mode=ParseMode.HTML)
-    except Exception as e:
-        logging.error(f"Erro de parsing HTML: {e}")
-        # Fallback to plain text if HTML fails
-        await update.message.reply_text(response_text)
+    except TelegramError as e:
+        logging.warning(f"Erro de parsing HTML: {e}")
+        # Fallback: strip unsupported tags and retry with HTML
+        clean_text = _strip_unsupported_html(response_text)
+        try:
+            await update.message.reply_text(clean_text, parse_mode=ParseMode.HTML)
+        except TelegramError:
+            # Last resort: send as plain text
+            await update.message.reply_text(response_text)
 
 # --- JOB QUEUE CALLBACKS ---
 async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
@@ -290,8 +309,12 @@ async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
             try:
                 await context.bot.send_message(chat_id=job.chat_id, text=response_text, parse_mode=ParseMode.HTML)
             except TelegramError as e:
-                logging.error(f"Erro de parsing HTML via Reminder: {e}")
-                await context.bot.send_message(chat_id=job.chat_id, text=response_text)
+                logging.warning(f"Erro de parsing HTML via Reminder: {e}")
+                clean_text = _strip_unsupported_html(response_text)
+                try:
+                    await context.bot.send_message(chat_id=job.chat_id, text=clean_text, parse_mode=ParseMode.HTML)
+                except TelegramError:
+                    await context.bot.send_message(chat_id=job.chat_id, text=response_text)
             except Exception as e:
                 logging.error(f"Erro inesperado ao enviar mensagem de Task: {e}")
                 raise e
@@ -355,13 +378,17 @@ async def system_heartbeat(context: ContextTypes.DEFAULT_TYPE):
             logging.info(f"🔔 Proactive Reflection Triggered: {msg}")
             # Send to authorized user
             if config.AUTHORIZED_USER_ID != 0:
-                import html
-                escaped_msg = html.escape(msg)
-                await context.bot.send_message(
-                    chat_id=config.AUTHORIZED_USER_ID, 
-                    text=f"{escaped_msg}",
-                    parse_mode=ParseMode.HTML
-                )
+                try:
+                    await context.bot.send_message(
+                        chat_id=config.AUTHORIZED_USER_ID,
+                        text=msg,
+                        parse_mode=ParseMode.HTML
+                    )
+                except TelegramError:
+                    await context.bot.send_message(
+                        chat_id=config.AUTHORIZED_USER_ID,
+                        text=msg
+                    )
                 try:
                     await memory_manager.log_message(config.AUTHORIZED_USER_ID, "model", msg)
                 except Exception as e:
@@ -371,6 +398,67 @@ async def system_heartbeat(context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logging.error(f"Heartbeat Reflection Error: {e}")
+
+async def check_token_health(context: ContextTypes.DEFAULT_TYPE):
+    """
+    Health check job for Google OAuth credentials.
+
+    Runs daily at 8 AM to validate token integrity and alert user
+    if re-authentication is needed.
+    """
+    from core.credential_manager import load_google_credentials
+    from core.audit_logger import AuditLogger
+
+    logger = logging.getLogger("token_health")
+    audit = AuditLogger()
+
+    try:
+        creds = load_google_credentials()
+
+        if not creds:
+            # Token missing
+            logger.warning("Token health check: No credentials found")
+            audit.log_event("token_health_check", {
+                "status": "missing",
+                "action_required": "user_reauth"
+            })
+
+            # Notify user via Telegram
+            if config.AUTHORIZED_USER_ID != 0:
+                await context.bot.send_message(
+                    chat_id=config.AUTHORIZED_USER_ID,
+                    text="⚠️ Google Calendar não autenticado\n\nUse /setup_calendar para reconectar."
+                )
+            return
+
+        if not creds.valid:
+            if creds.expired and creds.refresh_token:
+                # Expired but recoverable (auto-refresh will handle)
+                logger.info("Token expired but refresh_token present (OK)")
+                audit.log_event("token_health_check", {
+                    "status": "expired_recoverable"
+                })
+            else:
+                # Invalid and no refresh token (critical)
+                logger.error("Token invalid and no refresh_token (BAD)")
+                audit.log_event("token_health_check", {
+                    "status": "invalid_unrecoverable",
+                    "action_required": "user_reauth"
+                })
+
+                # Notify user via Telegram
+                if config.AUTHORIZED_USER_ID != 0:
+                    await context.bot.send_message(
+                        chat_id=config.AUTHORIZED_USER_ID,
+                        text="❌ Google Calendar: token inválido\n\nSuas credenciais expiraram. Use /setup_calendar para autenticar novamente."
+                    )
+        else:
+            # Healthy
+            logger.debug("Token health check: OK")
+            audit.log_event("token_health_check", {"status": "healthy"})
+
+    except Exception as e:
+        logger.error(f"Token health check failed: {e}")
 
 async def post_init(application: Application):
     if memory_manager is not None:
@@ -402,7 +490,16 @@ async def post_init(application: Application):
             )
             logging.info(f"Calendar sync job agendado (intervalo: {config.GCAL_SYNC_INTERVAL_MINUTES} minutos)")
 
-        logging.info("Jobs agendados: Heartbeat + Lembretes + Calendar Sync")
+            # Google Calendar Token Health Check (daily at 8 AM)
+            from telegram.ext import JobQueue
+            application.job_queue.run_daily(
+                check_token_health,
+                time=datetime.strptime("08:00", "%H:%M").time(),
+                name="token_health_check"
+            )
+            logging.info("Token health check job agendado (diário às 8:00)")
+
+        logging.info("Jobs agendados: Heartbeat + Lembretes + Calendar Sync + Token Health")
     else:
         logging.error("JobQueue não está disponível!")
 

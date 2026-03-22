@@ -12,6 +12,14 @@ class GetTimeSkill(BaseSkill):
         return "⏰ Data e Hora"
 
     @property
+    def skill_group(self) -> str:
+        return "system"
+
+    @property
+    def skill_group_emoji(self) -> str:
+        return "🖥️"
+
+    @property
     def description(self) -> str:
         return "Retorna a data e hora atual do sistema. Use quando o usuário perguntar 'que horas são?' ou 'que dia é hoje?'."
 

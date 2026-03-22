@@ -29,6 +29,14 @@ class RssReadSkill(BaseSkill):
         return "📰 Ler Feed RSS"
 
     @property
+    def skill_group(self) -> str:
+        return "rss"
+
+    @property
+    def skill_group_emoji(self) -> str:
+        return "📰"
+
+    @property
     def description(self) -> str:
         return "Busca as últimas notícias/entradas de um feed RSS configurado."
 
@@ -124,6 +132,14 @@ class RssListSkill(BaseSkill):
     @property
     def display_name(self) -> str:
         return "📋 Listar Feeds RSS"
+
+    @property
+    def skill_group(self) -> str:
+        return "rss"
+
+    @property
+    def skill_group_emoji(self) -> str:
+        return "📰"
 
     @property
     def description(self) -> str:

@@ -58,6 +58,7 @@ reminders = true
 time      = true
 hardware  = true
 memory    = true
+daily_briefing = true  # Briefing matinal (clima + agenda + notícias)
 github    = false   # Requer GITHUB_PERSONAL_ACCESS_TOKEN
 
 # NOTA: rss, job_hunter e sports possuem seções próprias abaixo

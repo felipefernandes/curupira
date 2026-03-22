@@ -120,4 +120,4 @@ async def test_system_heartbeat_memory_manager_exception(caplog):
         mock_memory_manager.log_message.assert_called_once_with(12345, "model", "Test message")
         
         # Verify the error was logged
-        assert "Erro ao salvar reflexão no histórico: DB Connection Error" in caplog.text
+        assert "Erro ao salvar mensagem proativa no histórico: DB Connection Error" in caplog.text

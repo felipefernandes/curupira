@@ -348,6 +348,48 @@ class AgentBrain:
 
 
 
+    def _resolve_reflection_provider(self) -> Tuple[bool, Optional[Any], Optional[str]]:
+        """Resolve the LLM provider for reflection/briefing.
+
+        Returns:
+            Tuple of (use_groq, client, model). Client/model may be None on failure.
+        """
+        use_groq = False
+        client = None
+        model = None
+
+        if config.AI_PROVIDER == 'groq':
+            if not config.GROQ_API_KEY:
+                self.logger.warning("AI_PROVIDER is 'groq' but GROQ_API_KEY is missing.")
+                return False, None, None
+            try:
+                from groq import AsyncGroq
+                client = AsyncGroq(api_key=config.GROQ_API_KEY)
+            except ImportError:
+                self.logger.error("Groq library not installed.")
+                return False, None, None
+            use_groq = True
+            model = config.GROQ_MODEL
+        elif config.AI_PROVIDER == 'gemini':
+            if not config.GEMINI_API_KEY:
+                self.logger.warning("AI_PROVIDER is 'gemini' but GEMINI_API_KEY is missing.")
+                return False, None, None
+            try:
+                from google import genai
+                client = genai.Client(api_key=config.GEMINI_API_KEY)
+            except ImportError:
+                self.logger.error("Google GenAI library not installed.")
+                return False, None, None
+            model = config.GEMINI_MODEL
+        else:
+            self.logger.warning(f"Unknown AI_PROVIDER: {config.AI_PROVIDER}")
+            return False, None, None
+
+        if not model or not client:
+            return False, None, None
+
+        return use_groq, client, model
+
     async def reflect(self, context: Dict[str, Any]) -> Optional[str]:
         """
         Executes a reflection cycle to check if the agent should proactively speak.
@@ -356,44 +398,8 @@ class AgentBrain:
         if not config.REFLECTION_ENABLED:
             return None
 
-        # Setup Client
-        client = None
-        use_groq = False
-
-        if config.AI_PROVIDER == 'groq':
-             if not config.GROQ_API_KEY:
-                 self.logger.warning("AI_PROVIDER is 'groq' but GROQ_API_KEY is missing via reflect.")
-                 return None
-             # Use explicit key for reflection client
-             try:
-                 from groq import AsyncGroq
-                 client = AsyncGroq(api_key=config.GROQ_API_KEY)
-             except ImportError:
-                 self.logger.error("Groq library not installed.")
-                 return None
-             use_groq = True
-             model = config.GROQ_MODEL
-        elif config.AI_PROVIDER == 'gemini':
-             if not config.GEMINI_API_KEY:
-                 self.logger.warning("AI_PROVIDER is 'gemini' but GEMINI_API_KEY is missing via reflect.")
-                 return None
-             # Use explicit key for reflection client
-             try:
-                 from google import genai
-                 client = genai.Client(api_key=config.GEMINI_API_KEY)
-             except ImportError:
-                 self.logger.error("Google GenAI library not installed.")
-                 return None
-             model = config.GEMINI_MODEL
-        else:
-             self.logger.warning(f"Unknown AI_PROVIDER for reflection: {config.AI_PROVIDER}")
-             return None
-        
-        if not model:
-            self.logger.error("Model name is empty.")
-            return None
-        
-        if not client:
+        use_groq, client, model = self._resolve_reflection_provider()
+        if not client or not model:
             return None
 
         # Resolve greeting window from config
@@ -525,6 +531,103 @@ class AgentBrain:
             
         except Exception as e:
             self.logger.error(f"Reflection Error: {e}")
+            return None
+
+    async def compose_briefing(self, briefing_data: Dict[str, Any], user_name: str = "") -> Optional[str]:
+        """Composes a natural-language daily briefing from structured data.
+
+        Uses the configured LLM to format weather, calendar events, and news
+        into a friendly morning message in Portuguese.
+
+        Args:
+            briefing_data: Dict with keys 'weather', 'events', 'news' (any may be None).
+            user_name: User's name for personalized greeting.
+
+        Returns:
+            Formatted briefing string or None on failure.
+        """
+        use_groq, client, model = self._resolve_reflection_provider()
+        if not client or not model:
+            self.logger.error("compose_briefing: no LLM provider available")
+            return None
+
+        # Build data summary for the prompt
+        sections = []
+
+        weather = briefing_data.get("weather")
+        if weather:
+            sections.append(
+                f"Clima: {weather.get('location', '?')} — "
+                f"{weather.get('temperature', '?')}°C, "
+                f"{weather.get('condition', '?')}, "
+                f"umidade {weather.get('humidity', '?')}%, "
+                f"chance de chuva {weather.get('rain_probability', '?')}%"
+            )
+
+        events = briefing_data.get("events")
+        if events:
+            ev_lines = []
+            for ev in events[:10]:
+                start = ev.get("start", "")
+                summary = ev.get("summary", "Sem título")
+                ev_lines.append(f"  - {start}: {summary}")
+            sections.append("Agenda de hoje:\n" + "\n".join(ev_lines))
+        elif events is not None:
+            sections.append("Agenda de hoje: nenhum evento.")
+
+        news = briefing_data.get("news")
+        if news:
+            nw_lines = []
+            for item in news[:6]:
+                nw_lines.append(f"  - [{item.get('source', '')}] {item.get('title', '')}")
+            sections.append("Notícias:\n" + "\n".join(nw_lines))
+
+        data_text = "\n\n".join(sections) if sections else "Nenhum dado disponível."
+
+        greeting_name = f" {user_name}" if user_name else ""
+        system_prompt = (
+            "/no_think\n"
+            "You are Curupira, a friendly Brazilian personal assistant. "
+            f"Compose a warm 'Bom dia{greeting_name}!' morning briefing in Portuguese (PT-BR). "
+            "Include a natural greeting followed by a concise summary of the data below. "
+            "Keep it short, friendly, and informative. "
+            "Use plain text (no markdown, no HTML). "
+            "Do NOT invent data — only use what is provided."
+        )
+
+        user_content = f"Dados do briefing:\n\n{data_text}"
+
+        try:
+            if use_groq:
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_content},
+                ]
+                response = await client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    max_tokens=600,
+                    temperature=0.5,
+                )
+                result = response.choices[0].message.content.strip()
+            else:
+                from google.genai import types
+                response = await client.aio.models.generate_content(
+                    model=model,
+                    contents=[types.Content(parts=[types.Part(text=f"{system_prompt}\n\n{user_content}")])],
+                    config=types.GenerateContentConfig(temperature=0.5, max_output_tokens=600),
+                )
+                if response.candidates:
+                    result = response.candidates[0].content.parts[0].text.strip()
+                else:
+                    return None
+
+            # Strip CoT blocks
+            result = self._RE_THINK_BLOCK.sub('', result).strip()
+            return result if result else None
+
+        except Exception as e:
+            self.logger.error(f"compose_briefing error: {e}")
             return None
 
     async def process(self, user_msg: str, context: Dict[str, Any], chat_history: str = "", on_intermediate_reply=None) -> str:

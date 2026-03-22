@@ -26,10 +26,15 @@ from pathlib import Path
 from google.oauth2.credentials import Credentials
 
 from core.token_encryption import TokenCipher
-from core.config import DATA_DIR
 
+# Token storage path (consistent with skills/google_calendar.py)
+DATA_DIR = Path(__file__).parent.parent / "data"
 TOKEN_FILE = DATA_DIR / "google_token.json"
 logger = logging.getLogger(__name__)
+
+# Ensure data directory exists
+if not DATA_DIR.exists():
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def save_google_credentials(creds: Credentials) -> None:

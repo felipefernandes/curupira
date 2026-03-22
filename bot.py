@@ -110,6 +110,22 @@ if config.skill_enabled("usage_report"):
 else:
     logging.info("Skill 'usage_report' desabilitada pela configuração.")
 
+# Skill: Daily Briefing
+if config.skill_enabled("daily_briefing"):
+    from skills.daily_briefing import DailyBriefingSkill
+    _briefing_weather = weather_skill if config.skill_enabled("weather") else None
+    _briefing_calendar = brain.skills.get("google_calendar")
+    _briefing_rss = brain.skills.get("rss_read")
+    daily_briefing_skill = DailyBriefingSkill(
+        weather_skill=_briefing_weather,
+        calendar_skill=_briefing_calendar,
+        rss_skill=_briefing_rss,
+    )
+    brain.register_skill(daily_briefing_skill)
+else:
+    logging.info("Skill 'daily_briefing' desabilitada pela configuração.")
+    daily_briefing_skill = None  # type: ignore[assignment]
+
 # Onboarding States
 WAITING_NAME = 1
 WAITING_SURNAME = 2
@@ -344,55 +360,91 @@ async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
     if not recurrence and not task_error:
         await reminder_manager.mark_as_sent(reminder_id)
 
+async def _send_proactive_message(context: ContextTypes.DEFAULT_TYPE, msg: str):
+    """Helper to send a proactive message to the authorized user."""
+    if config.AUTHORIZED_USER_ID == 0 or not msg:
+        return
+    try:
+        await context.bot.send_message(
+            chat_id=config.AUTHORIZED_USER_ID,
+            text=msg,
+            parse_mode=ParseMode.HTML
+        )
+    except TelegramError:
+        await context.bot.send_message(
+            chat_id=config.AUTHORIZED_USER_ID,
+            text=msg
+        )
+    try:
+        await memory_manager.log_message(config.AUTHORIZED_USER_ID, "model", msg)
+    except Exception as e:
+        logging.error(f"Erro ao salvar mensagem proativa no histórico: {e}")
+
 async def system_heartbeat(context: ContextTypes.DEFAULT_TYPE):
     """
     Heartbeat + Reflection Loop.
     Logs status and checks if the Agent wants to speak proactively.
+
+    When daily_briefing is enabled, the morning greeting is replaced by a
+    full briefing (weather + calendar + news) composed by the LLM.
     """
     logging.info("💓 Status Heartbeat: Online.")
-    
+
     if not config.REFLECTION_ENABLED:
         return
 
     try:
-        # 1. Gather Context (Lightweight)
+        now = datetime.now()
+        current_hour = now.hour
+        greeting_start = config.REFLECTION_GREETING_HOUR_START
+        greeting_end = config.REFLECTION_GREETING_HOUR_END
+        is_greeting_window = greeting_start <= current_hour < greeting_end
+        already_greeted = brain._last_greeting_date == now.date()
+
+        # ── Daily Briefing (replaces simple greeting) ─────────────────
+        if (
+            is_greeting_window
+            and not already_greeted
+            and config.skill_enabled("daily_briefing")
+            and daily_briefing_skill is not None
+        ):
+            logging.info("📋 Daily Briefing: gathering data...")
+            briefing_ctx = {"user_id": config.AUTHORIZED_USER_ID}
+
+            # Resolve user name for personalized greeting
+            user_name = ""
+            if memory_manager is not None:
+                user_name = await memory_manager.get_fact_value(
+                    config.AUTHORIZED_USER_ID, "personal_name"
+                ) or ""
+
+            briefing_result = await daily_briefing_skill.execute(briefing_ctx)
+            briefing_data = briefing_result.get("data", {}) if briefing_result.get("status") == "success" else {}
+
+            msg = await brain.compose_briefing(briefing_data, user_name=user_name)
+            if msg:
+                logging.info(f"📋 Daily Briefing sent: {msg[:80]}...")
+                brain._last_greeting_date = now.date()
+                await _send_proactive_message(context, msg)
+                return  # Skip normal reflect — briefing already includes greeting
+
+        # ── Normal Reflection (hardware alerts, simple greeting, etc.) ──
         hw_metrics: dict = {}
         if hardware_skill is not None:
             hw_status = await hardware_skill.execute({})
             hw_metrics = hw_status.get("metrics", {})
 
-        now = datetime.now()
-        
         reflection_context = {
             "time": now.strftime("%Y-%m-%d %H:%M:%S"),
             "hour": now.hour,
             "hardware": hw_metrics,
-            # "reminders": await reminder_manager.get_active_count() # Future optimization
         }
 
-        # 2. Reflect
         msg = await brain.reflect(reflection_context)
 
-        # 3. Act
         if msg:
             logging.info(f"🔔 Proactive Reflection Triggered: {msg}")
-            # Send to authorized user
-            if config.AUTHORIZED_USER_ID != 0:
-                try:
-                    await context.bot.send_message(
-                        chat_id=config.AUTHORIZED_USER_ID,
-                        text=msg,
-                        parse_mode=ParseMode.HTML
-                    )
-                except TelegramError:
-                    await context.bot.send_message(
-                        chat_id=config.AUTHORIZED_USER_ID,
-                        text=msg
-                    )
-                try:
-                    await memory_manager.log_message(config.AUTHORIZED_USER_ID, "model", msg)
-                except Exception as e:
-                    logging.error(f"Erro ao salvar reflexão no histórico: {e}")
+            await _send_proactive_message(context, msg)
         else:
             logging.info("🤫 Reflection: SILENCE")
 

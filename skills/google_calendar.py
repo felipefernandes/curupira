@@ -29,7 +29,11 @@ from core.config import GCAL_CLIENT_ID, GCAL_CLIENT_SECRET, GCAL_CALENDAR_ID
 
 # Security modules for OAuth2 hardening
 from skills.oauth_pkce_state import PKCEState
-from core.token_encryption import TokenCipher
+from core.credential_manager import (
+    save_google_credentials,
+    load_google_credentials,
+    delete_google_credentials
+)
 from core.audit_logger import (
     log_oauth2_auth_start,
     log_oauth2_auth_success,
@@ -216,32 +220,27 @@ class GoogleCalendarSkill(BaseSkill):
             - Tokens are encrypted at rest using Fernet (AES-128-CBC + HMAC-SHA256)
             - Encryption key derived from TELEGRAM_TOKEN via PBKDF2 (100k iterations)
             - If decryption fails (e.g., TELEGRAM_TOKEN changed), returns None (forces re-auth)
+
+        Note:
+            Delegates to centralized credential_manager to ensure consistency
+            across all modules. Maintains backward-compatible behavior of deleting
+            corrupted tokens.
         """
-        if not TOKEN_FILE.exists():
-            return None
-
         try:
-            # Read encrypted data
-            with open(TOKEN_FILE, "rb") as f:
-                encrypted_data = f.read()
+            creds = load_google_credentials()
 
-            # Decrypt token JSON
-            token_json = TokenCipher.decrypt_token(encrypted_data)
-
-            if not token_json:
-                self.logger.error("Falha ao descriptografar token (chave inválida ou dados corrompidos)")
-                self.logger.warning("Deletando token corrompido - usuário precisará re-autenticar")
-                try:
-                    TOKEN_FILE.unlink()
-                except Exception as del_err:
-                    self.logger.error(f"Erro ao deletar token corrompido: {del_err}")
+            if creds is None:
+                # Token file missing or corrupted
+                if TOKEN_FILE.exists():
+                    self.logger.error("Falha ao descriptografar token (chave inválida ou dados corrompidos)")
+                    self.logger.warning("Deletando token corrompido - usuário precisará re-autenticar")
+                    try:
+                        if not delete_google_credentials():
+                            self.logger.error("Erro ao deletar token corrompido: operação falhou")
+                    except Exception as del_err:
+                        self.logger.error(f"Erro ao deletar token corrompido: {del_err}")
                 return None
 
-            # Parse JSON and create Credentials
-            creds = Credentials.from_authorized_user_info(
-                json.loads(token_json),
-                SCOPES
-            )
             return creds
 
         except Exception as e:
@@ -250,7 +249,8 @@ class GoogleCalendarSkill(BaseSkill):
             if TOKEN_FILE.exists():
                 self.logger.warning("Deletando token inválido - usuário precisará re-autenticar")
                 try:
-                    TOKEN_FILE.unlink()
+                    if not delete_google_credentials():
+                        self.logger.error("Erro ao deletar token: operação falhou")
                 except Exception as del_err:
                     self.logger.error(f"Erro ao deletar token: {del_err}")
             return None
@@ -263,17 +263,13 @@ class GoogleCalendarSkill(BaseSkill):
             - Tokens are encrypted before writing to disk using Fernet
             - Encryption key derived from TELEGRAM_TOKEN
             - Protects tokens if data/ directory is exposed (backup, physical access)
+
+        Note:
+            Delegates to centralized credential_manager to ensure consistency
+            across all modules (google_calendar.py, calendar_reminder_bridge.py).
         """
         try:
-            token_json = creds.to_json()
-
-            # Encrypt before saving
-            encrypted_data = TokenCipher.encrypt_token(token_json)
-
-            # Write encrypted bytes
-            with open(TOKEN_FILE, "wb") as f:
-                f.write(encrypted_data)
-
+            save_google_credentials(creds)
             self.logger.info("Token salvo com sucesso (encrypted)")
         except Exception as e:
             self.logger.error(f"Erro ao salvar token: {type(e).__name__}")

@@ -368,6 +368,67 @@ async def system_heartbeat(context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logging.error(f"Heartbeat Reflection Error: {e}")
 
+async def check_token_health(context: ContextTypes.DEFAULT_TYPE):
+    """
+    Health check job for Google OAuth credentials.
+
+    Runs daily at 8 AM to validate token integrity and alert user
+    if re-authentication is needed.
+    """
+    from core.credential_manager import load_google_credentials
+    from core.audit_logger import AuditLogger
+
+    logger = logging.getLogger("token_health")
+    audit = AuditLogger()
+
+    try:
+        creds = load_google_credentials()
+
+        if not creds:
+            # Token missing
+            logger.warning("Token health check: No credentials found")
+            audit.log_event("token_health_check", {
+                "status": "missing",
+                "action_required": "user_reauth"
+            })
+
+            # Notify user via Telegram
+            if config.AUTHORIZED_USER_ID != 0:
+                await context.bot.send_message(
+                    chat_id=config.AUTHORIZED_USER_ID,
+                    text="⚠️ Google Calendar não autenticado\n\nUse /setup_calendar para reconectar."
+                )
+            return
+
+        if not creds.valid:
+            if creds.expired and creds.refresh_token:
+                # Expired but recoverable (auto-refresh will handle)
+                logger.info("Token expired but refresh_token present (OK)")
+                audit.log_event("token_health_check", {
+                    "status": "expired_recoverable"
+                })
+            else:
+                # Invalid and no refresh token (critical)
+                logger.error("Token invalid and no refresh_token (BAD)")
+                audit.log_event("token_health_check", {
+                    "status": "invalid_unrecoverable",
+                    "action_required": "user_reauth"
+                })
+
+                # Notify user via Telegram
+                if config.AUTHORIZED_USER_ID != 0:
+                    await context.bot.send_message(
+                        chat_id=config.AUTHORIZED_USER_ID,
+                        text="❌ Google Calendar: token inválido\n\nSuas credenciais expiraram. Use /setup_calendar para autenticar novamente."
+                    )
+        else:
+            # Healthy
+            logger.debug("Token health check: OK")
+            audit.log_event("token_health_check", {"status": "healthy"})
+
+    except Exception as e:
+        logger.error(f"Token health check failed: {e}")
+
 async def post_init(application: Application):
     if memory_manager is not None:
         await memory_manager.init_db()
@@ -398,7 +459,16 @@ async def post_init(application: Application):
             )
             logging.info(f"Calendar sync job agendado (intervalo: {config.GCAL_SYNC_INTERVAL_MINUTES} minutos)")
 
-        logging.info("Jobs agendados: Heartbeat + Lembretes + Calendar Sync")
+            # Google Calendar Token Health Check (daily at 8 AM)
+            from telegram.ext import JobQueue
+            application.job_queue.run_daily(
+                check_token_health,
+                time=datetime.strptime("08:00", "%H:%M").time(),
+                name="token_health_check"
+            )
+            logging.info("Token health check job agendado (diário às 8:00)")
+
+        logging.info("Jobs agendados: Heartbeat + Lembretes + Calendar Sync + Token Health")
     else:
         logging.error("JobQueue não está disponível!")
 

@@ -82,7 +82,21 @@ Archive a completed change in the experimental workflow.
    mv openspec/changes/<name> openspec/changes/archive/YYYY-MM-DD-<name>
    ```
 
-6. **Display summary**
+6. **Commit the archive state**
+
+   After moving to archive, commit the change to prevent "zombie" changes from reappearing when merging branches:
+
+   ```bash
+   git add openspec/changes/archive/YYYY-MM-DD-<name>
+   git add openspec/changes/<name> 2>/dev/null || true  # Stage deletion if not already
+   git commit -m "chore: archive <name> OpenSpec change"
+   ```
+
+   **If commit fails** (e.g., nothing to commit, working tree dirty with unrelated changes):
+   - Log the issue but don't fail the archive
+   - Inform user they should commit manually later
+
+7. **Display summary**
 
    Show archive completion summary including:
    - Change name
@@ -90,6 +104,7 @@ Archive a completed change in the experimental workflow.
    - Archive location
    - Whether specs were synced (if applicable)
    - Note about any warnings (incomplete artifacts/tasks)
+   - Git commit status (committed / manual commit needed)
 
 **Output On Success**
 
@@ -100,6 +115,7 @@ Archive a completed change in the experimental workflow.
 **Schema:** <schema-name>
 **Archived to:** openspec/changes/archive/YYYY-MM-DD-<name>/
 **Specs:** ✓ Synced to main specs (or "No delta specs" or "Sync skipped")
+**Git:** ✓ Committed (or "Manual commit needed")
 
 All artifacts complete. All tasks complete.
 ```

@@ -593,7 +593,13 @@ class TestListCalendarEvents:
         mock_client.get = AsyncMock(return_value=mock_response)
         mock_client.aclose = AsyncMock()
 
-        with patch.object(skill, '_get_client', return_value=mock_client):
+        # Mock datetime.now() to return 2026-03-11
+        mock_now = datetime(2026, 3, 11, 10, 0, 0)  # 2026-03-11 10:00:00
+
+        with patch.object(skill, '_get_client', return_value=mock_client), \
+             patch('skills.google_calendar.datetime') as mock_datetime:
+            mock_datetime.now.return_value = mock_now
+            mock_datetime.fromisoformat = datetime.fromisoformat  # Preserve original fromisoformat
             result = await skill._list_calendar_events(time_range="today")
 
         # Verificar resultado
@@ -637,7 +643,13 @@ class TestListCalendarEvents:
         mock_client.get = AsyncMock(return_value=mock_response)
         mock_client.aclose = AsyncMock()
 
-        with patch.object(skill, '_get_client', return_value=mock_client):
+        # Mock datetime.now() to return 2026-03-11
+        mock_now = datetime(2026, 3, 11, 10, 0, 0)  # 2026-03-11 10:00:00
+
+        with patch.object(skill, '_get_client', return_value=mock_client), \
+             patch('skills.google_calendar.datetime') as mock_datetime:
+            mock_datetime.now.return_value = mock_now
+            mock_datetime.fromisoformat = datetime.fromisoformat  # Preserve original fromisoformat
             result = await skill._list_calendar_events(time_range="today")
 
         # Verificar que evento de hoje está presente

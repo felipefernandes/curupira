@@ -235,7 +235,8 @@ class GoogleCalendarSkill(BaseSkill):
                     self.logger.error("Falha ao descriptografar token (chave inválida ou dados corrompidos)")
                     self.logger.warning("Deletando token corrompido - usuário precisará re-autenticar")
                     try:
-                        delete_google_credentials()
+                        if not delete_google_credentials():
+                            self.logger.error("Erro ao deletar token corrompido: operação falhou")
                     except Exception as del_err:
                         self.logger.error(f"Erro ao deletar token corrompido: {del_err}")
                 return None
@@ -248,7 +249,8 @@ class GoogleCalendarSkill(BaseSkill):
             if TOKEN_FILE.exists():
                 self.logger.warning("Deletando token inválido - usuário precisará re-autenticar")
                 try:
-                    delete_google_credentials()
+                    if not delete_google_credentials():
+                        self.logger.error("Erro ao deletar token: operação falhou")
                 except Exception as del_err:
                     self.logger.error(f"Erro ao deletar token: {del_err}")
             return None

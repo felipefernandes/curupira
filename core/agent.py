@@ -858,8 +858,13 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                                 continue # Loop back to get final response
                         except Exception as e:
                             self.logger.error(f"Error parsing XML tool call: {e}")
-                    
-                    return content
+
+                    # Sanitize response: remove any remaining <function...> tags
+                    # that weren't caught by regex patterns
+                    clean_content = re.sub(r'<function[^>]*>.*?</function>', '', content, flags=re.DOTALL)
+                    clean_content = re.sub(r'<function[^>]*>', '', clean_content)  # Unclosed tags
+
+                    return clean_content.strip()
                         
                 except Exception as e:
                     # Recover from Groq 400 "tool_use_failed" errors
@@ -992,7 +997,11 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                          )
                          continue
                      else:
-                         return text_content or ""
+                         # Sanitize response: remove any remaining <function...> tags
+                        clean_text = re.sub(r'<function[^>]*>.*?</function>', '', text_content, flags=re.DOTALL)
+                        clean_text = re.sub(r'<function[^>]*>', '', clean_text)  # Unclosed tags
+
+                        return clean_text.strip() or ""
 
                  except Exception as e:
                      # Try to catch specific Google API errors if available

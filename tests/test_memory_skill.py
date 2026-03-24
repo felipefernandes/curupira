@@ -214,19 +214,42 @@ from datetime import datetime, timedelta
 
 class TestGetContextSessionMemory:
     @pytest.mark.asyncio
+    async def test_get_context_returns_list_of_dicts(self):
+        """get_context() must return List[Dict] with role/content keys."""
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        try:
+            mm = MemoryManager(db_path=db_path)
+            await mm.init_db()
+            await mm.add_user(user_id=1, username="test", full_name="Test User")
+
+            await mm.log_message(1, "user", "Olá")
+            await mm.log_message(1, "model", "Oi!")
+
+            context = await mm.get_context(user_id=1, limit=10, minutes_ago=30)
+
+            assert isinstance(context, list)
+            assert len(context) == 2
+            assert context[0] == {"role": "user", "content": "Olá"}
+            # "model" stored in DB should be normalised to "assistant"
+            assert context[1] == {"role": "assistant", "content": "Oi!"}
+        finally:
+            os.unlink(db_path)
+
+    @pytest.mark.asyncio
     async def test_get_context_filters_by_minutes_ago(self):
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
             db_path = f.name
         try:
             mm = MemoryManager(db_path=db_path)
             await mm.init_db()
-            
+
             await mm.add_user(user_id=1, username="test", full_name="Test User")
-            
+
             now = datetime.now()
-            
+
             async with aiosqlite.connect(db_path) as db:
-                # 1 hour ago (should be excluded)
+                # 1 hour ago (should be excluded with 30-min window)
                 await db.execute(
                     "INSERT INTO conversations (user_id, role, content, timestamp) VALUES (?, ?, ?, ?)",
                     (1, "user", "Old message", now - timedelta(hours=1))
@@ -245,17 +268,18 @@ class TestGetContextSessionMemory:
 
             # Retrieve with 30 minutes window
             context = await mm.get_context(user_id=1, limit=10, minutes_ago=30)
-            
-            assert "Old message" not in context
-            assert "Recent reply" in context
-            assert "Hello now" in context
-            
+
+            contents = [m["content"] for m in context]
+            assert "Old message" not in contents
+            assert "Recent reply" in contents
+            assert "Hello now" in contents
+
             # Verify chronological order
-            assert context.find("Recent reply") < context.find("Hello now")
-            
+            assert contents.index("Recent reply") < contents.index("Hello now")
+
         finally:
             os.unlink(db_path)
-            
+
     @pytest.mark.asyncio
     async def test_get_context_respects_limit(self):
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
@@ -264,7 +288,7 @@ class TestGetContextSessionMemory:
             mm = MemoryManager(db_path=db_path)
             await mm.init_db()
             await mm.add_user(user_id=1, username="test", full_name="Test User")
-            
+
             now = datetime.now()
             async with aiosqlite.connect(db_path) as db:
                 for i in range(5):
@@ -276,12 +300,84 @@ class TestGetContextSessionMemory:
 
             # Retrieve with limit 2
             context = await mm.get_context(user_id=1, limit=2, minutes_ago=30)
-            
-            assert "Msg 0" not in context
-            assert "Msg 1" not in context
-            assert "Msg 2" not in context
-            assert "Msg 3" in context
-            assert "Msg 4" in context
+
+            contents = [m["content"] for m in context]
+            assert "Msg 0" not in contents
+            assert "Msg 1" not in contents
+            assert "Msg 2" not in contents
+            assert "Msg 3" in contents
+            assert "Msg 4" in contents
+        finally:
+            os.unlink(db_path)
+
+    @pytest.mark.asyncio
+    async def test_get_context_includes_tool_results(self):
+        """Tool-call and tool-result metadata should be included in the structured output."""
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        try:
+            mm = MemoryManager(db_path=db_path)
+            await mm.init_db()
+            await mm.add_user(user_id=1, username="test", full_name="Test User")
+
+            # Simulate: user asks → assistant calls tool → tool returns result
+            await mm.log_message(1, "user", "Qual o tempo?")
+            await mm.log_message(
+                1, "assistant", None,
+                metadata={"tool_call_id": "call_123", "tool_name": "get_weather", "tool_args": {"city": "SP"}}
+            )
+            await mm.log_message(
+                1, "tool", '{"temperature": 25}',
+                metadata={"tool_call_id": "call_123", "tool_name": "get_weather"}
+            )
+            await mm.log_message(1, "assistant", "Está 25°C em São Paulo!")
+
+            context = await mm.get_context(user_id=1, limit=10, minutes_ago=30)
+
+            assert len(context) == 4
+
+            # User message
+            assert context[0] == {"role": "user", "content": "Qual o tempo?"}
+
+            # Tool call message
+            assert context[1]["role"] == "assistant"
+            assert context[1]["content"] is None
+            assert context[1]["tool_calls"][0]["id"] == "call_123"
+            assert context[1]["tool_calls"][0]["function"]["name"] == "get_weather"
+
+            # Tool result message
+            assert context[2]["role"] == "tool"
+            assert context[2]["tool_call_id"] == "call_123"
+            assert context[2]["name"] == "get_weather"
+            assert context[2]["content"] == '{"temperature": 25}'
+
+            # Final assistant response
+            assert context[3] == {"role": "assistant", "content": "Está 25°C em São Paulo!"}
+        finally:
+            os.unlink(db_path)
+
+    @pytest.mark.asyncio
+    async def test_log_message_accepts_assistant_role(self):
+        """log_message should normalise 'assistant' to 'model' in DB."""
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        try:
+            mm = MemoryManager(db_path=db_path)
+            await mm.init_db()
+            await mm.add_user(user_id=1, username="test", full_name="Test User")
+
+            await mm.log_message(1, "assistant", "Stored as model")
+
+            async with aiosqlite.connect(db_path) as db:
+                async with db.execute("SELECT role FROM conversations WHERE user_id = 1") as cursor:
+                    row = await cursor.fetchone()
+
+            # DB stores "model" for backwards compatibility
+            assert row[0] == "model"
+
+            # get_context returns "assistant" (normalised)
+            ctx = await mm.get_context(user_id=1, limit=10, minutes_ago=30)
+            assert ctx[0]["role"] == "assistant"
         finally:
             os.unlink(db_path)
 

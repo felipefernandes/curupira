@@ -212,8 +212,8 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     # --- ONBOARDING FLOW END ---
     
-    # 2. Retrieve Context (Session Memory: Max 20 msgs in the last 30 minutes)
-    context_history = await memory_manager.get_context(user_id, limit=20, minutes_ago=30)
+    # 2. Retrieve Context (Structured Session Memory: Max 50 msgs in last 4 hours)
+    context_history = await memory_manager.get_context(user_id, limit=50, minutes_ago=240)
     user_facts = await memory_manager.get_facts(user_id)
     assistant_surname = await memory_manager.get_fact_value(user_id, "assistant_surname") or ""
 
@@ -321,7 +321,7 @@ async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
                 "assistant_surname": assistant_surname,
                 "memory_manager": memory_manager,
             }
-            response_text = await brain.process(message, agent_context, chat_history=[])
+            response_text = await brain.process(message, agent_context, chat_history=None)
             try:
                 await context.bot.send_message(chat_id=job.chat_id, text=response_text, parse_mode=ParseMode.HTML)
             except TelegramError as e:

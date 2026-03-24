@@ -1012,3 +1012,248 @@ async def test_dual_channel_oauth_timeout_check_with_real_time(agent):
     # Timeout should be detected and server stopped
     assert "_oauth_server" in dir(mock_gcal_skill)
     # Since timeout expired, _awaiting_auth should be cleared (but we can't verify in this mock)
+
+
+# ---------------------------------------------------------------------------
+# Structured conversation history (Issue #177)
+# ---------------------------------------------------------------------------
+
+class TestStructuredConversationHistory:
+    """Tests for multi-turn structured chat_history support."""
+
+    @pytest.mark.asyncio
+    async def test_persist_tool_interaction(self, agent):
+        """_persist_tool_interaction should log tool call + result to memory."""
+        mock_mem = AsyncMock()
+        context = {"memory_manager": mock_mem, "user_id": 42}
+
+        await agent._persist_tool_interaction(
+            context, "call_abc", "get_weather", {"city": "SP"}, '{"temp": 25}'
+        )
+
+        assert mock_mem.log_message.await_count == 2
+
+        # First call: assistant tool-call
+        first_call = mock_mem.log_message.await_args_list[0]
+        assert first_call.kwargs["user_id"] == 42
+        assert first_call.kwargs["role"] == "assistant"
+        assert first_call.kwargs["content"] is None
+        assert first_call.kwargs["metadata"]["tool_call_id"] == "call_abc"
+        assert first_call.kwargs["metadata"]["tool_name"] == "get_weather"
+        assert first_call.kwargs["metadata"]["tool_args"] == {"city": "SP"}
+
+        # Second call: tool result
+        second_call = mock_mem.log_message.await_args_list[1]
+        assert second_call.kwargs["role"] == "tool"
+        assert second_call.kwargs["content"] == '{"temp": 25}'
+        assert second_call.kwargs["metadata"]["tool_call_id"] == "call_abc"
+
+    @pytest.mark.asyncio
+    async def test_persist_tool_interaction_no_memory_manager(self, agent):
+        """_persist_tool_interaction should silently skip when no memory_manager."""
+        # Should not raise
+        await agent._persist_tool_interaction({}, "call_abc", "fn", {}, "result")
+
+    @pytest.mark.asyncio
+    async def test_persist_tool_interaction_handles_errors(self, agent):
+        """_persist_tool_interaction should not crash on DB errors."""
+        mock_mem = AsyncMock()
+        mock_mem.log_message.side_effect = Exception("DB write failed")
+        context = {"memory_manager": mock_mem, "user_id": 42}
+
+        # Should not raise
+        await agent._persist_tool_interaction(
+            context, "call_abc", "fn", {}, "result"
+        )
+
+    @pytest.mark.asyncio
+    async def test_groq_process_with_structured_history(self, agent, mock_groq_client):
+        """Groq process() should build messages array from structured chat_history."""
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "Continuando..."
+        mock_response.choices[0].message.tool_calls = None
+
+        agent.client = mock_groq_client
+        mock_groq_client.chat.completions.create.return_value = mock_response
+
+        history = [
+            {"role": "user", "content": "Olá"},
+            {"role": "assistant", "content": "Oi! Como posso ajudar?"},
+        ]
+
+        await agent.process("Me conte mais", {"user_name": "Felipe"}, chat_history=history)
+
+        call_kwargs = mock_groq_client.chat.completions.create.call_args.kwargs
+        messages = call_kwargs["messages"]
+
+        # system + 2 history + 1 current = 4 messages (sent to API)
+        # The loop also appends the response, so final list has 5
+        assert messages[0]["role"] == "system"
+        assert messages[1] == {"role": "user", "content": "Olá"}
+        assert messages[2] == {"role": "assistant", "content": "Oi! Como posso ajudar?"}
+        assert messages[3] == {"role": "user", "content": "Me conte mais"}
+
+    @pytest.mark.asyncio
+    async def test_groq_process_no_history(self, agent, mock_groq_client):
+        """Groq process() with no chat_history should only have system + user."""
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "Olá!"
+        mock_response.choices[0].message.tool_calls = None
+
+        agent.client = mock_groq_client
+        mock_groq_client.chat.completions.create.return_value = mock_response
+
+        await agent.process("Oi", {"user_name": "Felipe"}, chat_history=None)
+
+        call_kwargs = mock_groq_client.chat.completions.create.call_args.kwargs
+        messages = call_kwargs["messages"]
+
+        # system + user (+ appended response = 3 total, but we check pre-API structure)
+        assert messages[0]["role"] == "system"
+        assert messages[1]["role"] == "user"
+        assert messages[1]["content"] == "Oi"
+
+    @pytest.mark.asyncio
+    async def test_groq_process_with_tool_history(self, agent, mock_groq_client):
+        """Groq process() should correctly include tool_calls in history."""
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "A Splitero é uma empresa..."
+        mock_response.choices[0].message.tool_calls = None
+
+        agent.client = mock_groq_client
+        mock_groq_client.chat.completions.create.return_value = mock_response
+
+        history = [
+            {"role": "user", "content": "busque vagas"},
+            {"role": "assistant", "content": None, "tool_calls": [{
+                "id": "call_xyz",
+                "type": "function",
+                "function": {"name": "job_hunter", "arguments": '{}'},
+            }]},
+            {"role": "tool", "tool_call_id": "call_xyz", "name": "job_hunter",
+             "content": '{"vagas": [{"empresa": "Splitero"}]}'},
+            {"role": "assistant", "content": "Encontrei 1 vaga: Splitero"},
+        ]
+
+        await agent.process(
+            "Me fale sobre a Splitero",
+            {"user_name": "Felipe"},
+            chat_history=history,
+        )
+
+        call_kwargs = mock_groq_client.chat.completions.create.call_args.kwargs
+        messages = call_kwargs["messages"]
+
+        # system + 4 history + 1 current = 6 sent to API (+ response appended = 7)
+        assert messages[0]["role"] == "system"
+        assert messages[2]["tool_calls"][0]["function"]["name"] == "job_hunter"
+        assert messages[3]["role"] == "tool"
+        assert "Splitero" in messages[3]["content"]
+        assert messages[5]["content"] == "Me fale sobre a Splitero"
+
+    @pytest.mark.asyncio
+    async def test_groq_tool_execution_persists(self, agent, mock_groq_client):
+        """Groq tool execution should call _persist_tool_interaction."""
+        mock_tool_call = MagicMock()
+        mock_tool_call.id = "call_persist_test"
+        mock_tool_call.function.name = "test_skill"
+        mock_tool_call.function.arguments = '{"arg": 1}'
+
+        msg_with_tool = MagicMock()
+        msg_with_tool.role = "assistant"
+        msg_with_tool.content = None
+        msg_with_tool.tool_calls = [mock_tool_call]
+
+        msg_final = MagicMock()
+        msg_final.role = "assistant"
+        msg_final.content = "Done."
+        msg_final.tool_calls = None
+
+        mock_r1 = MagicMock()
+        mock_r1.choices = [MagicMock(message=msg_with_tool)]
+        mock_r2 = MagicMock()
+        mock_r2.choices = [MagicMock(message=msg_final)]
+
+        mock_skill = AsyncMock()
+        mock_skill.name = "test_skill"
+        mock_skill.execute.return_value = {"status": "success", "data": {}}
+        agent.register_skill(mock_skill)
+
+        mock_mem = AsyncMock()
+        agent.client = mock_groq_client
+        mock_groq_client.chat.completions.create.side_effect = [mock_r1, mock_r2]
+
+        await agent.process(
+            "Run tool",
+            {"user_name": "Test", "memory_manager": mock_mem, "user_id": 1},
+        )
+
+        # _persist_tool_interaction should have called log_message twice
+        assert mock_mem.log_message.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_gemini_process_with_structured_history(self, agent):
+        """Gemini process() should build Contents from structured chat_history."""
+        agent.provider = "gemini"
+
+        mock_genai = MagicMock()
+        mock_types = MagicMock()
+
+        class MockGenerateContentConfig:
+            def __init__(self, tools=None):
+                pass
+
+        mock_types.GenerateContentConfig = MockGenerateContentConfig
+
+        # Track Content() calls
+        content_calls = []
+        original_content = MagicMock
+
+        def track_content(**kwargs):
+            obj = MagicMock()
+            obj.role = kwargs.get("role")
+            obj.parts = kwargs.get("parts", [])
+            content_calls.append(kwargs)
+            return obj
+
+        mock_types.Content.side_effect = track_content
+        mock_types.Part.text = lambda t: MagicMock(text=t)
+
+        mock_genai.types = mock_types
+
+        # Mock response
+        mock_response = MagicMock()
+        mock_candidate = MagicMock()
+        mock_resp_part = MagicMock()
+        mock_resp_part.text = "Continuando a conversa"
+        mock_resp_part.function_call = None
+        mock_candidate.content.parts = [mock_resp_part]
+        mock_response.candidates = [mock_candidate]
+
+        mock_genai_client = MagicMock()
+        mock_genai_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
+
+        history = [
+            {"role": "user", "content": "Olá"},
+            {"role": "assistant", "content": "Oi!"},
+        ]
+
+        with patch.dict("sys.modules", {"google.genai": mock_genai, "google.genai.types": mock_types}):
+            with patch.object(agent, "_get_gemini_client", return_value=mock_genai_client):
+                with patch.object(agent, "_get_gemini_tools", return_value=None):
+                    response = await agent.process(
+                        "Me conte mais",
+                        {"user_name": "Felipe"},
+                        chat_history=history,
+                    )
+
+        assert response == "Continuando a conversa"
+
+        # With history: system prompt (user) + ack (model) + user history + model history + current user
+        # = 5 Content objects before the API call
+        roles = [c.get("role") for c in content_calls]
+        assert "user" in roles
+        assert "model" in roles

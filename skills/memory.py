@@ -1,7 +1,8 @@
 import aiosqlite
+import json
 import logging
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 import os
 
 import shutil
@@ -124,6 +125,27 @@ class MemoryManager:
             except Exception as e:
                 self.logger.error(f"Failed to create index on external_id: {e}")
 
+            # Migration: add metadata column to conversations for structured history
+            async with db.execute("PRAGMA table_info(conversations)") as cursor:
+                conv_cols = {row[1] for row in await cursor.fetchall()}
+            if "metadata" not in conv_cols:
+                try:
+                    await db.execute("ALTER TABLE conversations ADD COLUMN metadata TEXT")
+                    await db.commit()
+                    self.logger.info("Migrated conversations table: added column 'metadata'.")
+                except Exception as e:
+                    self.logger.error(f"Failed to add metadata column to conversations: {e}")
+
+            # Create index on conversations for faster context queries
+            try:
+                await db.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_conversations_user_timestamp "
+                    "ON conversations(user_id, timestamp DESC)"
+                )
+                await db.commit()
+            except Exception as e:
+                self.logger.error(f"Failed to create conversations index: {e}")
+
             self.logger.info("Database initialized.")
 
     async def add_user(self, user_id, username, full_name):
@@ -173,34 +195,91 @@ class MemoryManager:
                     return ""
                 return "\n".join([f"- {key}: {value}" for key, value in rows])
 
-    async def log_message(self, user_id, role, content):
-        """Logs a message to the conversation history."""
+    async def log_message(self, user_id, role, content, metadata: Optional[Dict[str, Any]] = None):
+        """Logs a message to the conversation history.
+
+        Args:
+            user_id: Telegram user ID.
+            role: Message role — "user", "assistant"/"model", or "tool".
+            content: Text content (may be None for tool-call messages).
+            metadata: Optional structured data (tool_call_id, tool_name, tool_args).
+        """
+        # Normalise role for DB storage (keep legacy "model" value)
+        db_role = "model" if role == "assistant" else role
+
+        metadata_json = json.dumps(metadata) if metadata else None
+
         async with aiosqlite.connect(self.db_path) as db:
             await db.execute("""
-                INSERT INTO conversations (user_id, role, content, timestamp)
-                VALUES (?, ?, ?, ?)
-            """, (user_id, role, content, datetime.now()))
+                INSERT INTO conversations (user_id, role, content, timestamp, metadata)
+                VALUES (?, ?, ?, ?, ?)
+            """, (user_id, db_role, content, datetime.now(), metadata_json))
             await db.commit()
 
-    async def get_context(self, user_id, limit=20, minutes_ago=30):
-        """Retrieves the recent messages for context injection within a timeframe."""
+    async def get_context(
+        self, user_id, limit=50, minutes_ago=240
+    ) -> List[Dict[str, Any]]:
+        """Retrieves recent messages as a structured list for multi-turn context.
+
+        Returns a list of message dicts compatible with OpenAI/Groq chat format::
+
+            [
+                {"role": "user", "content": "Olá"},
+                {"role": "assistant", "content": "Oi!"},
+                ...
+            ]
+
+        Tool-call and tool-result messages carry extra keys
+        (``tool_calls``, ``tool_call_id``, ``name``) when metadata is present.
+        """
         from datetime import timedelta
+
         cutoff_time = datetime.now() - timedelta(minutes=minutes_ago)
-        
+        messages: List[Dict[str, Any]] = []
+
         async with aiosqlite.connect(self.db_path) as db:
+            # Fetch N most-recent rows in reverse, then reverse again for chronological order
             async with db.execute("""
-                SELECT role, content FROM conversations 
+                SELECT role, content, metadata FROM conversations
                 WHERE user_id = ? AND timestamp >= ?
                 ORDER BY id DESC LIMIT ?
             """, (user_id, cutoff_time, limit)) as cursor:
                 rows = await cursor.fetchall()
-                # Reverse to correct chronological order
-                history = reversed(rows)
-                formatted_history = []
-                for role, content in history:
-                     role_name = "User" if role == "user" else "Model"
-                     formatted_history.append(f"{role_name}: {content}")
-                return "\n".join(formatted_history)
+
+        for role, content, metadata_json in reversed(rows):
+            # Normalise legacy "model" → "assistant"
+            if role == "model":
+                role = "assistant"
+
+            msg: Dict[str, Any] = {"role": role, "content": content}
+
+            if metadata_json:
+                try:
+                    meta = json.loads(metadata_json)
+
+                    # Assistant tool-call message (has tool_name but role is assistant)
+                    if role == "assistant" and meta.get("tool_call_id") and meta.get("tool_name"):
+                        msg["content"] = None
+                        msg["tool_calls"] = [{
+                            "id": meta["tool_call_id"],
+                            "type": "function",
+                            "function": {
+                                "name": meta["tool_name"],
+                                "arguments": json.dumps(meta.get("tool_args", {})),
+                            },
+                        }]
+
+                    # Tool result message
+                    elif role == "tool" and meta.get("tool_call_id"):
+                        msg["tool_call_id"] = meta["tool_call_id"]
+                        msg["name"] = meta.get("tool_name", "unknown")
+
+                except json.JSONDecodeError:
+                    self.logger.warning(f"Invalid metadata JSON in conversation row: {metadata_json[:80]}")
+
+            messages.append(msg)
+
+        return messages
 
     async def log_token_usage(self, provider: str, model: str, prompt_tokens: int, completion_tokens: int):
         """Logs the tokens consumed by the LLM."""

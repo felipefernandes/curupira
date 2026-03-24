@@ -192,6 +192,42 @@ class AgentBrain:
              )
         return [types.Tool(function_declarations=declarations)]
 
+    async def _persist_tool_interaction(
+        self,
+        context: Dict[str, Any],
+        tool_call_id: str,
+        tool_name: str,
+        tool_args: Any,
+        result_str: str,
+    ) -> None:
+        """Persist a tool call + result pair to the conversation history."""
+        mem_mgr = context.get("memory_manager")
+        user_id = context.get("user_id")
+        if not mem_mgr or not user_id:
+            return
+        try:
+            await mem_mgr.log_message(
+                user_id=user_id,
+                role="assistant",
+                content=None,
+                metadata={
+                    "tool_call_id": tool_call_id,
+                    "tool_name": tool_name,
+                    "tool_args": tool_args if isinstance(tool_args, dict) else {},
+                },
+            )
+            await mem_mgr.log_message(
+                user_id=user_id,
+                role="tool",
+                content=result_str,
+                metadata={
+                    "tool_call_id": tool_call_id,
+                    "tool_name": tool_name,
+                },
+            )
+        except Exception as e:
+            self.logger.warning(f"Failed to persist tool interaction ({tool_name}): {e}")
+
     async def _execute_tool_call(self, tool_name: str, tool_args: Optional[Dict[str, Any]], context: Dict[str, Any]) -> str:
         """
         Executes a tool (skill) by name with provided arguments.
@@ -630,7 +666,7 @@ class AgentBrain:
             self.logger.error(f"compose_briefing error: {e}")
             return None
 
-    async def process(self, user_msg: str, context: Dict[str, Any], chat_history: str = "", on_intermediate_reply=None) -> str:
+    async def process(self, user_msg: str, context: Dict[str, Any], chat_history: Optional[List[Dict[str, Any]]] = None, on_intermediate_reply=None) -> str:
         """
         Main Agent Loop (Async).
         Handles multi-turn reasoning and tool execution.
@@ -756,8 +792,6 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
 7. **Protocolo de ferramentas**: Use JSON válido. O campo `name` deve ser EXATAMENTE o identificador da ferramenta — nunca inclua argumentos no `name`.
 8. **Formatação de Texto**: A interface do usuário não suporta Markdown (como `**` ou `*`). Em vez disso, você DEVE DEVE DEVE formatar o texto obrigatoriamente usando tags HTML simples (apenas <b>, <i>, <code>, <pre>). Nunca use asteriscos para listas, use caracteres como • ou -.
 
-## HISTÓRICO RECENTE
-{chat_history}
 """
 
 
@@ -768,10 +802,13 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
             client = self._get_groq_client()
             if not client: return "Erro: Cliente Groq não inicializado."
 
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Histórico:\n{chat_history}\n\nMensagem Atual: {user_msg}"}
-            ]
+            messages = [{"role": "system", "content": system_prompt}]
+
+            # Inject structured conversation history
+            if chat_history:
+                messages.extend(chat_history)
+
+            messages.append({"role": "user", "content": user_msg})
             
             while current_turn < max_turns:
                 current_turn += 1
@@ -838,13 +875,18 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                                 pass
                                 
                             result_str = await self._execute_tool_call(fn_name, fn_args, context)
-                            
+
                             messages.append({
                                 "role": "tool",
                                 "tool_call_id": tool_call.id,
                                 "name": fn_name,
                                 "content": result_str
                             })
+
+                            # Persist tool interaction for future context
+                            await self._persist_tool_interaction(
+                                context, tool_call.id, fn_name, fn_args, result_str
+                            )
                         continue # Re-prompt Agent with tool outputs
 
                     # Fallback: Check for Llama-3 style <function> XML in content if no tool_calls
@@ -913,6 +955,9 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                                         "name": fn_name,
                                         "content": result_str
                                     })
+                                    await self._persist_tool_interaction(
+                                        context, fake_tool_id, fn_name, fn_args, result_str
+                                    )
                                     continue # Loop back to get final response
 
                             if match:
@@ -962,6 +1007,9 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                                     "name": fn_name,
                                     "content": result_str
                                 })
+                                await self._persist_tool_interaction(
+                                    context, fake_tool_id, fn_name, fn_args, result_str
+                                )
                                 continue # Loop back to get final response
                         except Exception as e:
                             self.logger.error(f"Error parsing XML tool call: {e}")
@@ -1005,6 +1053,9 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                             "name": fn_name,
                             "content": result_str
                         })
+                        await self._persist_tool_interaction(
+                            context, fake_tool_id, fn_name, fn_args, result_str
+                        )
                         continue  # Re-prompt with tool result
 
                     self.logger.error(f"Groq API Error: {e}")
@@ -1019,15 +1070,72 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
             
             tools = self._get_gemini_tools()
             
-            # Init conversation (Simplified Checkpoint for now)
-            # In a real scenario, we'd map 'chat_history' to strict Content objects.
-            # Here keeping it "Lightweight" by dumping text into the first prompt.
-            contents = [
-                types.Content(
+            # Build structured multi-turn contents from conversation history
+            contents = []
+
+            if chat_history:
+                # Inject system prompt as first user message (Gemini has no "system" role)
+                contents.append(types.Content(
                     role="user",
-                    parts=[types.Part(text=f"{system_prompt}\n\nHistórico:\n{chat_history}\n\nMensagem Atual: {user_msg}")]
-                )
-            ]
+                    parts=[types.Part(text=system_prompt)]
+                ))
+                contents.append(types.Content(
+                    role="model",
+                    parts=[types.Part(text="Entendido. Estou pronto para ajudar.")]
+                ))
+
+                for msg in chat_history:
+                    try:
+                        if msg["role"] == "user":
+                            contents.append(types.Content(
+                                role="user",
+                                parts=[types.Part(text=msg["content"] or "")]
+                            ))
+                        elif msg["role"] == "assistant":
+                            if msg.get("tool_calls"):
+                                parts = []
+                                for tc in msg["tool_calls"]:
+                                    args = tc["function"].get("arguments", "{}")
+                                    if isinstance(args, str):
+                                        args = json.loads(args)
+                                    parts.append(types.Part.from_function_call(
+                                        name=tc["function"]["name"],
+                                        args=args,
+                                    ))
+                                contents.append(types.Content(role="model", parts=parts))
+                            elif msg.get("content"):
+                                contents.append(types.Content(
+                                    role="model",
+                                    parts=[types.Part(text=msg["content"])]
+                                ))
+                        elif msg["role"] == "tool":
+                            try:
+                                result_dict = json.loads(msg["content"])
+                            except (json.JSONDecodeError, TypeError):
+                                result_dict = {"output": msg.get("content", "")}
+                            contents.append(types.Content(
+                                role="tool",
+                                parts=[types.Part.from_function_response(
+                                    name=msg.get("name", "unknown"),
+                                    response=result_dict,
+                                )]
+                            ))
+                    except Exception as conv_err:
+                        self.logger.warning(f"Skipping malformed history message for Gemini: {conv_err}")
+
+                # Append current user message
+                contents.append(types.Content(
+                    role="user",
+                    parts=[types.Part(text=user_msg)]
+                ))
+            else:
+                # No history — compact single-message format
+                contents = [
+                    types.Content(
+                        role="user",
+                        parts=[types.Part(text=f"{system_prompt}\n\nMensagem Atual: {user_msg}")]
+                    )
+                ]
             
             while current_turn < max_turns:
                  current_turn += 1
@@ -1101,6 +1209,12 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                                      response=result_dict
                                  )]
                              )
+                         )
+
+                         # Persist tool interaction for future context
+                         fake_tool_id = f"call_{uuid.uuid4().hex[:8]}"
+                         await self._persist_tool_interaction(
+                             context, fake_tool_id, fn_name, fn_args, result_str
                          )
                          continue
                      else:

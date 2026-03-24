@@ -52,3 +52,4 @@ cov*.*
 
 # Temp files
 .temp/
+curupira.db

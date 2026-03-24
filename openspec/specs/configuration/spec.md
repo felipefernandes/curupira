@@ -48,3 +48,9 @@ The system MUST support complex settings for specific skills (e.g., RSS feeds li
 - **THEN** it MUST use the feeds defined in the configuration.
 - **AND** ignore the hardcoded defaults.
 
+#### Scenario: Daily Briefing Toggle
+- **GIVEN** the configuration has `skills.daily_briefing = true`
+- **WHEN** the heartbeat runs during the greeting window
+- **THEN** a daily briefing (weather + calendar + news) MUST replace the simple greeting.
+- **AND** when `skills.daily_briefing = false`, the original "Bom dia" greeting MUST be preserved.
+

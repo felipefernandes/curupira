@@ -206,6 +206,42 @@ class TestMemoryManagerMigration:
         finally:
             os.unlink(db_path)
 
+    @pytest.mark.asyncio
+    async def test_init_db_creates_metadata_column(self):
+        """init_db should add metadata column to conversations table."""
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        try:
+            mm = MemoryManager(db_path=db_path)
+            await mm.init_db()
+
+            async with aiosqlite.connect(db_path) as db:
+                async with db.execute("PRAGMA table_info(conversations)") as cursor:
+                    columns = [row[1] for row in await cursor.fetchall()]
+
+            assert "metadata" in columns
+        finally:
+            os.unlink(db_path)
+
+    @pytest.mark.asyncio
+    async def test_init_db_creates_conversations_index(self):
+        """init_db should create performance index on conversations."""
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+            db_path = f.name
+        try:
+            mm = MemoryManager(db_path=db_path)
+            await mm.init_db()
+
+            async with aiosqlite.connect(db_path) as db:
+                async with db.execute(
+                    "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='conversations'"
+                ) as cursor:
+                    indexes = [row[0] for row in await cursor.fetchall()]
+
+            assert "idx_conversations_user_timestamp" in indexes
+        finally:
+            os.unlink(db_path)
+
 # ---------------------------------------------------------------------------
 # MemoryManager get_context session memory (Issue #70)
 # ---------------------------------------------------------------------------

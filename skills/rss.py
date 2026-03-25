@@ -5,6 +5,7 @@ Ref: Issue #54 - https://github.com/felipefernandes/curupira/issues/54
 
 import asyncio
 import logging
+import re
 from typing import Any, Dict, List
 
 import feedparser
@@ -111,7 +112,6 @@ class RssReadSkill(BaseSkill):
             line = line.strip()
             if line.startswith('-'):
                 line = line[1:].strip()
-            import re
             line = re.sub(r'^\d+[\.\)]\s*', '', line)
             
             if line:
@@ -149,6 +149,11 @@ class RssReadSkill(BaseSkill):
             elif provider == 'gemini':
                 text = await self._call_gemini(prompt)
             else:
+                logger.warning(f"Unknown AI provider '{provider}'. Skipping translation.")
+                return titles
+
+            if not text:
+                logger.warning("AI provider returned empty response. Falling back to original titles.")
                 return titles
                 
             translated = self._parse_translation(text, len(titles))
@@ -156,6 +161,8 @@ class RssReadSkill(BaseSkill):
                 logger.info("Titles translated successfully. Saving to cache.")
                 _translation_cache[cache_key] = translated
                 return translated
+
+            logger.warning("Parsed translation count mismatch. Falling back to original titles.")
             return titles
                 
         except Exception as e:

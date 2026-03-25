@@ -6,6 +6,8 @@ import asyncio
 class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.skill = RssReadSkill()
+        from skills.rss import _translation_cache
+        _translation_cache.clear()
         
     async def test_execute_validation(self):
         # Test Empty Input
@@ -247,6 +249,138 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(mock_groq.call_count, 1)  # Stays 1
             
         _translation_cache.clear()
+
+    @patch("skills.rss.config")
+    async def test_translate_titles_gemini(self, mock_config):
+        mock_config.AI_PROVIDER = "gemini"
+        titles = ["Hello World"]
+
+        with patch.object(self.skill, '_call_gemini', new_callable=AsyncMock) as mock_gemini:
+            mock_gemini.return_value = "Olá Mundo"
+            res = await self.skill._translate_titles(titles, "EN")
+            self.assertEqual(res, ["Olá Mundo"])
+            mock_gemini.assert_called_once()
+
+    @patch("skills.rss.config")
+    async def test_translate_titles_unknown_provider(self, mock_config):
+        mock_config.AI_PROVIDER = "openai"
+        titles = ["Hello"]
+        res = await self.skill._translate_titles(titles, "EN")
+        # Should fallback to original titles
+        self.assertEqual(res, titles)
+
+    @patch("skills.rss.config")
+    async def test_translate_titles_empty_response_fallback(self, mock_config):
+        mock_config.AI_PROVIDER = "groq"
+        titles = ["Hello"]
+
+        with patch.object(self.skill, '_call_groq', new_callable=AsyncMock) as mock_groq:
+            mock_groq.return_value = ""  # Empty response
+            res = await self.skill._translate_titles(titles, "EN")
+            # Should fallback to original titles
+            self.assertEqual(res, titles)
+
+    @patch("skills.rss.config")
+    async def test_translate_titles_exception_fallback(self, mock_config):
+        mock_config.AI_PROVIDER = "groq"
+        titles = ["Hello"]
+
+        with patch.object(self.skill, '_call_groq', new_callable=AsyncMock) as mock_groq:
+            mock_groq.side_effect = RuntimeError("API timeout")
+            res = await self.skill._translate_titles(titles, "EN")
+            # Should fallback to original titles
+            self.assertEqual(res, titles)
+
+    async def test_translate_titles_empty_list(self):
+        res = await self.skill._translate_titles([], "EN")
+        self.assertEqual(res, [])
+
+    def test_parse_translation_empty_text(self):
+        res = self.skill._parse_translation("", 2)
+        self.assertEqual(res, [])
+
+    @patch("os.getenv", return_value=None)
+    @patch("skills.rss.config")
+    async def test_call_groq_no_api_key(self, mock_config, mock_getenv):
+        mock_config.GROQ_API_KEY = None
+        res = await self.skill._call_groq("test prompt")
+        self.assertEqual(res, "")
+
+    @patch("os.getenv", return_value="fake-key")
+    @patch("skills.rss.config")
+    async def test_call_groq_success(self, mock_config, mock_getenv):
+        mock_config.GROQ_MODEL = "test-model"
+
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "  Translated  "
+
+        with patch("groq.AsyncGroq") as MockGroq:
+            mock_client = AsyncMock()
+            MockGroq.return_value = mock_client
+            mock_client.chat.completions.create = AsyncMock(return_value=mock_response)
+
+            res = await self.skill._call_groq("test prompt")
+            self.assertEqual(res, "Translated")
+
+    @patch("os.getenv", return_value=None)
+    @patch("skills.rss.config")
+    async def test_call_gemini_no_api_key(self, mock_config, mock_getenv):
+        mock_config.GEMINI_API_KEY = None
+        res = await self.skill._call_gemini("test prompt")
+        self.assertEqual(res, "")
+
+    @patch("os.getenv", return_value="fake-key")
+    @patch("skills.rss.config")
+    async def test_call_gemini_no_candidates(self, mock_config, mock_getenv):
+        mock_config.GEMINI_MODEL = "test-model"
+
+        mock_response = MagicMock()
+        mock_response.candidates = []
+
+        with patch("google.genai.Client") as MockClient:
+            mock_client = MagicMock()
+            MockClient.return_value = mock_client
+            mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
+
+            res = await self.skill._call_gemini("test prompt")
+            self.assertEqual(res, "")
+
+    @patch("os.getenv", return_value="fake-key")
+    @patch("skills.rss.config")
+    async def test_call_gemini_success(self, mock_config, mock_getenv):
+        mock_config.GEMINI_MODEL = "test-model"
+
+        mock_part = MagicMock()
+        mock_part.text = "  Traduzido  "
+        mock_candidate = MagicMock()
+        mock_candidate.content.parts = [mock_part]
+        mock_response = MagicMock()
+        mock_response.candidates = [mock_candidate]
+
+        with patch("google.genai.Client") as MockClient:
+            mock_client = MagicMock()
+            MockClient.return_value = mock_client
+            mock_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
+
+            res = await self.skill._call_gemini("test prompt")
+            self.assertEqual(res, "Traduzido")
+
+    @patch('core.config.RSS_FEEDS', {"GlobalNews": "http://example.com/global"})
+    @patch('core.config.RSS_FEEDS_LANGUAGES', {"GlobalNews": "EN"})
+    @patch('skills.rss.feedparser.parse')
+    async def test_read_feed_auto_translate_disabled(self, mock_parse):
+        mock_feed = MagicMock()
+        mock_feed.bozo = False
+        mock_feed.feed = {"title": "Global News"}
+        mock_feed.entries = [{"title": "Original Title", "link": "http://link.com"}]
+        mock_parse.return_value = mock_feed
+
+        with patch.object(self.skill, '_translate_titles', new_callable=AsyncMock) as mock_translate:
+            result = await self.skill.execute({}, feed_identifier="GlobalNews", auto_translate=False)
+            mock_translate.assert_not_called()
+            entry = result['data']['entries'][0]
+            self.assertEqual(entry['title'], "Original Title")
 
 class TestRssSkillGroup(unittest.TestCase):
     def test_rss_read_skill_group(self):

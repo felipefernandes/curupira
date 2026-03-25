@@ -1,7 +1,6 @@
 import unittest
 from unittest.mock import MagicMock, patch, AsyncMock
 from skills.rss import RssReadSkill, RssListSkill
-from core import config
 import asyncio
 
 class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
@@ -65,7 +64,7 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
         mock_parse.return_value = mock_feed
         
         # Execute with NAME "testfeed" (lower case)
-        result = await self.skill.execute({}, feed_identifier="testfeed")
+        await self.skill.execute({}, feed_identifier="testfeed")
         
         # Verify URL was resolved
         args, _ = mock_parse.call_args
@@ -151,6 +150,49 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
         
         self.assertEqual(result["status"], "error")
         self.assertIn("Timeout", result["error"])
+
+    @patch('core.config.RSS_FEEDS', {"GlobalNews": "http://example.com/global"})
+    @patch('core.config.RSS_FEEDS_LANGUAGES', {"GlobalNews": "EN"})
+    @patch('skills.rss.feedparser.parse')
+    async def test_read_feed_auto_translation(self, mock_parse):
+        mock_feed = MagicMock()
+        mock_feed.bozo = False
+        mock_feed.feed = {"title": "Global News"}
+        mock_feed.entries = [{"title": "Original Title", "link": "http://link.com"}]
+        mock_parse.return_value = mock_feed
+        
+        # Mock the translation method
+        with patch.object(self.skill, '_translate_titles', new_callable=AsyncMock) as mock_translate:
+            mock_translate.return_value = ["Título Traduzido"]
+            
+            result = await self.skill.execute({}, feed_identifier="GlobalNews", auto_translate=True)
+            
+            # Verify translation was called
+            mock_translate.assert_called_once_with(["Original Title"], "EN")
+            
+            # Verify the entry title was replaced and tagged
+            entry = result['data']['entries'][0]
+            self.assertEqual(entry['title'], "Título Traduzido (EN)")
+            
+    @patch('core.config.RSS_FEEDS', {"LocalNews": "http://example.com/local"})
+    @patch('core.config.RSS_FEEDS_LANGUAGES', {}) # Empty = PT-BR (no translation)
+    @patch('skills.rss.feedparser.parse')
+    async def test_read_feed_no_translation_needed(self, mock_parse):
+        mock_feed = MagicMock()
+        mock_feed.bozo = False
+        mock_feed.feed = {"title": "Local News"}
+        mock_feed.entries = [{"title": "Título Original", "link": "http://link.com"}]
+        mock_parse.return_value = mock_feed
+        
+        with patch.object(self.skill, '_translate_titles', new_callable=AsyncMock) as mock_translate:
+            result = await self.skill.execute({}, feed_identifier="LocalNews", auto_translate=True)
+            
+            # Verify translation was NOT called
+            mock_translate.assert_not_called()
+            
+            # Verify the entry title remained the same
+            entry = result['data']['entries'][0]
+            self.assertEqual(entry['title'], "Título Original")
 
 
 class TestRssSkillGroup(unittest.TestCase):

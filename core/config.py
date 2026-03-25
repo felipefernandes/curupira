@@ -279,6 +279,11 @@ RSS_FEEDS_DEFAULT: Dict[str, str] = {
     "Hacker News":          "https://hnrss.org/frontpage",
 }
 
+RSS_FEEDS_LANGUAGES: Dict[str, str] = {
+    "TechCrunch": "EN",
+    "Hacker News": "EN",
+}
+
 _rss_env = os.getenv("RSS_FEEDS_JSON", "")
 if _rss_env.strip():
     try:

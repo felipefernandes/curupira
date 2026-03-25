@@ -111,7 +111,7 @@ Ferramentas direcionadas para ganho de produtividade no trabalho e integrações
 - [ ] **E-mails v1.0:** Leitura e envio de anexos (SMTP/Resend). (Issue #50)
 - [ ] **Sistema de Arquivos:** Operações de I/O por linguagem natural. (Issue #43)
 - [ ] **Leitor de Documentos (PDF):** Síntese estruturada de relatórios PDF. (Issue #46)
-- [ ] **Navegação Web Headless:** Acesso e extração de URLs sem API (BS4/Trafilatura). (Issue #44)
+- [x] **Navegação Web Headless:** Acesso e extração de URLs sem API (Trafilatura + httpx). (Issue #44)
 - [ ] **Integração Notion:** Construção e input pro "segundo cérebro". (Issue #49)
 - [ ] **Entretenimento (Cinema/Teatro):** Busca de diversão local via APIs. (Issue #59)
 - [ ] **Vercel & Analytics:** Reports, logs e stats básicos (Dev/Prod). (Issues #45, #47)
@@ -119,3 +119,7 @@ Ferramentas direcionadas para ganho de produtividade no trabalho e integrações
 
 ### v1.1.1:
 - [ ] **Scoring de Memória (Facts):** Sistema de prioridade para fatos persistentes do usuário no prompt. 
+
+### 📦 v1.2.0: Rastreamento e Logística (O "Curupira Carteiro")
+Foco em acompanhamento de entregas e integrações de logística.
+- [ ] **Rastreio de Pacotes:** Suporte a rastreamento de encomendas (Correios, etc) via linguagem natural. (Issue #179)

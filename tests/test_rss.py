@@ -194,6 +194,59 @@ class TestRssReadSkill(unittest.IsolatedAsyncioTestCase):
             entry = result['data']['entries'][0]
             self.assertEqual(entry['title'], "Título Original")
 
+    async def test_translate_titles_ptbr_check(self):
+        titles = ["Test 1"]
+        # It should skip translation if language is PT-BR
+        res = await self.skill._translate_titles(titles, "PT-BR")
+        self.assertEqual(res, titles)
+        res_pt = await self.skill._translate_titles(titles, "pt")
+        self.assertEqual(res_pt, titles)
+
+    @patch("skills.rss.config")
+    async def test_translate_titles_groq(self, mock_config):
+        mock_config.AI_PROVIDER = "groq"
+        titles = ["Hello"]
+        
+        with patch.object(self.skill, '_call_groq', new_callable=AsyncMock) as mock_groq:
+            mock_groq.return_value = "- Olá"
+            res = await self.skill._translate_titles(titles, "EN")
+            self.assertEqual(res, ["Olá"])
+            mock_groq.assert_called_once()
+            
+    def test_parse_translation(self):
+        # Normal
+        res = self.skill._parse_translation("- Olá\n- Mundo", 2)
+        self.assertEqual(res, ["Olá", "Mundo"])
+        
+        # With numbers
+        res2 = self.skill._parse_translation("1. Olá\n2. Mundo", 2)
+        self.assertEqual(res2, ["Olá", "Mundo"])
+        
+        # Mismatch
+        res3 = self.skill._parse_translation("Olá", 2)
+        self.assertEqual(res3, [])
+
+    async def test_translate_titles_cache(self):
+        from skills.rss import _translation_cache
+        _translation_cache.clear()
+        
+        titles = ["Something new"]
+        with patch.object(self.skill, '_call_groq', new_callable=AsyncMock) as mock_groq, \
+             patch("skills.rss.config") as mock_config:
+            mock_config.AI_PROVIDER = "groq"
+            mock_groq.return_value = "Algo novo"
+            
+            # First call
+            res1 = await self.skill._translate_titles(titles, "EN")
+            self.assertEqual(res1, ["Algo novo"])
+            self.assertEqual(mock_groq.call_count, 1)
+            
+            # Second call (should hit cache)
+            res2 = await self.skill._translate_titles(titles, "EN")
+            self.assertEqual(res2, ["Algo novo"])
+            self.assertEqual(mock_groq.call_count, 1)  # Stays 1
+            
+        _translation_cache.clear()
 
 class TestRssSkillGroup(unittest.TestCase):
     def test_rss_read_skill_group(self):

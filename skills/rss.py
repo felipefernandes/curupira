@@ -244,11 +244,19 @@ class RssReadSkill(BaseSkill):
                 "published": entry.get("published", ""),
             })
 
-        return self.success({
-            "feed_title": feed.feed.get("title", url),
-            "total_available": len(feed.entries),
-            "entries": entries,
-        })
+        return self.success(
+            data={
+                "feed_title": feed.feed.get("title", url),
+                "total_available": len(feed.entries),
+                "entries": entries,
+            },
+            message=(
+                "Instrução OBRIGATÓRIA para o assistente: Apresente as notícias ao usuário "
+                "EXATAMENTE no seguinte formato de lista, preservando a URL de cada notícia:\n"
+                "- [Título da notícia]: [URL da notícia]\n"
+                "ATENÇÃO: Não resuma as notícias omitindo os links."
+            )
+        )
 
 
 class RssListSkill(BaseSkill):

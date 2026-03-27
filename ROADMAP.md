@@ -106,6 +106,14 @@ Integrações essenciais para rotina e facilidades da vida pessoal.
 - [ ] **Tempo de Transporte:** Consultas de rotas e estimativa (Maps). (Issue #61)
 - [ ] **Compras Inteligentes:** Gerenciamento e auxílio em compras de casa/mantimentos. (Issue #62)
 
+### 🧠 v1.0.1: Proatividade Real (Pattern Analysis)
+Foco em tornar o Curupira genuinamente proativo — não apenas reativo a comandos.
+- [x] **Analisador de Padrões:** Detecta skills usadas com frequência via histórico de conversas (`conversations.metadata`).
+- [x] **Suggestion Registry:** Mapa extensível de skill → sugestão de automação; nova skill = nova entrada no dict, zero mudança de código.
+- [x] **Anti-spam:** Cooldown configurável via `facts` table (padrão 30 dias entre sugestões da mesma skill).
+- [x] **Integração com Heartbeat:** Job independente no `job_queue` (padrão 24h); respeita manifesto Diet — sem FastAPI, sem dependências pesadas.
+- [x] **Cobertura de testes:** 100% de cobertura em `skills/pattern_analyzer.py` (24 testes).
+
 ### 📈 v1.1.0: Produtividade Profissional e Tools
 Ferramentas direcionadas para ganho de produtividade no trabalho e integrações corporativas.
 - [ ] **E-mails v1.0:** Leitura e envio de anexos (SMTP/Resend). (Issue #50)

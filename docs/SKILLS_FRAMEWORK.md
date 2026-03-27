@@ -367,3 +367,52 @@ Após criar o arquivo `skills/sua_skill.py` e a classe respectiva:
 2. **Atualizar Roadmap**: Se a skill foi completada, lembre-se de marcar na seção correspondente do `ROADMAP.md` e testar no hardware local alvo.
 3. **Documentar Dependências**: Se adicionar bibliotecas ao `requirements.txt`, comente o porquê e verifique impacto em memória.
 4. **Testar em Hardware Alvo**: Execute no Raspberry Pi 3 (ou similar) para garantir que não cause OOM ou latência excessiva.
+
+---
+
+## 7. Suggestion Registry (Sugestões Proativas de Automação)
+
+O `SUGGESTION_REGISTRY` em `skills/pattern_analyzer.py` é o mapa que conecta o nome de uma skill ao texto de sugestão que o Curupira exibe proativamente ao detectar uso frequente.
+
+**Quando adicionar uma entrada?** Sempre que sua skill tiver um uso recorrente natural que poderia ser automatizado — ex: consultas de esportes → alertas de jogos, RSS → digest diário.
+
+### Estrutura de uma entrada
+
+```python
+SUGGESTION_REGISTRY: Dict[str, Dict[str, str]] = {
+    "nome_da_sua_skill": {           # tool_name exato (skill.name)
+        "topic_field": "param_chave",  # campo de tool_args que identifica o tópico
+        "template": (
+            "Percebi que você usa {topic} com frequência. "
+            "Quer que eu configure uma automação?"
+        ),
+        "generic_template": (          # fallback quando topic_field está ausente nos args
+            "Percebi que você usa esta skill com frequência. "
+            "Quer configurar uma automação?"
+        ),
+    },
+}
+```
+
+### Regras
+
+- **`topic_field`**: deve ser exatamente o nome do parâmetro que sua skill recebe via `kwargs`. Ex: `"team"` para `sports_manager`, `"city"` para `get_weather`.
+- **`template`**: use `{topic}` como placeholder — o `PatternAnalyzer` vai substituir pelo valor mais frequente encontrado nos `tool_args` históricos.
+- **`generic_template`**: obrigatório — usado quando o usuário chama a skill sem o parâmetro de tópico (ex: consultas gerais sem especificar time ou cidade).
+- **Extensão zero-code**: adicionar sua skill ao registry é suficiente. O analisador a detectará automaticamente no próximo ciclo do heartbeat.
+
+### Cooldown e anti-spam
+
+O sistema persiste a data do último envio em `facts` com a chave `suggestion_sent:{tool_name}`. O intervalo padrão é 30 dias, configurável em `config.toml`:
+
+```toml
+[pattern_analysis]
+suggestion_cooldown_days = 30
+```
+
+### Referência de implementação
+
+- Registry: `skills/pattern_analyzer.py` → `SUGGESTION_REGISTRY`
+- Agendamento: `bot.py` → job `pattern_check` (padrão idêntico ao `calendar_sync`)
+- Config: `core/config.py` → `PATTERN_*` e `default.config.toml` → `[pattern_analysis]`
+- Testes: `tests/test_pattern_analyzer.py`

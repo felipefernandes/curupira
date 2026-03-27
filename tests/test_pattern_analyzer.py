@@ -201,6 +201,15 @@ class TestPatternAnalyzer:
         assert result == []
 
     @pytest.mark.asyncio
+    async def test_allows_suggestion_when_stored_timestamp_is_invalid(self, memory):
+        """ISO inválido em suggestion_sent deve ser ignorado e permitir re-sugestão."""
+        await _seed_tool_calls(memory.db_path, "sports_manager", {"team": "botafogo"}, count=5)
+        await memory.save_fact(USER_ID, "suggestion_sent:sports_manager", "not-a-valid-iso-date")
+        analyzer = self._make_analyzer(memory, threshold_count=3, cooldown_days=30)
+        result = await analyzer.get_pending_suggestions(USER_ID)
+        assert len(result) == 1
+
+    @pytest.mark.asyncio
     async def test_uses_generic_template_when_no_topic(self, memory):
         # sports_manager sem campo "team" nos args
         await _seed_tool_calls(memory.db_path, "sports_manager", {"action": "standings"}, count=5)

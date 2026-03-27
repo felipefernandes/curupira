@@ -117,8 +117,6 @@ class PatternAnalyzer:
                 stat["args_samples"], registry["topic_field"]
             )
             message = self._build_message(tool_name, topic)
-            if message is None:
-                continue
 
             suggestions.append({
                 "tool_name": tool_name,

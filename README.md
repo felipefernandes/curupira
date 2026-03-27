@@ -32,6 +32,7 @@ Baseado na **Arquitetura da Restrição** e no **Conceito Diet**, ele transforma
 *   **🌡️ Monitoramento de Hardware**: Pergunte *"Como está o sistema?"* para ver uso de CPU, RAM, Disco e Temperatura do Raspberry Pi em tempo real.
 *   **📰 RSS Reader**: Peça *"Quais são as notícias de hoje?"* e o Curupira busca as últimas manchetes de feeds RSS/Atom configurados.
 *   **📅 Google Calendar**: Integração completa com OAuth2 para listar, adicionar e cancelar eventos. Sincronização automática que transforma eventos em lembretes proativos.
+*   **🔍 Análise de Padrões**: Detecta quais skills você usa com frequência e sugere automações proativamente — ex: *"Você sempre me pergunta sobre o Botafogo. Quer alertas automáticos de jogos?"*
 
 ## 🛠️ Tecnologias
 

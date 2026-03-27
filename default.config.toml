@@ -135,6 +135,22 @@ allow_file_writes = false
 # Used when allow_file_writes = true
 safe_directories = ["/tmp/curupira", "/var/log"]
 
+# ─── Pattern Analysis (Sugestões Proativas de Automação) ──────────────
+#
+#  O analisador de padrões monitora quais skills o usuário usa com frequência
+#  e gera sugestões proativas para automatizar essas interações.
+#  Exemplo: "Você pergunta muito sobre o Botafogo — quer alertas automáticos?"
+#
+[pattern_analysis]
+# Janela de análise em dias (busca tool calls dos últimos N dias)
+threshold_days = 7
+# Número mínimo de chamadas para gerar uma sugestão
+threshold_count = 3
+# Com que frequência o analisador roda (em horas)
+check_interval_hours = 24
+# Dias de espera antes de re-sugerir a mesma automação
+suggestion_cooldown_days = 30
+
 # ─── Security & Audit ──────────────────────────────────────────────────
 [security]
 # Path to security audit log (records all blocked commands)

@@ -306,6 +306,52 @@ class MemoryManager:
                     }
         return summary
 
+    async def get_tool_usage_stats(
+        self, user_id: int, days: int = 7
+    ) -> List[Dict[str, Any]]:
+        """Retorna contagem de uso de tools pelo usuário nos últimos N dias.
+
+        Cada entrada: {"tool_name": str, "call_count": int, "args_samples": List[dict]}
+        Ordenado por call_count DESC.
+        """
+        interval = f"-{days} days"
+        rows_by_tool: Dict[str, Dict[str, Any]] = {}
+
+        async with aiosqlite.connect(self.db_path) as db:
+            async with db.execute(
+                """
+                SELECT
+                    json_extract(metadata, '$.tool_name'),
+                    json_extract(metadata, '$.tool_args')
+                FROM conversations
+                WHERE
+                    user_id = ?
+                    AND role = 'assistant'
+                    AND json_extract(metadata, '$.tool_name') IS NOT NULL
+                    AND timestamp >= datetime('now', ?)
+                """,
+                (user_id, interval),
+            ) as cursor:
+                async for tool_name, args_json in cursor:
+                    if tool_name not in rows_by_tool:
+                        rows_by_tool[tool_name] = {
+                            "tool_name": tool_name,
+                            "call_count": 0,
+                            "args_samples": [],
+                        }
+                    rows_by_tool[tool_name]["call_count"] += 1
+                    if args_json:
+                        try:
+                            parsed = json.loads(args_json)
+                            if isinstance(parsed, dict):
+                                rows_by_tool[tool_name]["args_samples"].append(parsed)
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+
+        return sorted(
+            rows_by_tool.values(), key=lambda x: x["call_count"], reverse=True
+        )
+
 
 class SaveFactSkill(BaseSkill):
     """Skill para o agente persistir fatos importantes sobre o usuário."""

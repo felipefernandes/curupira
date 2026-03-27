@@ -166,18 +166,19 @@ RETRY_INITIAL_DELAY: float = _cfg_float(
 # ── Skills (feature flags) ─────────────────────────────────────────────
 
 _SKILLS_DEFAULTS: Dict[str, bool] = {
-    "weather":    True,
-    "reminders":  True,
-    "time":       True,
-    "hardware":   True,
-    "memory":     True,
-    "rss":        True,
-    "job_hunter": True,
-    "sports":     True,
-    "github":     False,
-    "usage_report": True,
-    "system_control": True,
-    "daily_briefing": True,
+    "weather":          True,
+    "reminders":        True,
+    "time":             True,
+    "hardware":         True,
+    "memory":           True,
+    "rss":              True,
+    "job_hunter":       True,
+    "sports":           True,
+    "github":           False,
+    "usage_report":     True,
+    "system_control":   True,
+    "daily_briefing":   True,
+    "pattern_analysis": True,
 }
 
 _toml_skills: Dict[str, Any] = _toml_get("skills") or {}
@@ -348,6 +349,21 @@ GCAL_CALENDAR_ID: str = _cfg(
     "GCAL_CALENDAR_ID",
     "skills", "google_calendar", "calendar_id",
     default="primary"
+)
+
+# ── Pattern Analysis (Proactive Suggestions) ───────────────────────────
+
+PATTERN_THRESHOLD_DAYS: int = _cfg_int(
+    "PATTERN_THRESHOLD_DAYS", "pattern_analysis", "threshold_days", default=7
+)
+PATTERN_THRESHOLD_COUNT: int = _cfg_int(
+    "PATTERN_THRESHOLD_COUNT", "pattern_analysis", "threshold_count", default=3
+)
+PATTERN_CHECK_INTERVAL_HOURS: int = _cfg_int(
+    "PATTERN_CHECK_INTERVAL_HOURS", "pattern_analysis", "check_interval_hours", default=24
+)
+PATTERN_SUGGESTION_COOLDOWN_DAYS: int = _cfg_int(
+    "PATTERN_SUGGESTION_COOLDOWN_DAYS", "pattern_analysis", "suggestion_cooldown_days", default=30
 )
 
 # ── Validação e Avisos ─────────────────────────────────────────────────

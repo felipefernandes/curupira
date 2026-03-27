@@ -551,7 +551,33 @@ async def post_init(application: Application):
             )
             logging.info("Token health check job agendado (diário às 8:00)")
 
-        logging.info("Jobs agendados: Heartbeat + Lembretes + Calendar Sync + Token Health")
+        # Pattern Analysis (sugestões proativas de automação)
+        if config.skill_enabled("pattern_analysis") and memory_manager is not None:
+            from skills.pattern_analyzer import run_pattern_check as _run_pattern_check
+
+            async def _pattern_check_job(context: ContextTypes.DEFAULT_TYPE):
+                try:
+                    messages = await _run_pattern_check(
+                        config.AUTHORIZED_USER_ID, memory_manager, config
+                    )
+                    for msg in messages:
+                        await _send_proactive_message(context, msg)
+                except Exception as e:
+                    logging.error(f"Pattern check error: {e}")
+
+            pattern_interval = config.PATTERN_CHECK_INTERVAL_HOURS * 3600
+            application.job_queue.run_repeating(
+                _pattern_check_job,
+                interval=pattern_interval,
+                first=120,  # 2 min após startup (evita race com DB init)
+                name="pattern_check"
+            )
+            logging.info(
+                f"Pattern analysis job agendado "
+                f"(intervalo: {config.PATTERN_CHECK_INTERVAL_HOURS}h)"
+            )
+
+        logging.info("Jobs agendados: Heartbeat + Lembretes + Calendar Sync + Token Health + Pattern Analysis")
     else:
         logging.error("JobQueue não está disponível!")
 

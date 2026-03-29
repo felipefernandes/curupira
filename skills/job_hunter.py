@@ -101,14 +101,17 @@ class JobHunterRunSearchSkill(BaseSkill):
         _kw_keywords = kwargs.get("keywords")
         _kw_cutoff = kwargs.get("score_cutoff")
 
-        sources: Optional[List[str]] = _kw_sources or config.JOB_HUNTER_SOURCES
-        keywords: Optional[List[str]] = _kw_keywords or config.JOB_HUNTER_KEYWORDS
+        # config.toml takes priority over LLM-provided kwargs to prevent
+        # hallucinated values (e.g. from failed_generation recovery) from
+        # overriding the user's personal preferences.
+        sources: Optional[List[str]] = config.JOB_HUNTER_SOURCES or _kw_sources
+        keywords: Optional[List[str]] = config.JOB_HUNTER_KEYWORDS or _kw_keywords
         prompt_override: Optional[str] = kwargs.get("prompt_override")
-        score_cutoff: Optional[float] = _kw_cutoff or config.JOB_HUNTER_SCORE_CUTOFF
+        score_cutoff: Optional[float] = config.JOB_HUNTER_SCORE_CUTOFF or _kw_cutoff
 
-        sources_origin = "kwargs" if _kw_sources else "config"
-        keywords_origin = "kwargs" if _kw_keywords else "config"
-        cutoff_origin = "kwargs" if _kw_cutoff is not None else "config"
+        sources_origin = "config" if config.JOB_HUNTER_SOURCES else "kwargs"
+        keywords_origin = "config" if config.JOB_HUNTER_KEYWORDS else "kwargs"
+        cutoff_origin = "config" if config.JOB_HUNTER_SCORE_CUTOFF is not None else "kwargs"
 
         logger.info(
             "Job Hunter: valores efetivos — "

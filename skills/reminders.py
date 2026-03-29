@@ -708,8 +708,6 @@ class ListRemindersSkill(BaseSkill):
                     lines.append(f"• <code>[ID {r['id']}]</code> <b>{safe_msg}</b>\n  <i>(próximo: {r['at']}{rec_str}{task_str})</i>")
                 
                 summary = "\n".join(lines)
-                instruction = "\n\n[INSTRUÇÃO IMPORTANTE: Devolva a lista acima EXATAMENTE com essa formatação HTML (<code>, <b>, <i>). NÃO converta para Markdown.]"
-                summary += instruction
 
             return self.success({
                 "reminders": formatted_reminders,

@@ -97,10 +97,29 @@ class JobHunterRunSearchSkill(BaseSkill):
         if err:
             return self.error(err)
 
-        sources: Optional[List[str]] = kwargs.get("sources") or config.JOB_HUNTER_SOURCES
-        keywords: Optional[List[str]] = kwargs.get("keywords") or config.JOB_HUNTER_KEYWORDS
+        _kw_sources = kwargs.get("sources")
+        _kw_keywords = kwargs.get("keywords")
+        _kw_cutoff = kwargs.get("score_cutoff")
+
+        # config.toml takes priority over LLM-provided kwargs to prevent
+        # hallucinated values (e.g. from failed_generation recovery) from
+        # overriding the user's personal preferences.
+        sources: Optional[List[str]] = config.JOB_HUNTER_SOURCES or _kw_sources
+        keywords: Optional[List[str]] = config.JOB_HUNTER_KEYWORDS or _kw_keywords
         prompt_override: Optional[str] = kwargs.get("prompt_override")
-        score_cutoff: Optional[float] = kwargs.get("score_cutoff") or config.JOB_HUNTER_SCORE_CUTOFF
+        score_cutoff: Optional[float] = config.JOB_HUNTER_SCORE_CUTOFF or _kw_cutoff
+
+        sources_origin = "config" if config.JOB_HUNTER_SOURCES else "kwargs"
+        keywords_origin = "config" if config.JOB_HUNTER_KEYWORDS else "kwargs"
+        cutoff_origin = "config" if config.JOB_HUNTER_SCORE_CUTOFF is not None else "kwargs"
+
+        logger.info(
+            "Job Hunter: valores efetivos — "
+            "sources=%s [%s], keywords=%s [%s], score_cutoff=%s [%s]",
+            sources, sources_origin,
+            keywords, keywords_origin,
+            score_cutoff, cutoff_origin,
+        )
 
         if sources and not all(isinstance(s, str) for s in sources):
             return self.error("Fontes (sources) devem ser uma lista de strings.")
@@ -117,7 +136,7 @@ class JobHunterRunSearchSkill(BaseSkill):
         if score_cutoff is not None:
             body["score_cutoff"] = float(score_cutoff)
 
-        logger.info(f"Job Hunter: iniciando busca com overrides={list(body.keys())}")
+        logger.info("Job Hunter: iniciando busca com body_keys=%s", list(body.keys()))
 
         try:
             response = await asyncio.wait_for(

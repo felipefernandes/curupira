@@ -162,7 +162,7 @@ class TestJobHunterRunSearchSkill(unittest.IsolatedAsyncioTestCase):
     @patch("skills.job_hunter.config.JOB_HUNTER_KEYWORDS", ["Agente de IA"])
     @patch("skills.job_hunter.config.JOB_HUNTER_SCORE_CUTOFF", 7.5)
     @patch("skills.job_hunter.requests.post")
-    async def test_llm_overrides_take_priority_over_env(self, mock_post):
+    async def test_config_takes_priority_over_llm_kwargs(self, mock_post):
         mock_response = MagicMock()
         mock_response.json.return_value = {"status": "success", "fetched": 2, "approved": 1}
         mock_response.raise_for_status = MagicMock()
@@ -177,10 +177,10 @@ class TestJobHunterRunSearchSkill(unittest.IsolatedAsyncioTestCase):
 
         _, call_kwargs = mock_post.call_args
         body = call_kwargs["json"]
-        # LLM args should win over env config
-        self.assertEqual(body["sources"], ["gupy.io"])
-        self.assertEqual(body["keywords"], ["Producer"])
-        self.assertEqual(body["score_cutoff"], 9.0)
+        # config.toml must win over LLM kwargs to prevent hallucinated values
+        self.assertEqual(body["sources"], ["lever.co"])
+        self.assertEqual(body["keywords"], ["Agente de IA"])
+        self.assertEqual(body["score_cutoff"], 7.5)
 
     # --- Error handling ---
 

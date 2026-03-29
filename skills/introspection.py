@@ -80,7 +80,11 @@ class IntrospectionSkill(BaseSkill):
             return self.success(desc)
         else:
             data = self._list_all_skills()
-            return self.success(data, message=self._format_groups_summary(data["groups"]))
+            return self.success_with_html(
+                data=data,
+                html=self._format_groups_summary(data["groups"]),
+                summary=f"{data['total_groups']} grupo(s) de capacidades listado(s).",
+            )
 
     def _list_all_skills(self) -> Dict[str, Any]:
         """Returns a grouped summary of all registered skills, one entry per skill_group."""

@@ -58,24 +58,30 @@ class HardwareMonitoringSkill(BaseSkill):
             metrics["health_status"] = diag["status"]
             metrics["health_issues"] = diag["issues"]
             
-            # Format output with emojis
-            summary = (
-                f"🌡️ <b>Status do Sistema</b>\n"
-                f"🕒 <b>Hora:</b> {metrics['system_time']}\n\n"
-                f"🧠 <b>RAM:</b> {metrics['ram_used']}/{metrics['ram_total']} ({metrics['ram_percent']}%)\n"
-                f"⚙️ <b>CPU:</b> {metrics['cpu_percent']}%\n"
-                f"💾 <b>Disco:</b> {metrics['disk_free']} livres\n"
-            )
-            
+            # Build pre-formatted HTML sent directly to Telegram (bypasses LLM)
+            html_lines = [
+                f"🌡️ <b>Status do Sistema</b>",
+                f"🕒 <b>Hora:</b> {metrics['system_time']}",
+                f"",
+                f"🧠 <b>RAM:</b> {metrics['ram_used']}/{metrics['ram_total']} ({metrics['ram_percent']}%)",
+                f"⚙️ <b>CPU:</b> {metrics['cpu_percent']}%",
+                f"💾 <b>Disco:</b> {metrics['disk_free']} livres",
+            ]
+
             if metrics['temp'] != "N/A":
-                summary += f"🌡️ <b>Temp:</b> {metrics['temp']}°C\n"
-            
+                html_lines.append(f"🌡️ <b>Temp:</b> {metrics['temp']}°C")
+
             if diag["issues"]:
-                summary += "\n⚠️ <b>Avisos de Integridade (Health Check):</b>\n"
+                html_lines.append("")
+                html_lines.append("⚠️ <b>Avisos de Integridade (Health Check):</b>")
                 for issue in diag["issues"]:
-                    summary += f"- Aviso: {issue}\n"
-                
-            return self.success(metrics, summary)
+                    html_lines.append(f"• {issue}")
+
+            return self.success_with_html(
+                data=metrics,
+                html="\n".join(html_lines),
+                summary="Status do hardware coletado com sucesso.",
+            )
         except psutil.Error as pe:
             self.logger.error(f"Erro psutil monitorando hardware: {pe}")
             return self.error(f"Falha de sistema ao checar recursos (psutil): {pe}")

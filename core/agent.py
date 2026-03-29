@@ -230,28 +230,50 @@ class AgentBrain:
         except Exception as e:
             self.logger.warning(f"Failed to persist tool interaction ({tool_name}): {e}")
 
-    async def _execute_tool_call(self, tool_name: str, tool_args: Optional[Dict[str, Any]], context: Dict[str, Any]) -> str:
+    async def _execute_tool_call(
+        self,
+        tool_name: str,
+        tool_args: Optional[Dict[str, Any]],
+        context: Dict[str, Any],
+        on_direct_reply=None,
+    ) -> str:
         """
         Executes a tool (skill) by name with provided arguments.
         Catches exceptions to prevent agent crash.
+
+        If the skill result contains a `direct_html` field, it is dispatched
+        immediately via `on_direct_reply` callback and stripped from the payload
+        sent to the LLM — preventing models from reproducing HTML inconsistently.
         """
         self.logger.info(f"Invoking tool: {tool_name} with {tool_args}")
-        
+
         skill = self.skills.get(tool_name)
         if not skill:
             return json.dumps({"error": f"Tool {tool_name} not found"})
-            
+
         try:
             # SAFETY: Ensure tool_args is a dictionary
             safe_args = tool_args if isinstance(tool_args, dict) else {}
-            
+
             result = await skill.execute(context, **safe_args)
+
+            # Dispatch pre-formatted HTML directly to Telegram, bypassing LLM.
+            if isinstance(result, dict) and "direct_html" in result:
+                direct_html = result["direct_html"]
+                if direct_html and on_direct_reply:
+                    try:
+                        await on_direct_reply(direct_html)
+                    except Exception as cb_err:
+                        self.logger.warning(f"Erro ao enviar direct_html ({tool_name}): {cb_err}")
+                # Strip from LLM payload so the model doesn't try to reproduce it.
+                result = {k: v for k, v in result.items() if k != "direct_html"}
+
             result_str = json.dumps(result, ensure_ascii=False)
-            
+
             # Log truncated result for debugging (avoid huge logs)
             log_preview = (result_str[:200] + '...') if len(result_str) > 200 else result_str
             self.logger.info(f"Tool {tool_name} returned: {log_preview}")
-            
+
             return result_str
         except Exception as e:
             self.logger.error(f"Error executing {tool_name}: {e}")
@@ -668,7 +690,7 @@ class AgentBrain:
             self.logger.error(f"compose_briefing error: {e}")
             return None
 
-    async def process(self, user_msg: str, context: Dict[str, Any], chat_history: Optional[List[Dict[str, Any]]] = None, on_intermediate_reply=None) -> str:
+    async def process(self, user_msg: str, context: Dict[str, Any], chat_history: Optional[List[Dict[str, Any]]] = None, on_intermediate_reply=None, on_direct_reply=None) -> str:
         """
         Main Agent Loop (Async).
         Handles multi-turn reasoning and tool execution.
@@ -875,8 +897,8 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                                     fn_args = json.loads(tool_call.function.arguments)
                             except json.JSONDecodeError:
                                 pass
-                                
-                            result_str = await self._execute_tool_call(fn_name, fn_args, context)
+
+                            result_str = await self._execute_tool_call(fn_name, fn_args, context, on_direct_reply=on_direct_reply)
 
                             messages.append({
                                 "role": "tool",
@@ -932,7 +954,7 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                                             key, value = pair.split(':', 1)
                                             fn_args[key.strip()] = value.strip()
 
-                                    result_str = await self._execute_tool_call(fn_name, fn_args, context)
+                                    result_str = await self._execute_tool_call(fn_name, fn_args, context, on_direct_reply=on_direct_reply)
 
                                     # CRITICAL FIX: Rewrite history to look like a VALID tool call
                                     fake_tool_id = f"call_{uuid.uuid4().hex[:8]}"
@@ -982,7 +1004,7 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                                     self.logger.warning(f"Could not parse args from XML: {args_str}")
                                     fn_args = {}
 
-                                result_str = await self._execute_tool_call(fn_name, fn_args, context)
+                                result_str = await self._execute_tool_call(fn_name, fn_args, context, on_direct_reply=on_direct_reply)
 
                                 # CRITICAL FIX: Rewrite history to look like a VALID tool call
                                 # Groq API rejects <function> tags in content on next turn
@@ -1034,7 +1056,7 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                         fn_name, fn_args = parsed
                         self.logger.warning(f"Recovered tool call from failed_generation: {fn_name}")
 
-                        result_str = await self._execute_tool_call(fn_name, fn_args, context)
+                        result_str = await self._execute_tool_call(fn_name, fn_args, context, on_direct_reply=on_direct_reply)
 
                         fake_tool_id = f"call_{uuid.uuid4().hex[:8]}"
                         messages.append({
@@ -1193,8 +1215,8 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                          fn_name = part_with_fn.function_call.name
                          # Convert map to dict
                          fn_args = {k: v for k, v in part_with_fn.function_call.args.items()}
-                         
-                         result_str = await self._execute_tool_call(fn_name, fn_args, context)
+
+                         result_str = await self._execute_tool_call(fn_name, fn_args, context, on_direct_reply=on_direct_reply)
                          
                          # Parse result back to dict for Gemini SDK if expected, or just return text?
                          # Gemini expects a function_response part

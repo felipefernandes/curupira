@@ -696,23 +696,26 @@ class ListRemindersSkill(BaseSkill):
 
                 formatted_reminders.append(entry)
 
-            if not formatted_reminders:
-                summary = "Você não tem lembretes pendentes."
-            else:
-                lines = [f"Você tem {len(formatted_reminders)} lembrete(s) pendente(s):"]
-                for r in formatted_reminders:
-                    rec_str = f" 🔁 {self._recurrence_label(r['recurrence'])}" if r.get("recurrence") else ""
-                    task_str = " | Tarefa automática" if r.get("is_task") else ""
-                    # Escape HTML para evitar quebra de formatação e injection
-                    safe_msg = html.escape(r['message'])
-                    lines.append(f"• <code>[ID {r['id']}]</code> <b>{safe_msg}</b>\n  <i>(próximo: {r['at']}{rec_str}{task_str})</i>")
-                
-                summary = "\n".join(lines)
+            data = {"reminders": formatted_reminders, "count": len(formatted_reminders)}
 
-            return self.success({
-                "reminders": formatted_reminders,
-                "count": len(formatted_reminders),
-            }, summary)
+            if not formatted_reminders:
+                return self.success(data, "Você não tem lembretes pendentes.")
+
+            lines = [f"Você tem {len(formatted_reminders)} lembrete(s) pendente(s):"]
+            for r in formatted_reminders:
+                rec_str = f" 🔁 {self._recurrence_label(r['recurrence'])}" if r.get("recurrence") else ""
+                task_str = " | Tarefa automática" if r.get("is_task") else ""
+                safe_msg = html.escape(r['message'])
+                lines.append(
+                    f"• <code>[ID {r['id']}]</code> <b>{safe_msg}</b>\n"
+                    f"  <i>(próximo: {r['at']}{rec_str}{task_str})</i>"
+                )
+
+            return self.success_with_html(
+                data=data,
+                html="\n".join(lines),
+                summary=f"{len(formatted_reminders)} lembrete(s) listado(s).",
+            )
         except Exception as e:
             self.manager.logger.error(f"Error listing reminders: {e}")
             return self.error(str(e))

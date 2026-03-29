@@ -251,13 +251,30 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 logging.error(f"Erro no intermediate_reply: {e}")
 
+    async def direct_reply(html: str):
+        """Callback para enviar HTML pré-formatado diretamente ao Telegram.
+        Usado por skills que retornam direct_html, bypassando o LLM."""
+        if not html:
+            return
+        try:
+            await update.message.reply_text(html, parse_mode=ParseMode.HTML)
+        except TelegramError as e:
+            logging.warning(f"Erro no direct_reply (HTML): {e}")
+            try:
+                await update.message.reply_text(_strip_unsupported_html(html), parse_mode=ParseMode.HTML)
+            except TelegramError:
+                await update.message.reply_text(html)
+        except Exception as e:
+            logging.error(f"Erro no direct_reply: {e}")
+
     typing_task = asyncio.create_task(keep_typing())
     try:
         response_text = await brain.process(
-            user_msg, 
-            agent_context, 
-            chat_history=context_history, 
-            on_intermediate_reply=intermediate_reply
+            user_msg,
+            agent_context,
+            chat_history=context_history,
+            on_intermediate_reply=intermediate_reply,
+            on_direct_reply=direct_reply,
         )
     except Exception as e:
         logging.error(f"Brain Error: {e}")

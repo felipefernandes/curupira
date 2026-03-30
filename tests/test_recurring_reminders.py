@@ -376,7 +376,7 @@ class TestListRemindersSkillRecurrence(unittest.IsolatedAsyncioTestCase):
         result = await skill.execute({"user_id": FAKE_USER_ID})
 
         self.assertEqual(result["status"], "success")
-        self.assertIn("pendentes", result["message"])
+        self.assertIn("pendente", result["message"])
         self.assertNotIn("direct_html", result)
 
 

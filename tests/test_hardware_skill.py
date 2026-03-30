@@ -40,8 +40,8 @@ class TestHardwareMonitoringSkill:
         
         assert result["status"] == "success", result.get("error", "Unknown error")
         assert result["data"]["cpu_percent"] == 25.5
-        msg = result.get("message", "")
-        assert "25.5" in msg
+        assert "direct_html" in result
+        assert "25.5" in result["direct_html"]
 
     @pytest.mark.asyncio
     @patch("skills.hardware.psutil")

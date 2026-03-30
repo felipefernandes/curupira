@@ -260,13 +260,22 @@ class AgentBrain:
             # Dispatch pre-formatted HTML directly to Telegram, bypassing LLM.
             if isinstance(result, dict) and "direct_html" in result:
                 direct_html = result["direct_html"]
+                dispatched = False
                 if direct_html and on_direct_reply:
                     try:
                         await on_direct_reply(direct_html)
+                        dispatched = True
                     except Exception as cb_err:
                         self.logger.warning(f"Erro ao enviar direct_html ({tool_name}): {cb_err}")
-                # Strip from LLM payload so the model doesn't try to reproduce it.
-                result = {k: v for k, v in result.items() if k != "direct_html"}
+
+                if dispatched:
+                    # Content was already delivered to the user; give the LLM a minimal
+                    # ack so it doesn't re-summarize the same data in a second message.
+                    result = {"status": "success"}
+                else:
+                    # Dispatch failed (or no callback) — strip direct_html and let the
+                    # LLM handle the full data as fallback.
+                    result = {k: v for k, v in result.items() if k != "direct_html"}
 
             result_str = json.dumps(result, ensure_ascii=False)
 

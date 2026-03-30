@@ -148,7 +148,7 @@ class TestRetryLogic(unittest.IsolatedAsyncioTestCase):
             
             # Assertions
             # 1. Verify tool was called
-            self.agent._execute_tool_call.assert_called_with("rss_list", {}, context)
+            self.agent._execute_tool_call.assert_called_with("rss_list", {}, context, on_direct_reply=None)
             
             # 2. Verify result contains final text
             self.assertEqual(result, "Aqui está.")

@@ -369,6 +369,16 @@ class TestListRemindersSkillRecurrence(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("Seg", result["direct_html"])
 
+    async def test_list_empty_reminders(self):
+        """Empty reminder list returns success with message, no direct_html."""
+        skill = self._make_skill([])
+
+        result = await skill.execute({"user_id": FAKE_USER_ID})
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("pendentes", result["message"])
+        self.assertNotIn("direct_html", result)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -9,7 +9,7 @@ import re
 import logging
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from telegram import TelegramError
+from telegram.error import TelegramError
 from telegram.constants import ParseMode
 
 

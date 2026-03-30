@@ -117,6 +117,67 @@ async def test_execute_tool_call_exception(agent):
     mock_skill.execute.side_effect = Exception("Boom")
     
     agent.register_skill(mock_skill)
+
+@pytest.mark.asyncio
+async def test_execute_tool_call_dispatches_direct_html(agent):
+    """direct_html in skill result triggers on_direct_reply and is stripped from LLM payload."""
+    import json
+    mock_skill = AsyncMock()
+    mock_skill.name = "test_skill"
+    mock_skill.execute.return_value = {
+        "status": "success",
+        "data": {"count": 1},
+        "direct_html": "<b>Resultado</b>",
+        "message": "1 item.",
+    }
+    agent.register_skill(mock_skill)
+
+    mock_on_direct_reply = AsyncMock()
+    result = await agent._execute_tool_call("test_skill", {}, {}, on_direct_reply=mock_on_direct_reply)
+
+    mock_on_direct_reply.assert_called_once_with("<b>Resultado</b>")
+    parsed = json.loads(result)
+    assert "direct_html" not in parsed
+    assert parsed["status"] == "success"
+
+@pytest.mark.asyncio
+async def test_execute_tool_call_direct_html_callback_exception(agent):
+    """If on_direct_reply raises, execution continues and direct_html is still stripped."""
+    import json
+    mock_skill = AsyncMock()
+    mock_skill.name = "test_skill"
+    mock_skill.execute.return_value = {
+        "status": "success",
+        "data": {},
+        "direct_html": "<b>Resultado</b>",
+    }
+    agent.register_skill(mock_skill)
+
+    mock_on_direct_reply = AsyncMock(side_effect=Exception("Telegram down"))
+    result = await agent._execute_tool_call("test_skill", {}, {}, on_direct_reply=mock_on_direct_reply)
+
+    parsed = json.loads(result)
+    assert "direct_html" not in parsed
+    assert parsed["status"] == "success"
+
+@pytest.mark.asyncio
+async def test_execute_tool_call_direct_html_stripped_without_callback(agent):
+    """direct_html is stripped from LLM payload even when no on_direct_reply is provided."""
+    import json
+    mock_skill = AsyncMock()
+    mock_skill.name = "test_skill"
+    mock_skill.execute.return_value = {
+        "status": "success",
+        "data": {},
+        "direct_html": "<b>Resultado</b>",
+    }
+    agent.register_skill(mock_skill)
+
+    result = await agent._execute_tool_call("test_skill", {}, {})
+
+    parsed = json.loads(result)
+    assert "direct_html" not in parsed
+
 @pytest.mark.asyncio
 async def test_process_message_gemini_flow(agent):
     """Test basic Gemini flow"""

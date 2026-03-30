@@ -338,8 +338,8 @@ class TestListRemindersSkillRecurrence(unittest.IsolatedAsyncioTestCase):
 
         result = await skill.execute({"user_id": FAKE_USER_ID})
 
-        self.assertIn("🔁", result["message"])
-        self.assertIn("Todo dia", result["message"])
+        self.assertIn("🔁", result["direct_html"])
+        self.assertIn("Todo dia", result["direct_html"])
 
     async def test_list_shows_task_indicator(self):
         remind_at = (datetime.now() + timedelta(days=1)).isoformat()
@@ -348,7 +348,7 @@ class TestListRemindersSkillRecurrence(unittest.IsolatedAsyncioTestCase):
 
         result = await skill.execute({"user_id": FAKE_USER_ID})
 
-        self.assertIn("Tarefa automática", result["message"])
+        self.assertIn("Tarefa automática", result["direct_html"])
 
     async def test_list_one_shot_no_recurrence_symbol(self):
         remind_at = (datetime.now() + timedelta(hours=2)).isoformat()
@@ -357,8 +357,8 @@ class TestListRemindersSkillRecurrence(unittest.IsolatedAsyncioTestCase):
 
         result = await skill.execute({"user_id": FAKE_USER_ID})
 
-        self.assertNotIn("🔁", result["message"])
-        self.assertNotIn("Tarefa automática", result["message"])
+        self.assertNotIn("🔁", result["direct_html"])
+        self.assertNotIn("Tarefa automática", result["direct_html"])
 
     async def test_recurrence_weekly_label(self):
         remind_at = (datetime.now() + timedelta(days=2)).isoformat()
@@ -367,7 +367,17 @@ class TestListRemindersSkillRecurrence(unittest.IsolatedAsyncioTestCase):
 
         result = await skill.execute({"user_id": FAKE_USER_ID})
 
-        self.assertIn("Seg", result["message"])
+        self.assertIn("Seg", result["direct_html"])
+
+    async def test_list_empty_reminders(self):
+        """Empty reminder list returns success with message, no direct_html."""
+        skill = self._make_skill([])
+
+        result = await skill.execute({"user_id": FAKE_USER_ID})
+
+        self.assertEqual(result["status"], "success")
+        self.assertIn("pendente", result["message"])
+        self.assertNotIn("direct_html", result)
 
 
 if __name__ == "__main__":

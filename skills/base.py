@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 class BaseSkill(ABC):
     """
@@ -78,6 +78,24 @@ class BaseSkill(ABC):
         }
         if message:
             response["message"] = message
+        return response
+
+    def success_with_html(self, data: Any, html: str, summary: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Retorno de sucesso com conteúdo HTML pré-formatado para envio direto ao Telegram.
+
+        O campo `direct_html` é interceptado pelo AgentBrain e enviado diretamente
+        via callback, sem passar pelo LLM. O LLM recebe apenas `summary` como contexto,
+        evitando que modelos diferentes reproduzam o HTML de forma inconsistente.
+
+        Args:
+            data: Payload estruturado (o que o LLM vê como dados da tool).
+            html: Conteúdo HTML válido para envio direto ao Telegram.
+            summary: Texto simples descrevendo o resultado para o LLM (opcional).
+        """
+        response: Dict[str, Any] = {"status": "success", "data": data, "direct_html": html}
+        if summary:
+            response["message"] = summary
         return response
 
     def error(self, error_message: str) -> Dict[str, Any]:

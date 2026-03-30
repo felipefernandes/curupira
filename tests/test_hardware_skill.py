@@ -40,8 +40,34 @@ class TestHardwareMonitoringSkill:
         
         assert result["status"] == "success", result.get("error", "Unknown error")
         assert result["data"]["cpu_percent"] == 25.5
-        msg = result.get("message", "")
-        assert "25.5" in msg
+        assert "direct_html" in result
+        assert "25.5" in result["direct_html"]
+
+    @pytest.mark.asyncio
+    @patch("skills.hardware.psutil")
+    async def test_execute_success_with_temperature(self, mock_psutil):
+        class FakePsutilError(Exception): pass
+        mock_psutil.Error = FakePsutilError
+
+        mock_mem = mock_psutil.virtual_memory.return_value
+        mock_mem.total = 8 * 1024**3
+        mock_mem.used = 4 * 1024**3
+        mock_mem.percent = 60.0
+
+        mock_disk = mock_psutil.disk_usage.return_value
+        mock_disk.free = 50 * 1024**3
+
+        mock_psutil.cpu_percent.return_value = 30.0
+
+        mock_entry = type("Entry", (), {"current": 55.3})()
+        mock_psutil.sensors_temperatures.return_value = {"cpu_thermal": [mock_entry]}
+        mock_psutil.hasattr = lambda *a: True
+
+        result = await self.skill.execute({})
+
+        assert result["status"] == "success"
+        assert result["data"]["temp"] == 55.3
+        assert "55.3" in result["direct_html"]
 
     @pytest.mark.asyncio
     @patch("skills.hardware.psutil")

@@ -8,3 +8,6 @@ Use o arquivo README.md e PROJECT.md para obter informações gerais sobre o pro
 2. Recupere os comentários e reviews usando: gh pr view --json reviews,comments --jq '.reviews[].body, .comments[].body'
 3. Analise especificamente as sugestões da Iara (AI Code Review agent).
 4. Aplique as correções sugeridas diretamente nos arquivos locais sem que eu precise copiar e colar as mensagens.
+
+**Orientações Gerais**
+- Arquivos de logs, temporários (temps) e debugs devem ser adicionados à pasta `/logs`

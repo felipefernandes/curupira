@@ -127,6 +127,13 @@ else:
     logging.info("Skill 'daily_briefing' desabilitada pela configuração.")
     daily_briefing_skill = None  # type: ignore[assignment]
 
+# Skill: Remote Update
+if config.skill_enabled("remote_update"):
+    from skills.remote_update import RemoteUpdateSkill
+    brain.register_skill(RemoteUpdateSkill())
+else:
+    logging.info("Skill 'remote_update' desabilitada pela configuração.")
+
 # Onboarding States
 WAITING_NAME = 1
 WAITING_SURNAME = 2
@@ -216,6 +223,9 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "job_queue": context.job_queue,
         "assistant_surname": assistant_surname,
         "memory_manager": memory_manager,
+        "raw_message": user_msg,
+        "bot": context.bot,
+        "chat_id": update.effective_chat.id,
     }
 
     async def keep_typing():
@@ -536,6 +546,10 @@ async def post_init(application: Application):
         await memory_manager.init_db()
     # Start MCP Clients
     await brain.start_mcp_clients()
+
+    # Remote Update: check for post-restart sentinel and notify user if found
+    from skills.remote_update import check_update_sentinel
+    await check_update_sentinel(application.bot, config.AUTHORIZED_USER_ID)
     
     if application.job_queue:
         # System Heartbeat

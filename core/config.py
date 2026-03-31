@@ -179,6 +179,7 @@ _SKILLS_DEFAULTS: Dict[str, bool] = {
     "system_control":   True,
     "daily_briefing":   True,
     "pattern_analysis": True,
+    "remote_update":    True,
 }
 
 _toml_skills: Dict[str, Any] = _toml_get("skills") or {}
@@ -401,6 +402,14 @@ SYSTEM_CONTROL_ALLOW_FILE_WRITES: bool = _cfg_bool(
     "SYSTEM_CONTROL_ALLOW_FILE_WRITES",
     "skills", "system_control", "allow_file_writes",
     default=False
+)
+
+# ── Remote Update Skill ────────────────────────────────────────────────
+
+REMOTE_UPDATE_PIN: Optional[str] = _cfg(
+    "REMOTE_UPDATE_PIN",
+    "skills", "remote_update", "pin",
+    default=None
 )
 
 # ── Security & Audit ───────────────────────────────────────────────────

@@ -236,10 +236,14 @@ class AgentBrain:
         tool_args: Optional[Dict[str, Any]],
         context: Dict[str, Any],
         on_direct_reply=None,
-    ) -> str:
+    ) -> Tuple[str, bool]:
         """
         Executes a tool (skill) by name with provided arguments.
         Catches exceptions to prevent agent crash.
+
+        Returns (result_str, was_dispatched) where was_dispatched is True when
+        a direct_html was delivered to the user via on_direct_reply.  The caller
+        uses this flag to decide whether the LLM still needs to produce a reply.
 
         If the skill result contains a `direct_html` field, it is dispatched
         immediately via `on_direct_reply` callback and stripped from the payload
@@ -249,7 +253,7 @@ class AgentBrain:
 
         skill = self.skills.get(tool_name)
         if not skill:
-            return json.dumps({"error": f"Tool {tool_name} not found"})
+            return json.dumps({"error": f"Tool {tool_name} not found"}), False
 
         try:
             # SAFETY: Ensure tool_args is a dictionary
@@ -258,9 +262,9 @@ class AgentBrain:
             result = await skill.execute(context, **safe_args)
 
             # Dispatch pre-formatted HTML directly to Telegram, bypassing LLM.
+            dispatched = False
             if isinstance(result, dict) and "direct_html" in result:
                 direct_html = result["direct_html"]
-                dispatched = False
                 if direct_html and on_direct_reply:
                     try:
                         await on_direct_reply(direct_html)
@@ -283,10 +287,10 @@ class AgentBrain:
             log_preview = (result_str[:200] + '...') if len(result_str) > 200 else result_str
             self.logger.info(f"Tool {tool_name} returned: {log_preview}")
 
-            return result_str
+            return result_str, dispatched
         except Exception as e:
             self.logger.error(f"Error executing {tool_name}: {e}")
-            return json.dumps({"error": str(e)})
+            return json.dumps({"error": str(e)}), False
 
     @staticmethod
     def _parse_failed_generation(failed_gen: str) -> Optional[Tuple[str, dict]]:
@@ -699,7 +703,7 @@ class AgentBrain:
             self.logger.error(f"compose_briefing error: {e}")
             return None
 
-    async def process(self, user_msg: str, context: Dict[str, Any], chat_history: Optional[List[Dict[str, Any]]] = None, on_intermediate_reply=None, on_direct_reply=None) -> str:
+    async def process(self, user_msg: str, context: Dict[str, Any], chat_history: Optional[List[Dict[str, Any]]] = None, on_intermediate_reply=None, on_direct_reply=None) -> Optional[str]:
         """
         Main Agent Loop (Async).
         Handles multi-turn reasoning and tool execution.
@@ -823,7 +827,7 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
 5. **Diálogo natural**: Continue conversas de forma orgânica, inclusive após mensagens proativas suas.
 6. **Memória de longo prazo**: Ao aprender dado relevante (cidade, rotina, preferência), chame `save_user_fact` imediatamente.
 7. **Protocolo de ferramentas**: Use JSON válido. O campo `name` deve ser EXATAMENTE o identificador da ferramenta — nunca inclua argumentos no `name`.
-8. **Formatação de Texto**: A interface do usuário não suporta Markdown (como `**` ou `*`). Em vez disso, você DEVE DEVE DEVE formatar o texto obrigatoriamente usando tags HTML simples (apenas <b>, <i>, <code>, <pre>). Nunca use asteriscos para listas, use caracteres como • ou -.
+8. **Formatação de Texto**: Use SOMENTE tags HTML do Telegram: <b>, <i>, <code>, <pre>. PROIBIDO usar Markdown: sem asteriscos (**negrito**), sem underlines (_itálico_), sem cerquilhas (## Título). EXEMPLO ERRADO: **Status:** OK | EXEMPLO CORRETO: <b>Status:</b> OK. Para listas, use • ou - (nunca asterisco).
 
 """
 
@@ -842,7 +846,11 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                 messages.extend(chat_history)
 
             messages.append({"role": "user", "content": user_msg})
-            
+
+            # Track direct_html dispatches to suppress redundant LLM follow-ups.
+            _tool_call_count = 0
+            _direct_html_count = 0
+
             while current_turn < max_turns:
                 current_turn += 1
                 try:
@@ -907,7 +915,10 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                             except json.JSONDecodeError:
                                 pass
 
-                            result_str = await self._execute_tool_call(fn_name, fn_args, context, on_direct_reply=on_direct_reply)
+                            result_str, _dispatched = await self._execute_tool_call(fn_name, fn_args, context, on_direct_reply=on_direct_reply)
+                            _tool_call_count += 1
+                            if _dispatched:
+                                _direct_html_count += 1
 
                             messages.append({
                                 "role": "tool",
@@ -963,7 +974,10 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                                             key, value = pair.split(':', 1)
                                             fn_args[key.strip()] = value.strip()
 
-                                    result_str = await self._execute_tool_call(fn_name, fn_args, context, on_direct_reply=on_direct_reply)
+                                    result_str, _dispatched = await self._execute_tool_call(fn_name, fn_args, context, on_direct_reply=on_direct_reply)
+                                    _tool_call_count += 1
+                                    if _dispatched:
+                                        _direct_html_count += 1
 
                                     # CRITICAL FIX: Rewrite history to look like a VALID tool call
                                     fake_tool_id = f"call_{uuid.uuid4().hex[:8]}"
@@ -1013,7 +1027,10 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                                     self.logger.warning(f"Could not parse args from XML: {args_str}")
                                     fn_args = {}
 
-                                result_str = await self._execute_tool_call(fn_name, fn_args, context, on_direct_reply=on_direct_reply)
+                                result_str, _dispatched = await self._execute_tool_call(fn_name, fn_args, context, on_direct_reply=on_direct_reply)
+                                _tool_call_count += 1
+                                if _dispatched:
+                                    _direct_html_count += 1
 
                                 # CRITICAL FIX: Rewrite history to look like a VALID tool call
                                 # Groq API rejects <function> tags in content on next turn
@@ -1052,8 +1069,11 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                     clean_content = self._RE_FUNC_CLEANUP.sub('', content)
                     clean_content = self._RE_FUNC_UNCLOSED.sub('', clean_content)
 
+                    # Suppress LLM follow-up when all tool calls delivered via direct_html
+                    if _direct_html_count > 0 and _direct_html_count == _tool_call_count:
+                        return None
                     return clean_content.strip()
-                        
+
                 except Exception as e:
                     # Recover from Groq 400 "tool_use_failed" errors
                     # Llama sometimes generates <function=name(args)></function>
@@ -1065,7 +1085,10 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                         fn_name, fn_args = parsed
                         self.logger.warning(f"Recovered tool call from failed_generation: {fn_name}")
 
-                        result_str = await self._execute_tool_call(fn_name, fn_args, context, on_direct_reply=on_direct_reply)
+                        result_str, _dispatched = await self._execute_tool_call(fn_name, fn_args, context, on_direct_reply=on_direct_reply)
+                        _tool_call_count += 1
+                        if _dispatched:
+                            _direct_html_count += 1
 
                         fake_tool_id = f"call_{uuid.uuid4().hex[:8]}"
                         messages.append({
@@ -1169,7 +1192,11 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                         parts=[types.Part(text=f"{system_prompt}\n\nMensagem Atual: {user_msg}")]
                     )
                 ]
-            
+
+            # Track direct_html dispatches to suppress redundant LLM follow-ups.
+            _tool_call_count = 0
+            _direct_html_count = 0
+
             while current_turn < max_turns:
                  current_turn += 1
                  try:
@@ -1225,8 +1252,11 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                          # Convert map to dict
                          fn_args = {k: v for k, v in part_with_fn.function_call.args.items()}
 
-                         result_str = await self._execute_tool_call(fn_name, fn_args, context, on_direct_reply=on_direct_reply)
-                         
+                         result_str, _dispatched = await self._execute_tool_call(fn_name, fn_args, context, on_direct_reply=on_direct_reply)
+                         _tool_call_count += 1
+                         if _dispatched:
+                             _direct_html_count += 1
+
                          # Parse result back to dict for Gemini SDK if expected, or just return text?
                          # Gemini expects a function_response part
                          try:
@@ -1255,6 +1285,9 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                         clean_text = self._RE_FUNC_CLEANUP.sub('', text_content)
                         clean_text = self._RE_FUNC_UNCLOSED.sub('', clean_text)
 
+                        # Suppress LLM follow-up when all tool calls delivered via direct_html
+                        if _direct_html_count > 0 and _direct_html_count == _tool_call_count:
+                            return None
                         return clean_text.strip() or ""
 
                  except Exception as e:

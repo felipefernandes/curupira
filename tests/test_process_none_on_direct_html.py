@@ -257,3 +257,133 @@ async def test_process_returns_text_with_mixed_tools(agent):
     assert len(direct_reply_calls) == 1
     # But LLM text should NOT be suppressed (mixed case)
     assert result is not None
+
+
+# ── failed_generation recovery path (line 1091) ───────────────────────────────
+
+@pytest.mark.asyncio
+async def test_process_returns_none_via_failed_generation_recovery(agent):
+    """
+    When Groq returns a 400 with failed_generation, the recovered tool call
+    uses direct_html → process() must return None (line 1091 + 1074).
+    """
+    direct_reply_calls = []
+
+    async def mock_direct_reply(html: str):
+        direct_reply_calls.append(html)
+
+    mock_skill = AsyncMock()
+    mock_skill.name = "list_reminders"
+    mock_skill.description = "list"
+    mock_skill.parameters = {}
+    mock_skill.execute.return_value = {
+        "status": "success",
+        "data": [],
+        "direct_html": "<b>0 lembretes.</b>",
+    }
+    agent.register_skill(mock_skill)
+
+    # First call: Groq 400 with failed_generation
+    error = Exception("tool_use_failed")
+    error.body = {
+        "error": {
+            "failed_generation": '<function=list_reminders({})</function>'
+        }
+    }
+    # Second call after recovery: plain text (should be suppressed)
+    final_resp = _make_groq_text_response("Você tem 0 lembretes.")
+
+    mock_client = MagicMock()
+    mock_client.chat.completions.create = AsyncMock(
+        side_effect=[error, final_resp]
+    )
+
+    with patch.object(agent, "_get_groq_client", return_value=mock_client):
+        result = await agent.process(
+            "lista meus lembretes",
+            {},
+            on_direct_reply=mock_direct_reply,
+        )
+
+    assert direct_reply_calls == ["<b>0 lembretes.</b>"]
+    assert result is None
+
+
+# ── Gemini path (line 1290) ────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_process_returns_none_gemini_when_all_direct_html(agent):
+    """
+    Gemini path: when the only function call dispatches direct_html,
+    process() must return None (line 1290).
+    """
+    direct_reply_calls = []
+
+    async def mock_direct_reply(html: str):
+        direct_reply_calls.append(html)
+
+    mock_skill = AsyncMock()
+    mock_skill.name = "get_hw_status"
+    mock_skill.description = "hw"
+    mock_skill.parameters = {}
+    mock_skill.execute.return_value = {
+        "status": "success",
+        "data": {},
+        "direct_html": "<b>CPU: 5%</b>",
+    }
+    agent.register_skill(mock_skill)
+
+    # Build Gemini mock responses
+    mock_genai = MagicMock()
+    mock_types = MagicMock()
+
+    class MockGenerateContentConfig:
+        def __init__(self, tools=None, **kwargs):
+            pass
+
+    mock_types.GenerateContentConfig = MockGenerateContentConfig
+
+    # First Gemini response: function call
+    fn_call = MagicMock()
+    fn_call.name = "get_hw_status"
+    fn_call.args = {}
+
+    part_fn = MagicMock()
+    part_fn.function_call = fn_call
+    part_fn.text = None
+
+    part_text = MagicMock()
+    part_text.function_call = None
+    part_text.text = ""
+
+    response1 = MagicMock()
+    response1.candidates = [MagicMock()]
+    response1.candidates[0].content.parts = [part_fn]
+    response1.usage_metadata = None
+
+    # Second Gemini response: text follow-up (should be suppressed)
+    part_final = MagicMock()
+    part_final.function_call = None
+    part_final.text = "Hardware está ótimo!"
+
+    response2 = MagicMock()
+    response2.candidates = [MagicMock()]
+    response2.candidates[0].content.parts = [part_final]
+    response2.usage_metadata = None
+
+    with patch.dict("sys.modules", {"google.genai": mock_genai, "google.genai.types": mock_types}):
+        mock_client = MagicMock()
+        agent.provider = "gemini"
+
+        with patch.object(agent, "_get_gemini_client", return_value=mock_client), \
+             patch.object(agent, "_get_gemini_tools", return_value=[]), \
+             patch.object(agent, "_generate_with_retry",
+                          AsyncMock(side_effect=[response1, response2])):
+            result = await agent.process(
+                "status do hardware",
+                {},
+                on_direct_reply=mock_direct_reply,
+            )
+
+    assert direct_reply_calls == ["<b>CPU: 5%</b>"]
+    assert result is None

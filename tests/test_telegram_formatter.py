@@ -185,3 +185,17 @@ class TestNormalizeFull:
         result = TelegramFormatter.normalize(text)
         assert "<b>negrito</b>" in result
         assert "<b>html</b>" in result
+
+    def test_think_block_only_returns_empty(self):
+        """Text that becomes empty after stripping <think> block returns ''."""
+        # Line 89: return "" when think-block stripping leaves empty text
+        result = TelegramFormatter.normalize("<think>só raciocínio</think>")
+        assert result == ""
+
+    def test_html_text_over_limit_truncated(self):
+        """HTML/Markdown text > 4096 chars is truncated (line 105)."""
+        # Use bold markdown so it goes through the html/markdown path, not plain
+        long_text = "**" + "a" * 5000 + "**"
+        result = TelegramFormatter.normalize(long_text)
+        assert len(result) <= 4096
+        assert result.endswith("...")

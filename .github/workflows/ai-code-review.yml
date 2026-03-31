@@ -53,7 +53,7 @@ jobs:
 
           # Caminho do arquivo de configuração (opcional)
           # Se não especificado, usa .iara.json na raiz
-          config_path: 'iara.json'
+          config_path: '.iara.json'
           
           # GitHub variables explícitas para a nova versão da Action Docker
           github_token: ${{ secrets.GITHUB_TOKEN }}

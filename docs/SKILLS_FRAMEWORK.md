@@ -122,6 +122,18 @@ O LLM receberá:
 
 O intuito deste envelopamento é reduzir o _"temperature noise"_ que faz as LLMs (Llama, Gemini) alucinarem chaves em suas passagens de raciocínio.
 
+### Retornando HTML direto ao Telegram (bypass do LLM)
+`return self.success_with_html(data=payload, html="<b>Card formatado</b>", summary="Resumo para o LLM")`
+
+Use quando a skill gera um card visual que **não deve ser reescrito pelo LLM**. O campo `direct_html` é interceptado pelo AgentBrain e enviado direto ao usuário via callback — o LLM recebe apenas o `summary` como contexto e **não gera uma segunda resposta**.
+
+> **Atenção: formatação e pipeline de normalização**
+>
+> - **`self.success()` / `self.error()`**: o texto gerado pelo LLM passa automaticamente pelo pipeline `TelegramFormatter.normalize()` antes de chegar ao usuário. A skill não precisa fazer nada.
+> - **`self.success_with_html()`**: o `direct_html` é enviado diretamente, sem passar pelo pipeline. A skill é responsável por usar apenas as tags permitidas pelo Telegram: `<b>`, `<i>`, `<u>`, `<s>`, `<code>`, `<pre>`, `<a>`, `<tg-spoiler>`. Se precisar converter Markdown para HTML dentro da skill, use `from core.telegram_formatter import TelegramFormatter` e chame `TelegramFormatter.normalize(seu_texto)`.
+>
+> Skills que usam `direct_html` atualmente: `hardware.py`, `introspection.py`, `reminders.py`.
+
 ---
 
 ## 4. Skills Multi-Tool (Uma Skill, Múltiplas Ferramentas)

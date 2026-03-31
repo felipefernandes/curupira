@@ -16,6 +16,9 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Remote Update — sentinel written before restart, deleted after confirmation
+.update_pending
+
 # Data
 data/
 

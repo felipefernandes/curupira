@@ -93,21 +93,23 @@ async def test_execute_tool_call_success(agent):
     mock_skill = AsyncMock()
     mock_skill.name = "test_skill"
     mock_skill.execute.return_value = {"status": "success", "data": {"status": "ok"}}
-    
+
     agent.register_skill(mock_skill)
-    
-    result = await agent._execute_tool_call("test_skill", {"arg": 1}, {})
-    
+
+    result, was_dispatched = await agent._execute_tool_call("test_skill", {"arg": 1}, {})
+
     assert '"status": "success"' in result
     assert '"data": {"status": "ok"}' in result
+    assert was_dispatched is False
     mock_skill.execute.assert_called_with({}, arg=1)
 
 @pytest.mark.asyncio
 async def test_execute_tool_call_not_found(agent):
     """Test execution of non-existent tool"""
-    result = await agent._execute_tool_call("missing_tool", {}, {})
+    result, was_dispatched = await agent._execute_tool_call("missing_tool", {}, {})
     assert "error" in result
     assert "not found" in result
+    assert was_dispatched is False
 
 @pytest.mark.asyncio
 async def test_execute_tool_call_exception(agent):
@@ -115,7 +117,7 @@ async def test_execute_tool_call_exception(agent):
     mock_skill = AsyncMock()
     mock_skill.name = "failing_tool"
     mock_skill.execute.side_effect = Exception("Boom")
-    
+
     agent.register_skill(mock_skill)
 
 @pytest.mark.asyncio
@@ -133,12 +135,13 @@ async def test_execute_tool_call_dispatches_direct_html(agent):
     agent.register_skill(mock_skill)
 
     mock_on_direct_reply = AsyncMock()
-    result = await agent._execute_tool_call("test_skill", {}, {}, on_direct_reply=mock_on_direct_reply)
+    result, was_dispatched = await agent._execute_tool_call("test_skill", {}, {}, on_direct_reply=mock_on_direct_reply)
 
     mock_on_direct_reply.assert_called_once_with("<b>Resultado</b>")
     parsed = json.loads(result)
     assert "direct_html" not in parsed
     assert parsed["status"] == "success"
+    assert was_dispatched is True
 
 @pytest.mark.asyncio
 async def test_execute_tool_call_direct_html_callback_exception(agent):
@@ -154,11 +157,12 @@ async def test_execute_tool_call_direct_html_callback_exception(agent):
     agent.register_skill(mock_skill)
 
     mock_on_direct_reply = AsyncMock(side_effect=Exception("Telegram down"))
-    result = await agent._execute_tool_call("test_skill", {}, {}, on_direct_reply=mock_on_direct_reply)
+    result, was_dispatched = await agent._execute_tool_call("test_skill", {}, {}, on_direct_reply=mock_on_direct_reply)
 
     parsed = json.loads(result)
     assert "direct_html" not in parsed
     assert parsed["status"] == "success"
+    assert was_dispatched is False  # dispatch failed, so False
 
 @pytest.mark.asyncio
 async def test_execute_tool_call_direct_html_stripped_without_callback(agent):
@@ -173,10 +177,11 @@ async def test_execute_tool_call_direct_html_stripped_without_callback(agent):
     }
     agent.register_skill(mock_skill)
 
-    result = await agent._execute_tool_call("test_skill", {}, {})
+    result, was_dispatched = await agent._execute_tool_call("test_skill", {}, {})
 
     parsed = json.loads(result)
     assert "direct_html" not in parsed
+    assert was_dispatched is False
 
 @pytest.mark.asyncio
 async def test_process_message_gemini_flow(agent):

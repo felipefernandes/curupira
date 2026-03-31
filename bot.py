@@ -9,6 +9,7 @@ from datetime import datetime
 import logging
 from skills.memory import MemoryManager
 from core.agent import AgentBrain
+from core.telegram_formatter import TelegramFormatter, _strip_unsupported_html as _fmt_strip
 
 # Configure Logging
 logging.basicConfig(
@@ -133,19 +134,9 @@ onboarding_states = {}
 
 logging.info(f"Iniciando bot com provedor: {config.AI_PROVIDER}")
 
-# Telegram HTML supports only: <b>, <i>, <u>, <s>, <code>, <pre>, <a>, <tg-spoiler>, <tg-emoji>
-# Strip any other tags to prevent parse errors while keeping valid formatting.
-_ALLOWED_HTML_TAGS = {'b', 'i', 'u', 's', 'code', 'pre', 'a', 'tg-spoiler', 'tg-emoji'}
-_RE_HTML_TAG = re.compile(r'<(/?)(\w[\w-]*)([^>]*)>')
-
-def _strip_unsupported_html(text: str) -> str:
-    """Remove HTML tags not supported by Telegram, keeping allowed ones intact."""
-    def _replace(m):
-        tag_name = m.group(2).lower()
-        if tag_name in _ALLOWED_HTML_TAGS:
-            return m.group(0)  # Keep allowed tags
-        return ''  # Strip unsupported tags
-    return _RE_HTML_TAG.sub(_replace, text)
+# _strip_unsupported_html is now provided by core.telegram_formatter (imported above).
+# The local alias keeps backward compatibility with existing tests and call sites.
+_strip_unsupported_html = _fmt_strip
 
 # Security Filter
 def is_authorized(user_id):
@@ -239,13 +230,13 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     async def intermediate_reply(text: str):
         """Callback to send preamble text before tool execution."""
         if text and text.strip():
+            safe_text = TelegramFormatter.normalize(text.strip())
             try:
-                await update.message.reply_text(text.strip(), parse_mode=ParseMode.HTML)
+                await update.message.reply_text(safe_text, parse_mode=ParseMode.HTML)
             except TelegramError as e:
                 logging.warning(f"Erro no intermediate_reply (HTML): {e}")
-                clean_text = _strip_unsupported_html(text.strip())
                 try:
-                    await update.message.reply_text(clean_text, parse_mode=ParseMode.HTML)
+                    await update.message.reply_text(_strip_unsupported_html(safe_text), parse_mode=ParseMode.HTML)
                 except TelegramError:
                     await update.message.reply_text(text.strip())
             except Exception as e:
@@ -282,9 +273,15 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     finally:
         typing_task.cancel()
 
-    # 4. Log Response
+    # 4. Guard: if process() returned None, all content was already delivered via
+    #    direct_html — no LLM follow-up needed.
+    if response_text is None:
+        return
+
+    # 5. Log Response & Send
+    response_text = TelegramFormatter.normalize(response_text)
     await memory_manager.log_message(user_id, "model", response_text)
-    
+
     try:
         await update.message.reply_text(response_text, parse_mode=ParseMode.HTML)
     except TelegramError as e:
@@ -339,8 +336,12 @@ async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
                 "memory_manager": memory_manager,
             }
             response_text = await brain.process(message, agent_context, chat_history=None)
+            if response_text is None:
+                response_text = ""
+            response_text = TelegramFormatter.normalize(response_text)
             try:
-                await context.bot.send_message(chat_id=job.chat_id, text=response_text, parse_mode=ParseMode.HTML)
+                if response_text:
+                    await context.bot.send_message(chat_id=job.chat_id, text=response_text, parse_mode=ParseMode.HTML)
             except TelegramError as e:
                 logging.warning(f"Erro de parsing HTML via Reminder: {e}")
                 clean_text = _strip_unsupported_html(response_text)
@@ -381,16 +382,17 @@ async def _send_proactive_message(context: ContextTypes.DEFAULT_TYPE, msg: str):
     """Helper to send a proactive message to the authorized user."""
     if config.AUTHORIZED_USER_ID == 0 or not msg:
         return
+    safe_msg = TelegramFormatter.normalize(msg)
     try:
         await context.bot.send_message(
             chat_id=config.AUTHORIZED_USER_ID,
-            text=msg,
+            text=safe_msg,
             parse_mode=ParseMode.HTML
         )
     except TelegramError:
         await context.bot.send_message(
             chat_id=config.AUTHORIZED_USER_ID,
-            text=msg
+            text=safe_msg
         )
     try:
         await memory_manager.log_message(config.AUTHORIZED_USER_ID, "model", msg)

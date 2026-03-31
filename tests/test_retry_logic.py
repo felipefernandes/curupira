@@ -120,8 +120,8 @@ class TestRetryLogic(unittest.IsolatedAsyncioTestCase):
         # Mock _generate_with_retry on the agent instance (since we are testing process which calls it)
         self.agent._generate_with_retry = AsyncMock(return_value=response_mock)
         
-        # Mock _execute_tool_call
-        self.agent._execute_tool_call = AsyncMock(return_value='{"status": "ok"}')
+        # Mock _execute_tool_call (returns tuple: result_str, was_dispatched)
+        self.agent._execute_tool_call = AsyncMock(return_value=('{"status": "ok"}', False))
         
         # Mock config
         with patch('core.agent.config.AI_PROVIDER', 'gemini'), \

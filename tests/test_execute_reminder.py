@@ -321,7 +321,7 @@ class TestExecuteReminderCallback(unittest.IsolatedAsyncioTestCase):
     async def test_fallback_to_job_data_msg_when_db_returns_none(self):
         """When DB returns None for message, job.data['msg'] is used as fallback."""
         context = _make_context(reminder_data={"id": 9, "msg": "fallback msg"})
-        mgr = _make_reminder_manager(message=None, is_task=False, recurrence=None)
+        mgr = _make_reminder_manager(message=None, is_task=False, recurrence=None)  # type: ignore[arg-type]
         mgr.get_reminder_message = AsyncMock(return_value=None)
         mem_mgr = _make_memory_manager()
         brain = MagicMock()

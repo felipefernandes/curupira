@@ -2,6 +2,7 @@ import os
 import shutil
 import subprocess
 import urllib.request
+import urllib.error
 import logging
 from typing import TypedDict, Dict, Any
 

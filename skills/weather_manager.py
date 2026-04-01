@@ -89,7 +89,7 @@ class WeatherSkill(BaseSkill):
             "required": ["city"]
         }
 
-    async def execute(self, context: Dict[str, Any], city: str) -> Dict[str, Any]:
+    async def execute(self, context: Dict[str, Any], city: str = "", **kwargs) -> Dict[str, Any]:  # type: ignore[override]
         try:
             lat, lon, name = await self.get_coordinates(city)
             

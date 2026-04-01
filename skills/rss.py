@@ -82,7 +82,8 @@ class RssReadSkill(BaseSkill):
             max_tokens=600,
             temperature=0.3
         )
-        return response.choices[0].message.content.strip()
+        content = response.choices[0].message.content
+        return content.strip() if content else ""
 
     async def _call_gemini(self, prompt: str) -> str:
         import os
@@ -100,7 +101,10 @@ class RssReadSkill(BaseSkill):
             config=types.GenerateContentConfig(temperature=0.3, max_output_tokens=600),
         )
         if response.candidates:
-            return response.candidates[0].content.parts[0].text.strip()
+            content = response.candidates[0].content
+            if content and content.parts:
+                text = content.parts[0].text
+                return text.strip() if text else ""
         return ""
 
     def _parse_translation(self, text: str, expected_count: int) -> List[str]:
@@ -220,7 +224,7 @@ class RssReadSkill(BaseSkill):
             logger.warning(f"Feed inválido ou inacessível: {url} — {bozo_reason}")
             return self.error(f"Não foi possível ler o feed: {url} ({bozo_reason})")
 
-        entries: List[Dict[str, str]] = []
+        entries: List[Dict[str, Any]] = []
         raw_titles = []
         for entry in feed.entries[:limit]:
             raw_titles.append(entry.get("title", "Sem título"))
@@ -246,7 +250,7 @@ class RssReadSkill(BaseSkill):
 
         return self.success(
             data={
-                "feed_title": feed.feed.get("title", url),
+                "feed_title": feed.feed.get("title", url),  # type: ignore[union-attr]
                 "total_available": len(feed.entries),
                 "entries": entries,
             },

@@ -67,7 +67,7 @@ async def test_server_fails_without_token(mcp_server_no_token_env):
         # If it connects, give it a moment to die
         await asyncio.sleep(1)
         
-        if client.process.returncode is not None:
+        if client.process is not None and client.process.returncode is not None:
              assert client.process.returncode != 0
              
     except (asyncio.TimeoutError, Exception):

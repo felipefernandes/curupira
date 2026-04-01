@@ -56,7 +56,7 @@ class CalendarReminderBridge:
         """
         self.user_id = user_id
         self.logger = logging.getLogger("CalendarReminderBridge")
-        self.reminder_manager = ReminderManager(db_path=str(DB_FILE))
+        self.reminder_manager = ReminderManager(db_path=DB_FILE)
 
     def _load_token(self) -> Credentials | None:
         """

@@ -157,6 +157,7 @@ class TestEncryptionRoundTrip:
         assert decrypted == sample_token_json
 
         # Verificar que JSON é válido
+        assert decrypted is not None
         token_data = json.loads(decrypted)
         assert token_data["token"] == "ya29.a0AfB_byC..."
 

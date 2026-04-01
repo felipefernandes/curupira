@@ -129,19 +129,19 @@ def test_check_connectivity_fail_http_errors(mock_config):
     mock_config.GROQ_API_KEY = "gsk_123"
     
     # Simula 401
-    with patch("urllib.request.urlopen", side_effect=HTTPError(url="", code=401, msg="", hdrs=None, fp=None)):
+    with patch("urllib.request.urlopen", side_effect=HTTPError(url="", code=401, msg="", hdrs=None, fp=None)):  # type: ignore[arg-type]
         ok, failures = health.check_connectivity()
         assert not ok
         assert any("401" in f for f in failures)
-        
+
     # Simula 403
-    with patch("urllib.request.urlopen", side_effect=HTTPError(url="", code=403, msg="", hdrs=None, fp=None)):
+    with patch("urllib.request.urlopen", side_effect=HTTPError(url="", code=403, msg="", hdrs=None, fp=None)):  # type: ignore[arg-type]
         ok, failures = health.check_connectivity()
         assert not ok
         assert any("403" in f for f in failures)
-        
+
     # Simula genérico 500
-    with patch("urllib.request.urlopen", side_effect=HTTPError(url="", code=500, msg="", hdrs=None, fp=None)):
+    with patch("urllib.request.urlopen", side_effect=HTTPError(url="", code=500, msg="", hdrs=None, fp=None)):  # type: ignore[arg-type]
         ok, failures = health.check_connectivity()
         assert not ok
         assert any("500" in f for f in failures)

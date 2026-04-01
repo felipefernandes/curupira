@@ -22,7 +22,7 @@ async def run_tests():
     from skills.reminders import AddReminderSkill, ListRemindersSkill
     
     manager = MockManager()
-    skill = AddReminderSkill(manager)
+    skill = AddReminderSkill(manager)  # type: ignore[arg-type]
     
     context = {
         "user_id": 999,
@@ -88,7 +88,7 @@ async def run_tests():
         (123, "Test 1", datetime.now() + timedelta(days=1)),
         (124, "Test 2", datetime.now() + timedelta(days=2))
     ]
-    list_skill = ListRemindersSkill(manager)
+    list_skill = ListRemindersSkill(manager)  # type: ignore[arg-type]
     res_list = await list_skill.execute(context)
     print(res_list["summary"])
     assert "Test 1" in res_list["summary"]

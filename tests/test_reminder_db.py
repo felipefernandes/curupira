@@ -12,6 +12,8 @@ import os
 import tempfile
 import unittest
 from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import aiosqlite
@@ -30,11 +32,11 @@ class TestReminderManagerDB(unittest.IsolatedAsyncioTestCase):
         tmp.close()
         self.db_path = tmp.name
         # Use MemoryManager to create schema (users, facts, conversations, reminders + migration)
-        mm = MemoryManager(db_path=self.db_path)
+        mm = MemoryManager(db_path=Path(self.db_path))
         await mm.init_db()
         await mm.add_user(FAKE_USER_ID, "testuser", "Test User")
-        self.manager = ReminderManager(db_path=self.db_path)
-        self.manager._execute_reminder_callback = unittest.mock.MagicMock()
+        self.manager = ReminderManager(db_path=Path(self.db_path))
+        self.manager._execute_reminder_callback = MagicMock()
 
     async def asyncTearDown(self):
         os.unlink(self.db_path)
@@ -46,6 +48,8 @@ class TestReminderManagerDB(unittest.IsolatedAsyncioTestCase):
     async def test_add_reminder_returns_id(self):
         """add_reminder persists the row and returns a positive integer ID."""
         r_id = await self.manager.add_reminder(FAKE_USER_ID, "test msg", 3600)
+        self.assertIsNotNone(r_id)
+        assert r_id is not None
         self.assertIsInstance(r_id, int)
         self.assertGreater(r_id, 0)
 
@@ -85,7 +89,7 @@ class TestReminderManagerDB(unittest.IsolatedAsyncioTestCase):
             FAKE_USER_ID, "daily task", 3600,
             recurrence="DAILY@09:00", is_task=True,
         )
-        rows = await self.manager.get_active_reminders(FAKE_USER_ID)
+        rows = list(await self.manager.get_active_reminders(FAKE_USER_ID))
         self.assertEqual(len(rows), 1)
         r_id, msg, at_dt, recurrence, is_task = rows[0]
         self.assertEqual(msg, "daily task")
@@ -96,7 +100,7 @@ class TestReminderManagerDB(unittest.IsolatedAsyncioTestCase):
         """Cancelled reminders are not returned by get_active_reminders."""
         r_id = await self.manager.add_reminder(FAKE_USER_ID, "cancelled", 300)
         await self.manager.delete_reminder(r_id, FAKE_USER_ID)
-        rows = await self.manager.get_active_reminders(FAKE_USER_ID)
+        rows = list(await self.manager.get_active_reminders(FAKE_USER_ID))
         self.assertEqual(len(rows), 0)
 
     # ------------------------------------------------------------------
@@ -145,6 +149,7 @@ class TestReminderManagerDB(unittest.IsolatedAsyncioTestCase):
             ) as cursor:
                 row = await cursor.fetchone()
                 self.assertIsNotNone(row)
+                assert row is not None
                 stored = datetime.fromisoformat(row[0]) if isinstance(row[0], str) else row[0]
                 # Should be within 1 second of new_time
                 self.assertAlmostEqual(
@@ -234,9 +239,9 @@ class TestReminderManagerDB(unittest.IsolatedAsyncioTestCase):
 class TestReminderManagerDBErrors(unittest.IsolatedAsyncioTestCase):
     """Tests that DB methods return safe defaults and log errors on DB failure."""
 
-    def _make_broken_manager(self):
+    def _make_broken_manager(self) -> Any:
         """Returns a ReminderManager pointing at an invalid DB path."""
-        mgr = ReminderManager(db_path="/nonexistent/path/curupira.db")
+        mgr = ReminderManager(db_path=Path("/nonexistent/path/curupira.db"))
         mgr.logger = MagicMock()
         return mgr
 

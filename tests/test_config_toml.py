@@ -30,7 +30,7 @@ _CONFIG_MODULE_PATH = Path(__file__).resolve().parent.parent / "core" / "config.
 
 # ── Helpers ────────────────────────────────────────────────────────────
 
-def _load_config_isolated(toml_content: str = "", env_overrides: dict = None, monkeypatch=None):
+def _load_config_isolated(toml_content: str = "", env_overrides: dict = None, monkeypatch=None):  # type: ignore[assignment]
     """
     Carrega core.config em um namespace isolado sem modificar sys.modules.
     Isso evita qualquer poluição de estado entre testes.
@@ -68,12 +68,13 @@ def _load_config_isolated(toml_content: str = "", env_overrides: dict = None, mo
 
     # Cria um módulo isolado sem inserir em sys.modules
     spec = importlib.util.spec_from_file_location("_test_config_isolated", _CONFIG_MODULE_PATH)
+    assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
 
     with patch("pathlib.Path.is_file", _fake_is_file), \
          patch("builtins.open", m), \
          patch("dotenv.load_dotenv"):
-        spec.loader.exec_module(mod)
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
 
     return mod
 
@@ -398,12 +399,13 @@ def test_toml_invalido_retorna_defaults(monkeypatch):
         monkeypatch.delenv(key, raising=False)
 
     spec = importlib.util.spec_from_file_location("_test_config_isolated", _CONFIG_MODULE_PATH)
+    assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
 
     with patch("pathlib.Path.is_file", _fake_is_file), \
          patch("builtins.open", m), \
          patch("dotenv.load_dotenv"):
-        spec.loader.exec_module(mod)
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
 
     # Com TOML inválido, deve usar defaults internos
     assert mod.AI_PROVIDER == "groq"

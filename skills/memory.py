@@ -246,7 +246,7 @@ class MemoryManager:
             """, (user_id, cutoff_time, limit)) as cursor:
                 rows = await cursor.fetchall()
 
-        for role, content, metadata_json in reversed(rows):
+        for role, content, metadata_json in reversed(list(rows)):
             # Normalise legacy "model" → "assistant"
             if role == "model":
                 role = "assistant"

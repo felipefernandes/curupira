@@ -239,6 +239,7 @@ class TestPatternAnalyzer:
     def test_build_message_with_topic(self):
         analyzer = PatternAnalyzer(MagicMock(), _mock_config())
         msg = analyzer._build_message("sports_manager", "botafogo")
+        assert msg is not None
         assert "Botafogo" in msg
         assert msg == SUGGESTION_REGISTRY["sports_manager"]["template"].format(topic="Botafogo")
 

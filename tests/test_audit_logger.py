@@ -26,9 +26,9 @@ def cleanup_audit_log():
     # Fechar e resetar singleton antes do teste
     if core.audit_logger._audit_logger_instance is not None:
         # Fechar todos os handlers para liberar o arquivo
-        for handler in core.audit_logger._audit_logger_instance.logger.handlers[:]:
+        for handler in core.audit_logger._audit_logger_instance.logger.handlers[:]:  # type: ignore[union-attr]
             handler.close()
-            core.audit_logger._audit_logger_instance.logger.removeHandler(handler)
+            core.audit_logger._audit_logger_instance.logger.removeHandler(handler)  # type: ignore[union-attr]
     core.audit_logger._audit_logger_instance = None
 
     if AUDIT_LOG_FILE.exists():
@@ -37,9 +37,9 @@ def cleanup_audit_log():
 
     # Fechar e resetar singleton depois do teste
     if core.audit_logger._audit_logger_instance is not None:
-        for handler in core.audit_logger._audit_logger_instance.logger.handlers[:]:
+        for handler in core.audit_logger._audit_logger_instance.logger.handlers[:]:  # type: ignore[union-attr]
             handler.close()
-            core.audit_logger._audit_logger_instance.logger.removeHandler(handler)
+            core.audit_logger._audit_logger_instance.logger.removeHandler(handler)  # type: ignore[union-attr]
     core.audit_logger._audit_logger_instance = None
 
     if AUDIT_LOG_FILE.exists():

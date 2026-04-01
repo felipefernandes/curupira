@@ -285,7 +285,7 @@ async def test_process_returns_none_via_failed_generation_recovery(agent):
 
     # First call: Groq 400 with failed_generation
     error = Exception("tool_use_failed")
-    error.body = {
+    error.body = {  # type: ignore[attr-defined]
         "error": {
             "failed_generation": '<function=list_reminders({})</function>'
         }

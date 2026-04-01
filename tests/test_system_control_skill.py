@@ -303,7 +303,7 @@ class TestSystemControlSkill:
 
         # Temporarily reduce timeout for faster test
         original_timeout = self.skill.COMMAND_TIMEOUT
-        self.skill.COMMAND_TIMEOUT = 0.1
+        self.skill.COMMAND_TIMEOUT = 0.1  # type: ignore[misc]
 
         with patch("asyncio.create_subprocess_exec", side_effect=mock_create_subprocess):
             with pytest.raises(asyncio.TimeoutError):

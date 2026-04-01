@@ -91,6 +91,8 @@ class HardwareMonitoringSkill(BaseSkill):
 
     def _get_metrics(self) -> Dict[str, Any]:
         """Blocking helper function to fetch metrics via psutil."""
+        if psutil is None:
+            raise RuntimeError("psutil not installed")
         # RAM
         mem = psutil.virtual_memory()
         ram_total = f"{mem.total / (1024**3):.1f}GB"
@@ -107,7 +109,7 @@ class HardwareMonitoringSkill(BaseSkill):
         temp = "N/A"
         if hasattr(psutil, "sensors_temperatures"):
             try:
-                temps = psutil.sensors_temperatures()
+                temps = psutil.sensors_temperatures()  # type: ignore[attr-defined]
                 if temps:
                     # Generic logic: grab first available sensor
                     # For RPi, usually 'cpu_thermal'

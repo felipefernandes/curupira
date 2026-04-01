@@ -404,9 +404,9 @@ class SportsManagerSkill(BaseSkill):
         self,
         action: str,
         sport: str,
-        team: str = None,
-        league: str = None,
-        limit: int = None,
+        team: Optional[str] = None,
+        league: Optional[str] = None,
+        limit: Optional[int] = None,
     ) -> str:
         """
         Gera chave de cache determinística.
@@ -440,7 +440,7 @@ class SportsManagerSkill(BaseSkill):
         return self._http_client
 
     async def _fetch_with_retry(
-        self, url: str, headers: Dict = None, retries: int = 3
+        self, url: str, headers: Optional[Dict] = None, retries: int = 3
     ) -> Dict[str, Any]:
         """
         Executa requisição HTTP com retry exponencial.

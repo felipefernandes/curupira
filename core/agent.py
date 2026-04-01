@@ -347,7 +347,7 @@ class AgentBrain:
     def _is_retryable_error(self, e: Exception) -> bool:
         """Determines if an exception is a retryable rate limit error."""
         try:
-            from google.api_core import exceptions as google_exceptions
+            from google.api_core import exceptions as google_exceptions  # type: ignore
             if isinstance(e, google_exceptions.ResourceExhausted):
                 return True
         except ImportError:

@@ -4,7 +4,7 @@ Usado durante autenticação com Google Calendar
 """
 import asyncio
 import logging
-from aiohttp import web
+from aiohttp import web  # type: ignore
 from typing import Optional
 from urllib.parse import parse_qs, urlparse
 

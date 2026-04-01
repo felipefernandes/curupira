@@ -7,8 +7,8 @@ import asyncio
 import logging
 from typing import Any, Dict
 
-import httpx
-import trafilatura
+import httpx  # type: ignore
+import trafilatura  # type: ignore
 
 from skills.base import BaseSkill
 

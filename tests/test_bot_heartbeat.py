@@ -1,7 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from bot import system_heartbeat
-from core import config
 from telegram.constants import ParseMode
 from telegram.error import TelegramError
 

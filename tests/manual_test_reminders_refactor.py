@@ -48,7 +48,7 @@ async def run_tests():
     res = await skill.execute(context, "Test 3", when)
     print(res)
     assert res["status"] == "success"
-    assert f"01/01 às 10:00" in res["info"] or f"01/01" in res["target_time"], "Falha no teste de data absoluta"
+    assert "01/01 às 10:00" in res["info"] or "01/01" in res["target_time"], "Falha no teste de data absoluta"
 
     print("\n--- Test 3.1: Natural Language (Ambiguous '10h') ---")
     res = await skill.execute(context, "Test 3.1", "amanhã as 10h")

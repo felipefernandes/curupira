@@ -5,7 +5,6 @@ Covers: format detection, Markdown→HTML conversion, tag stripping,
 idempotency, edge cases, and full normalize() pipeline.
 """
 
-import pytest
 from core.telegram_formatter import TelegramFormatter
 
 

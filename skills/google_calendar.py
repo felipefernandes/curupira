@@ -13,7 +13,6 @@ Follows Curupira MCP-Lite framework (single skill, multiple tools).
 
 import asyncio
 import httpx
-import json
 import logging
 import re
 from datetime import datetime, timedelta
@@ -961,7 +960,7 @@ class GoogleCalendarSkill(BaseSkill):
 
             return self.success(
                 {"deleted": event_id},
-                message=f"✅ Evento cancelado com sucesso"
+                message="✅ Evento cancelado com sucesso"
             )
 
         except httpx.TimeoutException:

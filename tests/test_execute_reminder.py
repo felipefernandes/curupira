@@ -8,86 +8,23 @@ it in isolation — following the same pattern as test_bot_typing.py.
 Ref: Issue #76 — coverage for bot.py execute_reminder().
 """
 
-import asyncio
 import unittest
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch, call
-from telegram.error import TelegramError
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from skills.reminders import ReminderManager
 
 
 # ---------------------------------------------------------------------------
-# Exact replica of execute_reminder() from bot.py
-# (dependencies injected as parameters for testability)
+# Import real execute_reminder() from bot.py and patch variables
 # ---------------------------------------------------------------------------
+from bot import execute_reminder
 
 async def _execute_reminder_impl(context, reminder_manager, memory_manager, brain):
-    """Mirror of execute_reminder() in bot.py — used for isolated unit tests."""
-    job = context.job
-    reminder_data = job.data
-
-    if not isinstance(reminder_data, dict):
-        # Fallback for old plain-text jobs
-        await context.bot.send_message(chat_id=job.chat_id, text=f"⏰ Lembrete: {reminder_data}")
-        return
-
-    reminder_id = reminder_data["id"]
-    db_message = await reminder_manager.get_reminder_message(reminder_id)
-    message = db_message if db_message else reminder_data.get("msg", "Lembrete sem texto")
-
-    status = await reminder_manager.get_reminder_status(reminder_id)
-    if status != "PENDING":
-        return
-
-    recurrence, is_task, remind_at = await reminder_manager.get_reminder_recurrence(reminder_id)
-
-    # --- Execute the reminder action ---
-    task_error = False
-    if is_task:
-        try:
-            user_facts = await memory_manager.get_facts(job.chat_id)
-            assistant_surname = await memory_manager.get_fact_value(job.chat_id, "assistant_surname") or ""
-            agent_context = {
-                "user_id": job.chat_id,
-                "user_name": "Usuário",
-                "user_facts": user_facts,
-                "job_queue": context.job_queue,
-                "assistant_surname": assistant_surname,
-            }
-            response_text = await brain.process(message, agent_context, chat_history=[])
-            try:
-                await context.bot.send_message(chat_id=job.chat_id, text=response_text, parse_mode="HTML")
-            except TelegramError:
-                await context.bot.send_message(chat_id=job.chat_id, text=response_text)
-            except Exception as e:
-                raise e
-        except Exception:
-            task_error = True
-            try:
-                await context.bot.send_message(
-                    chat_id=job.chat_id,
-                    text=f"⚠️ Erro ao executar tarefa agendada: {message}",
-                )
-            except Exception:
-                pass  # notification failure is logged in bot.py; here we just swallow it
-    else:
-        await context.bot.send_message(chat_id=job.chat_id, text=f"⏰ Lembrete: {message}")
-
-    # --- Reschedule or mark as sent ---
-    if recurrence:
-        next_time = reminder_manager._next_occurrence(recurrence, from_time=remind_at)
-        await reminder_manager.reset_recurring_reminder(reminder_id, next_time)
-        next_delay = (next_time - datetime.now()).total_seconds()
-        context.job_queue.run_once(
-            lambda ctx: None,
-            when=max(next_delay, 1),
-            chat_id=job.chat_id,
-            data={"id": reminder_id, "msg": message},
-            name=f"reminder_{reminder_id}",
-        )
-    if not recurrence and not task_error:
-        await reminder_manager.mark_as_sent(reminder_id)
+    with patch("bot.reminder_manager", reminder_manager), \
+         patch("bot.memory_manager", memory_manager), \
+         patch("bot.brain", brain):
+        await execute_reminder(context)
 
 
 # ---------------------------------------------------------------------------
@@ -360,6 +297,48 @@ class TestExecuteReminderCallback(unittest.IsolatedAsyncioTestCase):
         except Exception:
             self.fail("Exception propagated when both brain and send_message failed")
 
+        mgr.mark_as_sent.assert_not_awaited()
+
+    async def test_execute_reminder_job_is_none_returns_early(self):
+        """When context.job is None, returns early without processing."""
+        context = MagicMock()
+        context.job = None
+        mgr = _make_reminder_manager()
+        mem_mgr = _make_memory_manager()
+        brain = MagicMock()
+
+        await _execute_reminder_impl(context, mgr, mem_mgr, brain)
+        context.bot.send_message.assert_not_called()
+
+    async def test_execute_reminder_chat_id_is_none_returns_early(self):
+        """When context.job.chat_id is None, returns early and logs error."""
+        context = MagicMock()
+        context.job = MagicMock()
+        context.job.chat_id = None
+        context.job.data = {"id": 14, "msg": "test"}
+        mgr = _make_reminder_manager()
+        mem_mgr = _make_memory_manager()
+        brain = MagicMock()
+
+        with patch("bot.logging.error") as mock_log_err:
+            await _execute_reminder_impl(context, mgr, mem_mgr, brain)
+            mock_log_err.assert_called_once_with("execute_reminder: job has no chat_id")
+
+    async def test_execute_reminder_memory_manager_is_none_fails_gracefully(self):
+        """When memory_manager is None, task execution fails gracefully with error notification."""
+        context = _make_context(chat_id=123, reminder_data={"id": 15, "msg": "tarefa"})
+        mgr = _make_reminder_manager(message="tarefa", is_task=True, recurrence=None)
+        brain = MagicMock()
+
+        # memory_manager is None
+        await _execute_reminder_impl(context, mgr, None, brain)
+
+        # Should send error message to Telegram
+        context.bot.send_message.assert_called_once()
+        text = context.bot.send_message.call_args[1]["text"]
+        self.assertIn("⚠️ Erro ao executar tarefa agendada", text)
+        self.assertIn("sistema de memória está desativado", text)
+        # Should not mark as sent
         mgr.mark_as_sent.assert_not_awaited()
 
 

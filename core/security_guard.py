@@ -14,7 +14,7 @@ before execution, protecting against:
 import logging
 import re
 import time
-from typing import Dict, Any, Tuple, List
+from typing import Dict, Tuple, List
 from core import config
 
 

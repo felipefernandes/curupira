@@ -4,8 +4,6 @@ Tests para PKCE State Management (skills/oauth_pkce_state.py)
 import json
 import pytest
 from datetime import datetime, timedelta
-from pathlib import Path
-from unittest.mock import patch, mock_open
 
 from skills.oauth_pkce_state import PKCEState, PKCE_STATE_FILE
 

@@ -7,7 +7,7 @@ used in the responder() handler, without importing the full bot module.
 """
 import asyncio
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 
 # ---------------------------------------------------------------------------

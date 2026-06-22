@@ -664,7 +664,7 @@ class SystemControlSkill(BaseSkill):
                     "output": stdout,
                     "returncode": returncode
                 },
-                message=f"✅ Comando executado com sucesso"
+                message="✅ Comando executado com sucesso"
             )
 
         except asyncio.TimeoutError:

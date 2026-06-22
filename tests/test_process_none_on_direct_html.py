@@ -8,7 +8,6 @@ Also verifies that process() still returns text when:
   - only some tools used direct_html (mixed case)
 """
 
-import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from core.agent import AgentBrain

@@ -1,7 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from core.agent import AgentBrain
-from core import config
 
 @pytest.fixture
 def mock_agent():

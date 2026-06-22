@@ -60,9 +60,9 @@ class HardwareMonitoringSkill(BaseSkill):
             
             # Build pre-formatted HTML sent directly to Telegram (bypasses LLM)
             html_lines = [
-                f"🌡️ <b>Status do Sistema</b>",
+                "🌡️ <b>Status do Sistema</b>",
                 f"🕒 <b>Hora:</b> {metrics['system_time']}",
-                f"",
+                "",
                 f"🧠 <b>RAM:</b> {metrics['ram_used']}/{metrics['ram_total']} ({metrics['ram_percent']}%)",
                 f"⚙️ <b>CPU:</b> {metrics['cpu_percent']}%",
                 f"💾 <b>Disco:</b> {metrics['disk_free']} livres",

@@ -836,3 +836,198 @@ class TestStructuredConversationHistory:
         roles = [c.get("role") for c in content_calls]
         assert "user" in roles
         assert "model" in roles
+
+
+# --- Novas Coberturas (Parsing Resiliente & CoT) ---
+
+@pytest.mark.asyncio
+async def test_process_strips_think_block_groq(agent, mock_groq_client):
+    """Garante que o loop do Groq remove blocos <think> do output final."""
+    msg_final = MagicMock()
+    msg_final.content = "<think>Raciocínio interno complexo.</think>Aqui está a resposta real."
+    msg_final.tool_calls = None
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock(message=msg_final)]
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.side_effect = [mock_response]
+
+    response = await agent.process("Olá", {})
+    assert response == "Aqui está a resposta real."
+
+
+@pytest.mark.asyncio
+async def test_process_strips_think_block_gemini(agent):
+    """Garante que o loop do Gemini remove blocos <think> do output final."""
+    mock_genai = MagicMock()
+    mock_types = MagicMock()
+    class MockGenerateContentConfig:
+        def __init__(self, tools=None): pass
+    mock_types.GenerateContentConfig = MockGenerateContentConfig
+    mock_genai.types = mock_types
+
+    mock_response = MagicMock()
+    mock_resp_part = MagicMock()
+    mock_resp_part.text = "<think>Calculando...</think>Aqui está o resultado do Gemini."
+    mock_resp_part.function_call = None
+    mock_response.candidates = [MagicMock()]
+    mock_response.candidates[0].content.parts = [mock_resp_part]
+
+    mock_genai_client = MagicMock()
+    mock_genai_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
+    agent.provider = "gemini"
+
+    with patch.dict("sys.modules", {"google.genai": mock_genai, "google.genai.types": mock_types}):
+        with patch.object(agent, "_get_gemini_client", return_value=mock_genai_client):
+            with patch.object(agent, "_get_gemini_tools", return_value=None):
+                response = await agent.process("Olá", {})
+
+    assert response == "Aqui está o resultado do Gemini."
+
+
+@pytest.mark.asyncio
+async def test_process_resilient_tool_name_with_spaces(agent, mock_groq_client):
+    """Garante o parsing correto se o nome do tool_call vier com argumentos e espaços embutidos."""
+    tool_call = MagicMock()
+    tool_call.id = "call_1"
+    tool_call.function.name = "test_skill {\"arg\": 1}"
+    tool_call.function.arguments = "{\"arg\": 1}"
+
+    msg_tool = MagicMock()
+    msg_tool.tool_calls = [tool_call]
+    msg_tool.content = None
+
+    mock_response_1 = MagicMock()
+    mock_response_1.choices = [MagicMock(message=msg_tool)]
+
+    msg_final = MagicMock()
+    msg_final.content = "Pronto."
+    msg_final.tool_calls = None
+
+    mock_response_2 = MagicMock()
+    mock_response_2.choices = [MagicMock(message=msg_final)]
+
+    mock_skill = AsyncMock()
+    mock_skill.name = "test_skill"
+    mock_skill.execute.return_value = {"status": "success", "data": "ok"}
+    agent.register_skill(mock_skill)
+
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.side_effect = [mock_response_1, mock_response_2]
+
+    response = await agent.process("Rodar", {})
+    assert response == "Pronto."
+    mock_skill.execute.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_process_resilient_tool_args_malformed_json_recovered(agent, mock_groq_client):
+    """Garante que a extração resiliente recupera JSONs malformados com texto ao redor."""
+    tool_call = MagicMock()
+    tool_call.id = "call_1"
+    tool_call.function.name = "test_skill"
+    tool_call.function.arguments = "preamble text { \"arg\": 1 } postamble text"
+
+    msg_tool = MagicMock()
+    msg_tool.tool_calls = [tool_call]
+    msg_tool.content = None
+
+    mock_response_1 = MagicMock()
+    mock_response_1.choices = [MagicMock(message=msg_tool)]
+
+    msg_final = MagicMock()
+    msg_final.content = "Pronto."
+    msg_final.tool_calls = None
+
+    mock_response_2 = MagicMock()
+    mock_response_2.choices = [MagicMock(message=msg_final)]
+
+    mock_skill = AsyncMock()
+    mock_skill.name = "test_skill"
+    mock_skill.execute.return_value = {"status": "success", "data": "ok"}
+    agent.register_skill(mock_skill)
+
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.side_effect = [mock_response_1, mock_response_2]
+
+    response = await agent.process("Rodar", {})
+    assert response == "Pronto."
+    mock_skill.execute.assert_called_once_with({}, arg=1)
+
+
+@pytest.mark.asyncio
+async def test_process_resilient_tool_args_malformed_json_failed(agent, mock_groq_client):
+    """Garante que se falhar totalmente o parser resiliente de argumentos, cai em dict vazio."""
+    tool_call = MagicMock()
+    tool_call.id = "call_1"
+    tool_call.function.name = "test_skill"
+    tool_call.function.arguments = "completamente invalido"
+
+    msg_tool = MagicMock()
+    msg_tool.tool_calls = [tool_call]
+    msg_tool.content = None
+
+    mock_response_1 = MagicMock()
+    mock_response_1.choices = [MagicMock(message=msg_tool)]
+
+    msg_final = MagicMock()
+    msg_final.content = "Pronto."
+    msg_final.tool_calls = None
+
+    mock_response_2 = MagicMock()
+    mock_response_2.choices = [MagicMock(message=msg_final)]
+
+    mock_skill = AsyncMock()
+    mock_skill.name = "test_skill"
+    mock_skill.execute.return_value = {"status": "success", "data": "ok"}
+    agent.register_skill(mock_skill)
+
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.side_effect = [mock_response_1, mock_response_2]
+
+    response = await agent.process("Rodar", {})
+    assert response == "Pronto."
+    mock_skill.execute.assert_called_once_with({})
+
+
+@pytest.mark.asyncio
+async def test_process_gemini_error_handling(agent):
+    """Garante que erros de rate limit (429) no Gemini são capturados corretamente e retornam mensagem amigável."""
+    mock_genai = MagicMock()
+    mock_types = MagicMock()
+    class MockGenerateContentConfig:
+        def __init__(self, tools=None): pass
+    mock_types.GenerateContentConfig = MockGenerateContentConfig
+    mock_genai.types = mock_types
+
+    mock_genai_client = MagicMock()
+    mock_genai_client.aio.models.generate_content = AsyncMock(side_effect=Exception("Rate limit exceeded 429"))
+    agent.provider = "gemini"
+
+    with patch.dict("sys.modules", {"google.genai": mock_genai, "google.genai.types": mock_types}):
+        with patch.object(agent, "_get_gemini_client", return_value=mock_genai_client):
+            with patch.object(agent, "_get_gemini_tools", return_value=None):
+                response = await agent.process("Olá", {})
+
+    assert "sobrecarregado" in response
+
+
+@pytest.mark.asyncio
+async def test_process_gemini_generic_error(agent):
+    """Garante que erros genéricos de API no Gemini são capturados corretamente e retornam mensagem amigável genérica."""
+    mock_genai = MagicMock()
+    mock_types = MagicMock()
+    class MockGenerateContentConfig:
+        def __init__(self, tools=None): pass
+    mock_types.GenerateContentConfig = MockGenerateContentConfig
+    mock_genai.types = mock_types
+
+    mock_genai_client = MagicMock()
+    mock_genai_client.aio.models.generate_content = AsyncMock(side_effect=Exception("API Key expired"))
+    agent.provider = "gemini"
+
+    with patch.dict("sys.modules", {"google.genai": mock_genai, "google.genai.types": mock_types}):
+        with patch.object(agent, "_get_gemini_client", return_value=mock_genai_client):
+            with patch.object(agent, "_get_gemini_tools", return_value=None):
+                response = await agent.process("Olá", {})
+
+    assert "erro ao processar" in response

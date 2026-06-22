@@ -1,7 +1,6 @@
 import os
 import sys
 import importlib
-import pytest
 from unittest.mock import patch, mock_open
 
 # Add parent directory to path to import core

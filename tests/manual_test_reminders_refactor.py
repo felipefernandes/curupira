@@ -22,7 +22,7 @@ async def run_tests():
     from skills.reminders import AddReminderSkill, ListRemindersSkill
     
     manager = MockManager()
-    skill = AddReminderSkill(manager)
+    skill = AddReminderSkill(manager)  # type: ignore[arg-type]
     
     context = {
         "user_id": 999,
@@ -48,7 +48,7 @@ async def run_tests():
     res = await skill.execute(context, "Test 3", when)
     print(res)
     assert res["status"] == "success"
-    assert f"01/01 às 10:00" in res["info"] or f"01/01" in res["target_time"], "Falha no teste de data absoluta"
+    assert "01/01 às 10:00" in res["info"] or "01/01" in res["target_time"], "Falha no teste de data absoluta"
 
     print("\n--- Test 3.1: Natural Language (Ambiguous '10h') ---")
     res = await skill.execute(context, "Test 3.1", "amanhã as 10h")
@@ -88,7 +88,7 @@ async def run_tests():
         (123, "Test 1", datetime.now() + timedelta(days=1)),
         (124, "Test 2", datetime.now() + timedelta(days=2))
     ]
-    list_skill = ListRemindersSkill(manager)
+    list_skill = ListRemindersSkill(manager)  # type: ignore[arg-type]
     res_list = await list_skill.execute(context)
     print(res_list["summary"])
     assert "Test 1" in res_list["summary"]

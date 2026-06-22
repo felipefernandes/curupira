@@ -3,9 +3,7 @@ Tests para Audit Logger (core/audit_logger.py)
 """
 import json
 import pytest
-from pathlib import Path
 from datetime import datetime
-from unittest.mock import patch
 
 from core.audit_logger import (
     AuditLogger,
@@ -19,31 +17,44 @@ from core.audit_logger import (
 
 
 @pytest.fixture
-def cleanup_audit_log():
-    """Remove arquivo de audit log e reseta singleton antes/depois de cada teste."""
+def cleanup_audit_log(tmp_path):
+    """Remove arquivo de audit log e reseta singleton antes/depois de cada teste, usando caminhos temporários."""
     import core.audit_logger
+    import logging
 
-    # Fechar e resetar singleton antes do teste
-    if core.audit_logger._audit_logger_instance is not None:
-        # Fechar todos os handlers para liberar o arquivo
-        for handler in core.audit_logger._audit_logger_instance.logger.handlers[:]:
-            handler.close()
-            core.audit_logger._audit_logger_instance.logger.removeHandler(handler)
+    # Salvar caminhos originais
+    orig_logs_dir = core.audit_logger.LOGS_DIR
+    orig_audit_file = core.audit_logger.AUDIT_LOG_FILE
+
+    temp_logs_dir = tmp_path / "logs"
+    temp_audit_file = temp_logs_dir / "security_audit.log"
+
+    # Aplicar caminhos temporários
+    core.audit_logger.LOGS_DIR = temp_logs_dir
+    core.audit_logger.AUDIT_LOG_FILE = temp_audit_file
+    
+    # Atualizar referência local de forma infalível via globals()
+    globals()["AUDIT_LOG_FILE"] = temp_audit_file
+
+    # Resetar singleton e fechar todos os handlers ativos do logger
+    logger = logging.getLogger("SecurityAudit")
+    for handler in logger.handlers[:]:
+        handler.close()
+        logger.removeHandler(handler)
     core.audit_logger._audit_logger_instance = None
 
-    if AUDIT_LOG_FILE.exists():
-        AUDIT_LOG_FILE.unlink()
     yield
 
-    # Fechar e resetar singleton depois do teste
-    if core.audit_logger._audit_logger_instance is not None:
-        for handler in core.audit_logger._audit_logger_instance.logger.handlers[:]:
-            handler.close()
-            core.audit_logger._audit_logger_instance.logger.removeHandler(handler)
+    # Resetar singleton e fechar todos os handlers ativos do logger
+    for handler in logger.handlers[:]:
+        handler.close()
+        logger.removeHandler(handler)
     core.audit_logger._audit_logger_instance = None
 
-    if AUDIT_LOG_FILE.exists():
-        AUDIT_LOG_FILE.unlink()
+    # Restaurar caminhos originais
+    core.audit_logger.LOGS_DIR = orig_logs_dir
+    core.audit_logger.AUDIT_LOG_FILE = orig_audit_file
+    globals()["AUDIT_LOG_FILE"] = orig_audit_file
 
 
 @pytest.fixture
@@ -57,10 +68,11 @@ class TestAuditLoggerInitialization:
 
     def test_creates_logs_directory(self, cleanup_audit_log):
         """Verifica que AuditLogger cria diretório logs/ se não existir."""
-        # Garantir que diretório não existe
-        logs_dir = AUDIT_LOG_FILE.parent
+        import core.audit_logger
+        logs_dir = core.audit_logger.LOGS_DIR
+        
+        # Como o caminho é temporário, se ele já existir, removemos para testar a criação
         if logs_dir.exists():
-            # Remover temporariamente
             import shutil
             shutil.rmtree(logs_dir)
 

@@ -6,7 +6,6 @@ import pytest
 from unittest.mock import patch
 
 from core.token_encryption import TokenCipher
-from cryptography.fernet import InvalidToken
 
 
 @pytest.fixture
@@ -157,6 +156,7 @@ class TestEncryptionRoundTrip:
         assert decrypted == sample_token_json
 
         # Verificar que JSON é válido
+        assert decrypted is not None
         token_data = json.loads(decrypted)
         assert token_data["token"] == "ya29.a0AfB_byC..."
 

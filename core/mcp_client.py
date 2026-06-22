@@ -3,7 +3,6 @@ import asyncio
 import json
 import logging
 import os
-import sys
 from typing import Any, Dict, List, Optional
 
 class MCPClient:
@@ -25,7 +24,7 @@ class MCPClient:
         self.command = command
         self.args = args
         self.env = env or os.environ.copy()
-        self.process = None
+        self.process: Optional[asyncio.subprocess.Process] = None
         self._request_id = 0
         self._pending_requests: Dict[int, asyncio.Future] = {}
         self._reader_task = None
@@ -83,6 +82,8 @@ class MCPClient:
 
     async def _read_loop(self):
         """Background task to read messages from the server's stdout."""
+        if not self.process or not self.process.stdout:
+            return
         try:
             while True:
                 line = await self.process.stdout.readline()
@@ -105,6 +106,8 @@ class MCPClient:
 
     async def _read_stderr_loop(self):
         """Background task to read stderr from the server."""
+        if not self.process or not self.process.stderr:
+            return
         while self.connected:
             try:
                 line = await self.process.stderr.readline()
@@ -152,9 +155,10 @@ class MCPClient:
         self._pending_requests[req_id] = future
         
         payload = json.dumps(request) + "\n"
+        assert self.process.stdin is not None  # PIPE set in connect()
         self.process.stdin.write(payload.encode())
         await self.process.stdin.drain()
-        
+
         return await future
 
     async def send_notification(self, method: str, params: Optional[Dict[str, Any]] = None):
@@ -168,6 +172,7 @@ class MCPClient:
             "params": params or {}
         }
          payload = json.dumps(request) + "\n"
+         assert self.process.stdin is not None  # PIPE set in connect()
          self.process.stdin.write(payload.encode())
          await self.process.stdin.drain()
 

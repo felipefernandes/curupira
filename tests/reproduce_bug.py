@@ -1,6 +1,6 @@
 
 import asyncio
-import logging
+from pathlib import Path
 from typing import Dict, Any, Optional
 from skills.reminders import ListRemindersSkill, ReminderManager
 
@@ -25,7 +25,7 @@ async def mock_execute_tool_call(skill, tool_args: Optional[Dict[str, Any]], con
 
 async def main():
     # Setup
-    manager = ReminderManager("curupira.db")
+    manager = ReminderManager(db_path=Path("curupira.db"))  # type: ignore[arg-type]
     skill = ListRemindersSkill(manager)
     
     print("\n--- Test 1: Args as None ---")

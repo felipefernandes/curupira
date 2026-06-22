@@ -104,6 +104,7 @@ class ReminderManager:
         freq = freq_parts[0].upper()
         dow_list = [d.strip().upper() for d in freq_parts[1].split(",")] if len(freq_parts) > 1 else []
 
+        sh = sm = eh = em = h = m = 0
         try:
             is_random = time_part.upper().startswith("RANDOM:")
             if is_random:
@@ -169,6 +170,7 @@ class ReminderManager:
                     candidate = _make_candidate(from_time + timedelta(days=days_ahead))
                 if best is None or candidate < best:
                     best = candidate
+            assert best is not None
             return best
 
         # Fallback: 24h from now
@@ -289,7 +291,7 @@ class ReminderManager:
                         self.logger.info(f"Rescheduled reminder {reminder_id} for {delay:.1f}s")
                     elif recurrence:
                         # Recurring reminder expired while offline → compute next future occurrence
-                        next_time = self._next_occurrence(recurrence, now)
+                        next_time = self._next_occurrence(recurrence, now) or now + timedelta(hours=24)
                         await self.reset_recurring_reminder(reminder_id, next_time)
                         next_delay = (next_time - now).total_seconds()
                         job_queue.run_once(
@@ -493,7 +495,7 @@ class AddReminderSkill(BaseSkill):
         
         return text
 
-    async def execute(self, context: Dict[str, Any], message: str, when: str, is_task: bool = False, **kwargs) -> Dict[str, Any]:
+    async def execute(self, context: Dict[str, Any], message: str, when: str, is_task: bool = False, **kwargs) -> Dict[str, Any]:  # type: ignore[override]
         """Executes the add_reminder skill.
 
         Args:
@@ -754,7 +756,7 @@ class DeleteReminderSkill(BaseSkill):
             "required": ["reminder_id"]
         }
 
-    async def execute(self, context: Dict[str, Any], reminder_id: int) -> Dict[str, Any]:
+    async def execute(self, context: Dict[str, Any], reminder_id: int, **kwargs) -> Dict[str, Any]:  # type: ignore[override]
         """Executes the delete_reminder skill.
 
         Args:
@@ -827,7 +829,7 @@ class UpdateReminderSkill(BaseSkill):
             "required": ["reminder_id"]
         }
 
-    async def execute(self, context: Dict[str, Any], reminder_id: int, new_message: Optional[str] = None, new_delay_minutes: Optional[int] = None) -> Dict[str, Any]:
+    async def execute(self, context: Dict[str, Any], reminder_id: int, new_message: Optional[str] = None, new_delay_minutes: Optional[int] = None, **kwargs) -> Dict[str, Any]:  # type: ignore[override]
          """Executes the update_reminder skill.
 
          Args:

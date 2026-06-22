@@ -8,7 +8,7 @@ def test_parse(input_str):
     # Actually, dateparser uses datetime.now() internally.
     
     print(f"Input: '{input_str}'")
-    res = dateparser.parse(input_str, settings=settings)
+    res = dateparser.parse(input_str, settings=settings)  # type: ignore[arg-type]
     print(f"Result: {res}")
     
     now = datetime.now()

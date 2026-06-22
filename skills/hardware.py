@@ -60,9 +60,9 @@ class HardwareMonitoringSkill(BaseSkill):
             
             # Build pre-formatted HTML sent directly to Telegram (bypasses LLM)
             html_lines = [
-                f"🌡️ <b>Status do Sistema</b>",
+                "🌡️ <b>Status do Sistema</b>",
                 f"🕒 <b>Hora:</b> {metrics['system_time']}",
-                f"",
+                "",
                 f"🧠 <b>RAM:</b> {metrics['ram_used']}/{metrics['ram_total']} ({metrics['ram_percent']}%)",
                 f"⚙️ <b>CPU:</b> {metrics['cpu_percent']}%",
                 f"💾 <b>Disco:</b> {metrics['disk_free']} livres",
@@ -91,6 +91,8 @@ class HardwareMonitoringSkill(BaseSkill):
 
     def _get_metrics(self) -> Dict[str, Any]:
         """Blocking helper function to fetch metrics via psutil."""
+        if psutil is None:
+            raise RuntimeError("psutil not installed")
         # RAM
         mem = psutil.virtual_memory()
         ram_total = f"{mem.total / (1024**3):.1f}GB"
@@ -107,7 +109,7 @@ class HardwareMonitoringSkill(BaseSkill):
         temp = "N/A"
         if hasattr(psutil, "sensors_temperatures"):
             try:
-                temps = psutil.sensors_temperatures()
+                temps = psutil.sensors_temperatures()  # type: ignore[attr-defined]
                 if temps:
                     # Generic logic: grab first available sensor
                     # For RPi, usually 'cpu_thermal'

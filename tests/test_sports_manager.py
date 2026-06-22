@@ -4,7 +4,6 @@ from unittest.mock import AsyncMock, patch, MagicMock
 from datetime import datetime
 import sys
 import os
-import asyncio
 import time
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))

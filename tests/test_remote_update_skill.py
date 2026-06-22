@@ -1,14 +1,12 @@
 """Tests for RemoteUpdateSkill and check_update_sentinel."""
 
 import json
-import os
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from skills.remote_update import RemoteUpdateSkill, check_update_sentinel, _SENTINEL_FILE
+from skills.remote_update import RemoteUpdateSkill, check_update_sentinel
 
 
 # ── Fixtures ───────────────────────────────────────────────────────────

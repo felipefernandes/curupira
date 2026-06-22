@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO)
 
 async def run_tests():
     # Import inside verify to use the updated file
-    from skills.reminders import ListRemindersSkill, ReminderManager
+    from skills.reminders import ListRemindersSkill
     
     # Mock Manager
     manager = MagicMock()

@@ -4,9 +4,9 @@ from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, Application
 from core import config
 import asyncio
-import re
 from datetime import datetime
 import logging
+from typing import Optional
 from skills.memory import MemoryManager
 from core.agent import AgentBrain
 from core.telegram_formatter import TelegramFormatter, _strip_unsupported_html as _fmt_strip
@@ -24,7 +24,7 @@ _needs_memory = (
     or config.skill_enabled("sports")
     or config.skill_enabled("reminders")
 )
-memory_manager = MemoryManager() if _needs_memory else None  # type: ignore[assignment]
+memory_manager: Optional[MemoryManager] = MemoryManager() if _needs_memory else None
 
 # Agent Brain Setup
 brain = AgentBrain(
@@ -37,6 +37,7 @@ brain = AgentBrain(
 # Skill: Lembretes
 from skills.reminders import ReminderManager, AddReminderSkill, ListRemindersSkill, DeleteReminderSkill, UpdateReminderSkill
 from skills.calendar_reminder_bridge import run_calendar_sync
+reminder_manager: Optional[ReminderManager] = None
 if config.skill_enabled("reminders"):
     reminder_manager = ReminderManager()
     brain.register_skill(AddReminderSkill(reminder_manager))
@@ -44,7 +45,6 @@ if config.skill_enabled("reminders"):
     brain.register_skill(DeleteReminderSkill(reminder_manager))
     brain.register_skill(UpdateReminderSkill(reminder_manager))
 else:
-    reminder_manager = None  # type: ignore[assignment]
     logging.info("Skill 'reminders' desabilitada pela configuração.")
 
 # Skill: Clima
@@ -84,6 +84,7 @@ else:
 # Skill: Memória de Usuário (long-term facts)
 if config.skill_enabled("memory"):
     from skills.memory import SaveFactSkill
+    assert memory_manager is not None  # memory skill enabled → manager initialized
     brain.register_skill(SaveFactSkill(memory_manager))
 else:
     logging.info("Skill 'memory' desabilitada pela configuração.")
@@ -99,6 +100,7 @@ else:
 # Skill: Sports Manager
 if config.skill_enabled("sports"):
     from skills.sports_manager import SportsManagerSkill
+    assert memory_manager is not None  # sports skill enabled → manager initialized
     sports_skill = SportsManagerSkill(memory_manager)
     brain.register_skill(sports_skill)
 else:
@@ -107,6 +109,7 @@ else:
 # Skill: Usage Report
 if config.skill_enabled("usage_report"):
     from skills.usage_report import UsageReportSkill
+    assert memory_manager is not None  # usage_report skill enabled → manager initialized
     brain.register_skill(UsageReportSkill(memory_manager))
 else:
     logging.info("Skill 'usage_report' desabilitada pela configuração.")
@@ -151,22 +154,34 @@ def is_authorized(user_id):
 
 # Authorized Check Handler
 async def acesso_negado(update: Update):
+    if not update.message:
+        return
     await update.message.reply_text("⛔ Acesso negado. Este bot é privado.")
 
 # Message Handler (AI)
 async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.from_user:
+        return
+
+    if memory_manager is None:
+        logging.warning("responder: Tentativa de processar mensagem, mas memory_manager está desativado.")
+        await update.message.reply_text(
+            "⚠️ O sistema de memória e histórico está desativado. Por favor, ative-o nas configurações para conversar comigo."
+        )
+        return
+
     user_id = update.message.from_user.id
-    
+
     if not is_authorized(user_id):
         await acesso_negado(update)
         return
 
-    user_msg = update.message.text
+    user_msg = update.message.text or ""
     user_name = update.message.from_user.username or "Unknown"
     full_name = update.message.from_user.full_name or "Unknown"
-    
+
     await update.message.reply_chat_action(action="typing")
-    
+
     # 1. Register User & Log Message
     await memory_manager.add_user(user_id, user_name, full_name)
     await memory_manager.log_message(user_id, "user", user_msg)
@@ -203,7 +218,7 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
             name = await memory_manager.get_fact_value(user_id, "personal_name") or "Usuário"
             
             # Improved informal reply as requested:
-            welcome_back = f"Entendido! Configuração concluída! Como posso ajudar hoje?"
+            welcome_back = "Entendido! Configuração concluída! Como posso ajudar hoje?"
             
             await update.message.reply_text(welcome_back)
             await memory_manager.log_message(user_id, "model", welcome_back)
@@ -216,6 +231,11 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     assistant_surname = await memory_manager.get_fact_value(user_id, "assistant_surname") or ""
 
     # 3. Agent Brain Execution
+    # Capture narrowed refs before closures (pyright doesn't carry narrowing into nested funcs)
+    _msg = update.message
+    _chat = update.effective_chat
+    assert _chat is not None
+
     agent_context = {
         "user_id": user_id,
         "user_name": full_name,
@@ -225,14 +245,14 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "memory_manager": memory_manager,
         "raw_message": user_msg,
         "bot": context.bot,
-        "chat_id": update.effective_chat.id,
+        "chat_id": _chat.id,
     }
 
     async def keep_typing():
         """Sends TYPING action every 4s while the agent processes."""
         try:
             while True:
-                await update.effective_chat.send_action("typing")
+                await _chat.send_action("typing")
                 await asyncio.sleep(4)
         except asyncio.CancelledError:
             pass
@@ -242,13 +262,13 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if text and text.strip():
             safe_text = TelegramFormatter.normalize(text.strip())
             try:
-                await update.message.reply_text(safe_text, parse_mode=ParseMode.HTML)
+                await _msg.reply_text(safe_text, parse_mode=ParseMode.HTML)
             except TelegramError as e:
                 logging.warning(f"Erro no intermediate_reply (HTML): {e}")
                 try:
-                    await update.message.reply_text(_strip_unsupported_html(safe_text), parse_mode=ParseMode.HTML)
+                    await _msg.reply_text(_strip_unsupported_html(safe_text), parse_mode=ParseMode.HTML)
                 except TelegramError:
-                    await update.message.reply_text(text.strip())
+                    await _msg.reply_text(text.strip())
             except Exception as e:
                 logging.error(f"Erro no intermediate_reply: {e}")
 
@@ -258,13 +278,13 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not html:
             return
         try:
-            await update.message.reply_text(html, parse_mode=ParseMode.HTML)
+            await _msg.reply_text(html, parse_mode=ParseMode.HTML)
         except TelegramError as e:
             logging.warning(f"Erro no direct_reply (HTML): {e}")
             try:
-                await update.message.reply_text(_strip_unsupported_html(html), parse_mode=ParseMode.HTML)
+                await _msg.reply_text(_strip_unsupported_html(html), parse_mode=ParseMode.HTML)
             except TelegramError:
-                await update.message.reply_text(html)
+                await _msg.reply_text(html)
         except Exception as e:
             logging.error(f"Erro no direct_reply: {e}")
 
@@ -293,16 +313,16 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await memory_manager.log_message(user_id, "model", response_text)
 
     try:
-        await update.message.reply_text(response_text, parse_mode=ParseMode.HTML)
+        await _msg.reply_text(response_text, parse_mode=ParseMode.HTML)
     except TelegramError as e:
         logging.warning(f"Erro de parsing HTML: {e}")
         # Fallback: strip unsupported tags and retry with HTML
         clean_text = _strip_unsupported_html(response_text)
         try:
-            await update.message.reply_text(clean_text, parse_mode=ParseMode.HTML)
+            await _msg.reply_text(clean_text, parse_mode=ParseMode.HTML)
         except TelegramError:
             # Last resort: send as plain text
-            await update.message.reply_text(response_text)
+            await _msg.reply_text(response_text)
 
 # --- JOB QUEUE CALLBACKS ---
 async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
@@ -311,12 +331,20 @@ async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
     For recurring reminders: resets remind_at and reschedules instead of marking SENT.
     For is_task reminders: runs the message through the agent brain to trigger skills.
     """
+    assert reminder_manager is not None  # job registered only when reminders enabled
     job = context.job
+    if job is None:
+        return
+    chat_id = job.chat_id
+    if chat_id is None:
+        logging.error("execute_reminder: job has no chat_id")
+        return
+
     reminder_data = job.data
 
     if not isinstance(reminder_data, dict):
         # Fallback for old plain-text jobs
-        await context.bot.send_message(chat_id=job.chat_id, text=f"⏰ Lembrete: {reminder_data}")
+        await context.bot.send_message(chat_id=chat_id, text=f"⏰ Lembrete: {reminder_data}")
         return
 
     reminder_id = reminder_data["id"]
@@ -335,10 +363,17 @@ async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
     if is_task:
         # Run message through the agent brain to trigger skills
         try:
-            user_facts = await memory_manager.get_facts(job.chat_id)
-            assistant_surname = await memory_manager.get_fact_value(job.chat_id, "assistant_surname") or ""
+            if memory_manager is None:
+                logging.error(f"execute_reminder: Não foi possível executar a tarefa {reminder_id} porque memory_manager está desativado.")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"⚠️ Erro ao executar tarefa agendada: {message}. O sistema de memória está desativado."
+                )
+                return
+            user_facts = await memory_manager.get_facts(chat_id)
+            assistant_surname = await memory_manager.get_fact_value(chat_id, "assistant_surname") or ""
             agent_context = {
-                "user_id": job.chat_id,
+                "user_id": chat_id,
                 "user_name": "Usuário",
                 "user_facts": user_facts,
                 "job_queue": context.job_queue,
@@ -351,14 +386,14 @@ async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
             response_text = TelegramFormatter.normalize(response_text)
             try:
                 if response_text:
-                    await context.bot.send_message(chat_id=job.chat_id, text=response_text, parse_mode=ParseMode.HTML)
+                    await context.bot.send_message(chat_id=chat_id, text=response_text, parse_mode=ParseMode.HTML)
             except TelegramError as e:
                 logging.warning(f"Erro de parsing HTML via Reminder: {e}")
                 clean_text = _strip_unsupported_html(response_text)
                 try:
-                    await context.bot.send_message(chat_id=job.chat_id, text=clean_text, parse_mode=ParseMode.HTML)
+                    await context.bot.send_message(chat_id=chat_id, text=clean_text, parse_mode=ParseMode.HTML)
                 except TelegramError:
-                    await context.bot.send_message(chat_id=job.chat_id, text=response_text)
+                    await context.bot.send_message(chat_id=chat_id, text=response_text)
             except Exception as e:
                 logging.error(f"Erro inesperado ao enviar mensagem de Task: {e}")
                 raise e
@@ -366,21 +401,22 @@ async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
             task_error = True
             logging.error(f"Error executing task reminder {reminder_id}: {e}")
             try:
-                await context.bot.send_message(chat_id=job.chat_id, text=f"⚠️ Erro ao executar tarefa agendada: {message}")
+                await context.bot.send_message(chat_id=chat_id, text=f"⚠️ Erro ao executar tarefa agendada: {message}")
             except Exception as send_err:
                 logging.error(f"Failed to notify user of task error for reminder {reminder_id}: {send_err}")
     else:
-        await context.bot.send_message(chat_id=job.chat_id, text=f"⏰ Lembrete: {message}")
+        await context.bot.send_message(chat_id=chat_id, text=f"⏰ Lembrete: {message}")
 
     # --- Reschedule or mark as sent ---
     if recurrence:
         next_time = reminder_manager._next_occurrence(recurrence, from_time=remind_at)
         await reminder_manager.reset_recurring_reminder(reminder_id, next_time)
         next_delay = (next_time - datetime.now()).total_seconds()
+        assert context.job_queue is not None
         context.job_queue.run_once(
             execute_reminder,
             when=max(next_delay, 1),
-            chat_id=job.chat_id,
+            chat_id=chat_id,
             data={"id": reminder_id, "msg": message},
             name=f"reminder_{reminder_id}",
         )
@@ -404,10 +440,11 @@ async def _send_proactive_message(context: ContextTypes.DEFAULT_TYPE, msg: str):
             chat_id=config.AUTHORIZED_USER_ID,
             text=safe_msg
         )
-    try:
-        await memory_manager.log_message(config.AUTHORIZED_USER_ID, "model", msg)
-    except Exception as e:
-        logging.error(f"Erro ao salvar mensagem proativa no histórico: {e}")
+    if memory_manager is not None:
+        try:
+            await memory_manager.log_message(config.AUTHORIZED_USER_ID, "model", msg)
+        except Exception as e:
+            logging.error(f"Erro ao salvar mensagem proativa no histórico: {e}")
 
 async def system_heartbeat(context: ContextTypes.DEFAULT_TYPE):
     """
@@ -499,7 +536,7 @@ async def check_token_health(context: ContextTypes.DEFAULT_TYPE):
         if not creds:
             # Token missing
             logger.warning("Token health check: No credentials found")
-            audit.log_event("token_health_check", {
+            audit.log_event("token_health_check", user_id=0, success=False, details={
                 "status": "missing",
                 "action_required": "user_reauth"
             })
@@ -516,13 +553,13 @@ async def check_token_health(context: ContextTypes.DEFAULT_TYPE):
             if creds.expired and creds.refresh_token:
                 # Expired but recoverable (auto-refresh will handle)
                 logger.info("Token expired but refresh_token present (OK)")
-                audit.log_event("token_health_check", {
+                audit.log_event("token_health_check", user_id=0, success=True, details={
                     "status": "expired_recoverable"
                 })
             else:
                 # Invalid and no refresh token (critical)
                 logger.error("Token invalid and no refresh_token (BAD)")
-                audit.log_event("token_health_check", {
+                audit.log_event("token_health_check", user_id=0, success=False, details={
                     "status": "invalid_unrecoverable",
                     "action_required": "user_reauth"
                 })
@@ -536,7 +573,7 @@ async def check_token_health(context: ContextTypes.DEFAULT_TYPE):
         else:
             # Healthy
             logger.debug("Token health check: OK")
-            audit.log_event("token_health_check", {"status": "healthy"})
+            audit.log_event("token_health_check", user_id=0, success=True, details={"status": "healthy"})
 
     except Exception as e:
         logger.error(f"Token health check failed: {e}")
@@ -567,8 +604,11 @@ async def post_init(application: Application):
         # Google Calendar Sync
         if config.GCAL_CLIENT_ID and config.GCAL_CLIENT_SECRET:
             sync_interval = config.GCAL_SYNC_INTERVAL_MINUTES * 60
+            async def _calendar_sync_job(context: ContextTypes.DEFAULT_TYPE) -> None:
+                await run_calendar_sync(config.AUTHORIZED_USER_ID)
+
             application.job_queue.run_repeating(
-                lambda context: asyncio.create_task(run_calendar_sync(config.AUTHORIZED_USER_ID)),
+                _calendar_sync_job,
                 interval=sync_interval,
                 first=60,  # First sync after 1 minute
                 name="calendar_sync"
@@ -576,7 +616,6 @@ async def post_init(application: Application):
             logging.info(f"Calendar sync job agendado (intervalo: {config.GCAL_SYNC_INTERVAL_MINUTES} minutos)")
 
             # Google Calendar Token Health Check (daily at 8 AM)
-            from telegram.ext import JobQueue
             application.job_queue.run_daily(
                 check_token_health,
                 time=datetime.strptime("08:00", "%H:%M").time(),
@@ -616,6 +655,8 @@ async def post_init(application: Application):
 
 # Status Command (Automation)
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.from_user:
+        return
     if not is_authorized(update.message.from_user.id):
         await acesso_negado(update)
         return
@@ -646,6 +687,7 @@ def main():
     if not run_pre_start_checks():
         return
 
+    assert config.TELEGRAM_TOKEN, "TELEGRAM_TOKEN must be set (validated in run_pre_start_checks)"
     app = ApplicationBuilder().token(config.TELEGRAM_TOKEN).post_init(post_init).build()
     
     app.add_handler(CommandHandler("status", status))

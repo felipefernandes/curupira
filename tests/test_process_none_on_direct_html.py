@@ -8,7 +8,6 @@ Also verifies that process() still returns text when:
   - only some tools used direct_html (mixed case)
 """
 
-import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from core.agent import AgentBrain
@@ -285,7 +284,7 @@ async def test_process_returns_none_via_failed_generation_recovery(agent):
 
     # First call: Groq 400 with failed_generation
     error = Exception("tool_use_failed")
-    error.body = {
+    error.body = {  # type: ignore[attr-defined]
         "error": {
             "failed_generation": '<function=list_reminders({})</function>'
         }

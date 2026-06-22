@@ -98,7 +98,7 @@ class RemoteUpdateSkill(BaseSkill):
             await proc.wait()
             raise
         output = (stdout.decode(errors="replace") + stderr.decode(errors="replace")).strip()
-        return proc.returncode, output
+        return proc.returncode if proc.returncode is not None else 1, output
 
     # ── PIN helpers ────────────────────────────────────────────────────
 

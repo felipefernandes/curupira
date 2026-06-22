@@ -14,7 +14,7 @@ before execution, protecting against:
 import logging
 import re
 import time
-from typing import Dict, Any, Tuple, List
+from typing import Dict, Tuple, List
 from core import config
 
 
@@ -293,7 +293,8 @@ Responda APENAS:
             )
 
             # Parse response
-            llm_response = response.choices[0].message.content.strip()
+            _content = response.choices[0].message.content
+            llm_response = _content.strip() if _content else ""
             self.logger.debug(f"LLM Security evaluation for '{command}': {llm_response}")
 
             if llm_response.upper().startswith("SAFE"):

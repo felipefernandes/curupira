@@ -409,6 +409,7 @@ class TestGetContextSessionMemory:
                     row = await cursor.fetchone()
 
             # DB stores "model" for backwards compatibility
+            assert row is not None
             assert row[0] == "model"
 
             # get_context returns "assistant" (normalised)

@@ -3,10 +3,9 @@ Tests for recurring reminders & scheduled tasks.
 Ref: Issue #76 — https://github.com/felipefernandes/curupira/issues/76
 """
 
-import asyncio
 import unittest
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock
 
 from skills.reminders import (
     ReminderManager,
@@ -225,12 +224,14 @@ class TestParseSchedule(unittest.IsolatedAsyncioTestCase):
     def test_parse_weekly_single_day(self):
         target, recurrence = self.skill._parse_schedule("toda segunda às 8h")
         self.assertIsNotNone(recurrence)
+        assert recurrence is not None
         self.assertTrue(recurrence.startswith("WEEKLY:MON"))
         self.assertIn("@08:00", recurrence)
 
     def test_parse_weekly_multiple_days(self):
         target, recurrence = self.skill._parse_schedule("toda segunda e quarta às 10h")
         self.assertIsNotNone(recurrence)
+        assert recurrence is not None
         self.assertIn("MON", recurrence)
         self.assertIn("WED", recurrence)
 

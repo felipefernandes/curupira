@@ -6,8 +6,7 @@ import uuid
 import asyncio
 from typing import Dict, Any, List, Optional, Tuple
 from . import config
-import datetime
-from datetime import datetime
+from datetime import datetime, date
 from skills.base import BaseSkill
 from .mcp_client import MCPClient
 from skills.mcp_skill import MCPSkill
@@ -70,7 +69,7 @@ class AgentBrain:
 
         # Proactive greeting deduplication: only one greeting per calendar day.
         # Stores the last date (datetime.date) a greeting was sent, or None.
-        self._last_greeting_date: Optional[datetime.date] = None
+        self._last_greeting_date: Optional[date] = None
 
         # Built-in skills (always available)
         self.register_skill(IntrospectionSkill(self))
@@ -189,7 +188,7 @@ class AgentBrain:
                  types.FunctionDeclaration(
                      name=skill.name,
                      description=skill.description,
-                     parameters=skill.parameters
+                     parameters=skill.parameters  # type: ignore[arg-type]
                  )
              )
         return [types.Tool(function_declarations=declarations)]
@@ -348,7 +347,7 @@ class AgentBrain:
     def _is_retryable_error(self, e: Exception) -> bool:
         """Determines if an exception is a retryable rate limit error."""
         try:
-            from google.api_core import exceptions as google_exceptions
+            from google.api_core import exceptions as google_exceptions  # type: ignore
             if isinstance(e, google_exceptions.ResourceExhausted):
                 return True
         except ImportError:
@@ -720,7 +719,7 @@ class AgentBrain:
         # Check if Google Calendar skill is awaiting authentication
         # This implements the "manual fallback" channel in dual-channel approach
         # If user pastes OAuth callback URL, extract code and process token exchange
-        gcal_skill = self.skills.get("google_calendar")
+        gcal_skill: Any = self.skills.get("google_calendar")
 
         if gcal_skill and hasattr(gcal_skill, '_awaiting_auth') and gcal_skill._awaiting_auth:
             # Timeout check (5 minutes)
@@ -839,7 +838,7 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
             client = self._get_groq_client()
             if not client: return "Erro: Cliente Groq não inicializado."
 
-            messages = [{"role": "system", "content": system_prompt}]
+            messages: List[Any] = [{"role": "system", "content": system_prompt}]
 
             # Inject structured conversation history
             if chat_history:
@@ -856,10 +855,10 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                 try:
                     tools = self._get_groq_tools()
                     # Async call
-                    response = await client.chat.completions.create(
+                    response = await client.chat.completions.create(  # type: ignore[union-attr]
                         model=self.model_name,
                         messages=messages,
-                        tools=tools if tools else None,
+                        tools=tools if tools else None,  # type: ignore[arg-type]
                         tool_choice="auto" if tools else None,
                         max_tokens=2048,
                         temperature=config.GROQ_TEMPERATURE
@@ -1208,12 +1207,12 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                          config=types.GenerateContentConfig(tools=tools)
                      )
                      
-                     if not response.candidates:
+                     if response is None or not response.candidates:
                          return "Erro: Sem resposta da IA."
-                         
+
                      # Append Agent Response
                      contents.append(response.candidates[0].content)
-                     
+
                      if hasattr(response, 'usage_metadata') and response.usage_metadata:
                          prompt_tokens = getattr(response.usage_metadata, 'prompt_token_count', 0)
                          completion_tokens = getattr(response.usage_metadata, 'candidates_token_count', 0)

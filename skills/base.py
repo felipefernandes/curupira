@@ -7,6 +7,12 @@ class BaseSkill(ABC):
     Enforces a standard interface for integration with the Agent Brain.
     """
 
+    # OAuth-related attributes used by skills that require authentication.
+    # Declared here so subclasses and agent.py can access them without type errors.
+    _awaiting_auth: bool = False
+    _auth_start_time: Optional[float] = None
+    _oauth_server: Optional[Any] = None
+
     @property
     @abstractmethod
     def name(self) -> str:
@@ -61,7 +67,7 @@ class BaseSkill(ABC):
         """
         pass
 
-    def success(self, data: Any, message: str = None) -> Dict[str, Any]:
+    def success(self, data: Any, message: Optional[str] = None) -> Dict[str, Any]:
         """
         Formats a successful skill execution into a standard MCP-Lite JSON output.
         

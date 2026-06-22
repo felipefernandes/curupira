@@ -3,8 +3,6 @@ import unittest
 from unittest.mock import MagicMock, patch, AsyncMock
 import sys
 import os
-import asyncio
-import json
 
 # Setup path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -36,7 +34,7 @@ class TestRetryLogic(unittest.IsolatedAsyncioTestCase):
         
         # Error with code 429 attribute
         error_429 = Exception("429 RESOURCE_EXHAUSTED")
-        error_429.code = 429
+        error_429.code = 429  # type: ignore[attr-defined]
         
         # AsyncMock for generate_content
         # Provide enough side effects to cover retries

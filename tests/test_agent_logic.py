@@ -1,5 +1,4 @@
 import pytest
-import asyncio
 from unittest.mock import MagicMock, AsyncMock, patch
 import sys
 import os
@@ -378,7 +377,7 @@ class TestParseFailedGeneration:
         assert AgentBrain._parse_failed_generation("") is None
 
     def test_none_input(self):
-        assert AgentBrain._parse_failed_generation(None) is None
+        assert AgentBrain._parse_failed_generation(None) is None  # type: ignore[arg-type]
 
     def test_ampersand_format(self):
         """Match <function=name:value&key:value</function> (ampersand format with : separators)."""
@@ -405,7 +404,7 @@ class TestSanitizeText:
     def test_sanitize_empty_string(self):
         """Testa o tratamento de strings vazias ou nulas."""
         assert AgentBrain._sanitize_text("") == ""
-        assert AgentBrain._sanitize_text(None) == ""
+        assert AgentBrain._sanitize_text(None) == ""  # type: ignore[arg-type]
 
     def test_sanitize_normal_text(self):
         """Testa o retorno inalterado de textos comuns."""
@@ -429,7 +428,7 @@ async def test_groq_failed_generation_recovery(agent, mock_groq_client):
     """Test that a Groq 400 with failed_generation recovers and retries."""
     # Simulate Groq 400 error with failed_generation
     error = Exception("tool_use_failed")
-    error.body = {
+    error.body = {  # type: ignore[attr-defined]
         "error": {
             "message": "Failed to call a function.",
             "type": "invalid_request_error",

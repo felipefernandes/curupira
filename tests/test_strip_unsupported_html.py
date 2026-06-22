@@ -1,4 +1,3 @@
-import pytest
 from bot import _strip_unsupported_html
 
 

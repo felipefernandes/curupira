@@ -664,7 +664,7 @@ class SystemControlSkill(BaseSkill):
                     "output": stdout,
                     "returncode": returncode
                 },
-                message=f"✅ Comando executado com sucesso"
+                message="✅ Comando executado com sucesso"
             )
 
         except asyncio.TimeoutError:
@@ -675,7 +675,7 @@ class SystemControlSkill(BaseSkill):
     async def _run_subprocess(
         self,
         cmd: List[str]
-    ) -> Tuple[str, str, int]:
+    ) -> Tuple[str, str, Optional[int]]:
         """
         Runs a subprocess with timeout and output size limits.
 
@@ -688,6 +688,7 @@ class SystemControlSkill(BaseSkill):
         Raises:
             asyncio.TimeoutError: If command exceeds timeout
         """
+        process: Optional[asyncio.subprocess.Process] = None
         try:
             process = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -732,7 +733,7 @@ class SystemControlSkill(BaseSkill):
 
         except asyncio.TimeoutError:
             # Kill the process if it times out
-            if process.returncode is None:
+            if process is not None and process.returncode is None:
                 process.kill()
                 await process.wait()
             raise

@@ -22,11 +22,13 @@ O Curupira é uma alternativa "Lite" ao OpenClaw, projetado para alta performanc
 3. Estrutura do Projeto (Sugestão para o Agente)
 ```
 curupira/
-├── .env                # Chaves e IDs (Não versionado)
+├── .env                # Chaves e IDs sensíveis (Não versionado)
+├── config.toml         # Configurações do bot e skills (Não versionado)
+├── default.config.toml # Template comentado de configurações
 ├── .gitignore          # Proteção de segredos
 ├── requirements.txt    # Dependências mínimas
 ├── bot.py              # Núcleo do sistema (Core)
-├── config.py           # Validação de ambiente
+├── config.py           # Loader de configuração (TOML + ENV)
 ├── ROADMAP.md          # Objetivos e Fases do Projeto
 ├── docs/               # Documentação técnica detalhada
 │   ├── INSTALL.md      # Guia de instalação completo
@@ -69,8 +71,9 @@ curupira/
     ```
 
 4.  **Configure o Ambiente**:
-    - Crie o arquivo `.env`: `nano .env`
-    - Cole suas chaves (TELEGRAM_TOKEN, GEMINI_API_KEY, GROQ_API_KEY, AUTHORIZED_USER_ID).
+    - Edite o arquivo `.env`: `nano .env`
+    - Cole suas chaves sensíveis (TELEGRAM_TOKEN, GEMINI_API_KEY, GROQ_API_KEY, AUTHORIZED_USER_ID).
+    - Copie o template: `cp default.config.toml config.toml` e ajuste configurações não sensíveis.
 
 5.  **Execute**:
     ```bash

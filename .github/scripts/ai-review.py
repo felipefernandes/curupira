@@ -157,7 +157,7 @@ def review_code(diff: str, api_key: str) -> str:
             errors.append(f"{model}: {error_msg}")
             time.sleep(1)
             
-    return f"❌ Não foi possível revisar com nenhum modelo gratuito.\nErros:\n" + "\n".join(errors)
+    return "❌ Não foi possível revisar com nenhum modelo gratuito.\nErros:\n" + "\n".join(errors)
 
 
 def main():

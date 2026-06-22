@@ -209,6 +209,30 @@ class TestEventReminderCreation:
             mock_add.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_create_event_reminder_all_day_event(self, bridge):
+        """Verifica que parsing de evento de dia inteiro (sem fuso horário) funciona e não lança TypeError."""
+        tomorrow = (datetime.now(timezone.utc) + timedelta(days=1)).strftime("%Y-%m-%d")
+        event = {
+            "id": "all_day_123",
+            "iCalUID": "all-day-ical-uid",
+            "summary": "Evento Dia Inteiro",
+            "start": tomorrow,
+        }
+
+        with patch.object(bridge.reminder_manager, 'add_reminder', return_value=3) as mock_add:
+            with patch('aiosqlite.connect') as mock_connect:
+                mock_db = AsyncMock()
+                mock_db.execute = AsyncMock()
+                mock_db.commit = AsyncMock()
+                mock_connect.return_value.__aenter__.return_value = mock_db
+
+                # Não deve lançar TypeError (e deve disparar o reminder)
+                await bridge._create_event_reminder(event)
+
+                # Verifica que add_reminder foi chamado
+                assert mock_add.call_count == 1
+
+    @pytest.mark.asyncio
     async def test_fetch_upcoming_events_uses_utc(self, bridge):
         """Verifica que _fetch_upcoming_events usa datetime.now(timezone.utc)."""
         with patch.object(bridge, '_get_valid_credentials', return_value=MagicMock(token="test_token")):

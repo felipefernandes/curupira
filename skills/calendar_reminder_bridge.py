@@ -311,6 +311,10 @@ class CalendarReminderBridge:
             else:
                 start_dt = datetime.fromisoformat(start_str)
 
+            # Ensure it is timezone-aware. If naive (e.g. all-day event YYYY-MM-DD), assume UTC.
+            if start_dt.tzinfo is None or start_dt.tzinfo.utcoffset(start_dt) is None:
+                start_dt = start_dt.replace(tzinfo=timezone.utc)
+
             # Calculate reminder time (10 minutes before event)
             remind_at = start_dt - timedelta(minutes=10)
 

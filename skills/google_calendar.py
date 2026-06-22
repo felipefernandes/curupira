@@ -24,7 +24,13 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
 from skills.base import BaseSkill
-from core.config import GCAL_CLIENT_ID, GCAL_CLIENT_SECRET, GCAL_CALENDAR_ID
+from core.config import (
+    GCAL_CLIENT_ID,
+    GCAL_CLIENT_SECRET,
+    GCAL_CALENDARS,
+    GCAL_CALENDAR_IDS,
+    GCAL_WRITE_CALENDAR_ID
+)
 
 # Security modules for OAuth2 hardening
 from skills.oauth_pkce_state import PKCEState
@@ -96,8 +102,28 @@ class GoogleCalendarSkill(BaseSkill):
         # OAuth state tracking (dual-channel approach)
         # Allows simultaneous listening for HTTP callback OR Telegram message
         self._oauth_server: Optional[OAuthCallbackServer] = None
-        self._awaiting_auth: bool = False
-        self._auth_start_time: Optional[float] = None
+        self._awaiting_auth = False
+        self._auth_start_time = None
+
+    def _resolve_calendar_id(self, requested_id: Optional[str], default_id: str) -> str:
+        """
+        Resolves a requested calendar name or alias to the actual Google Calendar ID.
+        
+        Uses case-insensitive lookup in GCAL_CALENDARS. If not found, returns
+        the requested_id string as-is (assuming it's a raw calendar ID/email).
+        """
+        if not requested_id:
+            return default_id
+        
+        req_clean = requested_id.strip().lower()
+        
+        # 1. Busca case-insensitive no dicionário de aliases
+        for alias, real_id in GCAL_CALENDARS.items():
+            if alias.lower() == req_clean:
+                return real_id
+                
+        # 2. Fallback: Assume que o usuário forneceu o ID/e-mail real do calendário
+        return requested_id
 
     @property
     def name(self) -> str:
@@ -163,6 +189,10 @@ class GoogleCalendarSkill(BaseSkill):
                     "type": "string",
                     "description": "Código de autorização OAuth2 (setup_calendar)",
                 },
+                "calendar_id": {
+                    "type": "string",
+                    "description": "Apelido ou ID da agenda (ex: 'primary', 'work', 'family'). Opcional.",
+                },
             },
             "required": ["action"],
         }
@@ -192,16 +222,23 @@ class GoogleCalendarSkill(BaseSkill):
             if action == "setup_calendar":
                 return await self._setup_calendar(kwargs.get("auth_code"))
             elif action == "list_calendar_events":
-                return await self._list_calendar_events(kwargs.get("time_range", "today"))
+                return await self._list_calendar_events(
+                    kwargs.get("time_range", "today"),
+                    kwargs.get("calendar_id"),
+                )
             elif action == "add_calendar_event":
                 return await self._add_calendar_event(
                     kwargs.get("summary"),
                     kwargs.get("start_time"),
                     kwargs.get("end_time"),
                     kwargs.get("description"),
+                    kwargs.get("calendar_id"),
                 )
             elif action == "cancel_calendar_event":
-                return await self._cancel_calendar_event(kwargs.get("event_id"))
+                return await self._cancel_calendar_event(
+                    kwargs.get("event_id"),
+                    kwargs.get("calendar_id"),
+                )
             else:
                 return self.error(f"Ação desconhecida: {action}")
 
@@ -746,12 +783,13 @@ class GoogleCalendarSkill(BaseSkill):
         else:
             return self.error(result.get("error", "Falha na autenticação. Verifique o código fornecido."))
 
-    async def _list_calendar_events(self, time_range: str) -> Dict[str, Any]:
+    async def _list_calendar_events(self, time_range: str, calendar_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Lists calendar events for a time range.
 
         Args:
             time_range: "today", "tomorrow", or "week"
+            calendar_id: Optional calendar name/alias or raw ID to query.
 
         Returns:
             Success with events list or error
@@ -783,49 +821,105 @@ class GoogleCalendarSkill(BaseSkill):
         time_max = end.isoformat() + "Z"
 
         try:
-            response = await client.get(
-                f"/calendars/{GCAL_CALENDAR_ID}/events",
-                params={
-                    "timeMin": time_min,
-                    "timeMax": time_max,
-                    "singleEvents": True,
-                    "orderBy": "startTime",
-                    "maxResults": 50,
-                },
-            )
-            response.raise_for_status()
-            data = response.json()
+            async def fetch_calendar(calendar_id: str) -> list:
+                try:
+                    res = await client.get(
+                        f"/calendars/{calendar_id}/events",
+                        params={
+                            "timeMin": time_min,
+                            "timeMax": time_max,
+                            "singleEvents": True,
+                            "orderBy": "startTime",
+                            "maxResults": 50,
+                        },
+                    )
+                    res.raise_for_status()
+                    return res.json().get("items", [])
+                except httpx.HTTPStatusError as err:
+                    self.logger.error(
+                        f"Erro HTTP {err.response.status_code} ao listar eventos do calendário {calendar_id}"
+                    )
+                    return []
+                except Exception as err:
+                    self.logger.error(
+                        f"Erro inesperado ao listar eventos do calendário {calendar_id}: {err}"
+                    )
+                    return []
 
+            # Determinar as agendas a serem consultadas resolvendo aliases
+            resolved_cals = []
+            if calendar_id and calendar_id.strip().lower() not in ("all", "todos"):
+                resolved_cals = [self._resolve_calendar_id(calendar_id, "")]
+            else:
+                resolved_cals = GCAL_CALENDAR_IDS
+
+            # Buscar de forma concorrente em todos os calendários configurados
+            tasks = [fetch_calendar(cal_id) for cal_id in resolved_cals if cal_id]
+            results = await asyncio.gather(*tasks)
+
+            raw_events = []
+            for items in results:
+                raw_events.extend(items)
+
+            # Deduplicação e normalização dos eventos
+            seen_uids = set()
+            seen_keys = set()
             events = []
-            for item in data.get("items", []):
-                # Extract start/end (dateTime for timed events, date for all-day)
+            for item in raw_events:
+                # 1. Chaves de deduplicação
+                ical_uid = item.get("iCalUID")
+                event_id = item.get("id")
+                
                 start_datetime = item.get("start", {}).get("dateTime")
                 start_date = item.get("start", {}).get("date")
+                start_val = start_datetime or start_date
+                summary = item.get("summary", "Sem título").strip()
+                fallback_key = (summary, start_val)
+
+                if ical_uid:
+                    if ical_uid in seen_uids:
+                        continue
+                    seen_uids.add(ical_uid)
+                elif event_id:
+                    if event_id in seen_uids:
+                        continue
+                    seen_uids.add(event_id)
+                else:
+                    if fallback_key in seen_keys:
+                        continue
+                    seen_keys.add(fallback_key)
+
+                # 2. Filtragem de eventos de dia inteiro já encerrados
                 end_datetime = item.get("end", {}).get("dateTime")
                 end_date = item.get("end", {}).get("date")
 
-                # Filter out all-day events that ended before the requested range
-                # All-day events have end.date = start.date + 1 day
-                # So an all-day event from yesterday (2026-03-10) has end.date = 2026-03-11
-                # We need to filter it out when listing "today" (2026-03-11)
                 if start_date and end_date:
-                    # Parse dates for comparison
                     from datetime import datetime as dt
-                    event_end = dt.fromisoformat(end_date)
-                    range_start = dt.fromisoformat(start.isoformat().split('T')[0])  # Extract date part
-
-                    # Filter: if all-day event ended before range start, skip it
-                    if event_end <= range_start:
-                        continue
+                    try:
+                        event_end = dt.fromisoformat(end_date)
+                        range_start = dt.fromisoformat(start.isoformat().split('T')[0])
+                        if event_end <= range_start:
+                            continue
+                    except Exception as parse_err:
+                        self.logger.warning(f"Erro ao parsear datas de evento de dia inteiro: {parse_err}")
 
                 event = {
-                    "id": item.get("id"),
-                    "summary": item.get("summary", "Sem título"),
-                    "start": start_datetime or start_date,
+                    "id": event_id,
+                    "summary": summary,
+                    "start": start_val,
                     "end": end_datetime or end_date,
                     "description": item.get("description", ""),
                 }
                 events.append(event)
+
+            # Ordenação cronológica por data/hora de início
+            def get_start_sort_key(ev):
+                val = ev.get("start") or ""
+                if len(val) == 10:
+                    return val + "T00:00:00"
+                return val
+
+            events.sort(key=get_start_sort_key)
 
             await client.aclose()
 
@@ -857,6 +951,7 @@ class GoogleCalendarSkill(BaseSkill):
         start_time: Optional[str],
         end_time: Optional[str] = None,
         description: Optional[str] = None,
+        calendar_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Creates a new calendar event.
@@ -866,6 +961,7 @@ class GoogleCalendarSkill(BaseSkill):
             start_time: Start time (ISO8601)
             end_time: End time (ISO8601, optional - defaults to 1h after start)
             description: Event description (optional)
+            calendar_id: Optional calendar name/alias or raw ID to add event to.
 
         Returns:
             Success with event details or error
@@ -877,6 +973,9 @@ class GoogleCalendarSkill(BaseSkill):
 
         if not client:
             return self.error("Não autenticado. Use 'Configure o calendário' para autenticar.")
+
+        # Resolve target calendar ID
+        target_calendar = self._resolve_calendar_id(calendar_id, GCAL_WRITE_CALENDAR_ID)
 
         # Default end_time to 1 hour after start if not provided
         if not end_time:
@@ -899,7 +998,7 @@ class GoogleCalendarSkill(BaseSkill):
 
         try:
             response = await client.post(
-                f"/calendars/{GCAL_CALENDAR_ID}/events",
+                f"/calendars/{target_calendar}/events",
                 json=event_data,
             )
             response.raise_for_status()
@@ -934,12 +1033,17 @@ class GoogleCalendarSkill(BaseSkill):
             self.logger.error(f"Erro ao criar evento: {e}")
             return self.error(f"Falha ao criar evento: {str(e)}")
 
-    async def _cancel_calendar_event(self, event_id: Optional[str]) -> Dict[str, Any]:
+    async def _cancel_calendar_event(
+        self,
+        event_id: Optional[str],
+        calendar_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         Deletes a calendar event.
 
         Args:
             event_id: Event ID to delete
+            calendar_id: Optional calendar name/alias or raw ID to delete event from.
 
         Returns:
             Success confirmation or error
@@ -952,8 +1056,11 @@ class GoogleCalendarSkill(BaseSkill):
         if not client:
             return self.error("Não autenticado. Use 'Configure o calendário' para autenticar.")
 
+        # Resolve target calendar ID
+        target_calendar = self._resolve_calendar_id(calendar_id, GCAL_WRITE_CALENDAR_ID)
+
         try:
-            response = await client.delete(f"/calendars/{GCAL_CALENDAR_ID}/events/{event_id}")
+            response = await client.delete(f"/calendars/{target_calendar}/events/{event_id}")
             response.raise_for_status()
 
             await client.aclose()

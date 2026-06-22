@@ -21,7 +21,7 @@ import json
 import logging
 import tomllib
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 
@@ -352,6 +352,53 @@ GCAL_CALENDAR_ID: str = _cfg(
     "skills", "google_calendar", "calendar_id",
     default="primary"
 )
+
+# Mapeamento de agendas (alias -> ID)
+GCAL_CALENDARS: Dict[str, str] = {}
+_toml_calendars = _toml_get("skills", "google_calendar", "calendars")
+
+if isinstance(_toml_calendars, dict) and _toml_calendars:
+    GCAL_CALENDARS = {str(k): str(v) for k, v in _toml_calendars.items()}
+else:
+    # Se não houver no TOML, tenta parsear do ENV como JSON string
+    _gcal_calendars_env = os.getenv("GCAL_CALENDARS_JSON")
+    if _gcal_calendars_env:
+        try:
+            _parsed = json.loads(_gcal_calendars_env)
+            if isinstance(_parsed, dict):
+                GCAL_CALENDARS = {str(k): str(v) for k, v in _parsed.items()}
+        except Exception:
+            logger.warning("Falha ao parsear GCAL_CALENDARS_JSON. Usando fallback.")
+
+# Caso nenhuma agenda esteja mapeada, criamos o alias padrão com o GCAL_CALENDAR_ID ativo
+if not GCAL_CALENDARS:
+    GCAL_CALENDARS = {"primary": GCAL_CALENDAR_ID}
+
+# Lista de IDs para monitoramento/leitura (bridge de sincronização)
+# Também suporta carregar GCAL_CALENDAR_IDS diretamente do .env como fallback
+_gcal_ids_raw = _cfg(
+    "GCAL_CALENDAR_IDS", "skills", "google_calendar", "calendar_ids"
+)
+
+GCAL_CALENDAR_IDS: List[str] = []
+if _gcal_ids_raw is not None:
+    if isinstance(_gcal_ids_raw, list):
+        GCAL_CALENDAR_IDS = [str(x).strip() for x in _gcal_ids_raw if str(x).strip()]
+    elif isinstance(_gcal_ids_raw, str):
+        GCAL_CALENDAR_IDS = [x.strip() for x in _gcal_ids_raw.split(",") if x.strip()]
+
+# Se não estiver explicitamente definido no .env/config.toml, assume os valores mapeados em GCAL_CALENDARS
+if not GCAL_CALENDAR_IDS:
+    GCAL_CALENDAR_IDS = list(GCAL_CALENDARS.values())
+
+# Agenda padrão de escrita (resolvida a partir de alias ou ID direto)
+_write_cal_raw: str = _cfg(
+    "GCAL_WRITE_CALENDAR_ID",
+    "skills", "google_calendar", "write_calendar_id",
+    default="primary"
+)
+# Se for um alias cadastrado no dict, resolve para o ID real. Caso contrário, usa o valor direto.
+GCAL_WRITE_CALENDAR_ID: str = GCAL_CALENDARS.get(_write_cal_raw, _write_cal_raw)
 
 # ── Pattern Analysis (Proactive Suggestions) ───────────────────────────
 

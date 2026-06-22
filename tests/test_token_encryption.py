@@ -6,7 +6,6 @@ import pytest
 from unittest.mock import patch
 
 from core.token_encryption import TokenCipher
-from cryptography.fernet import InvalidToken
 
 
 @pytest.fixture

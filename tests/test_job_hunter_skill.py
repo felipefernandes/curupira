@@ -5,7 +5,7 @@ Ref: Issue #95
 
 import asyncio
 import unittest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 from skills.job_hunter import JobHunterGetDefaultsSkill, JobHunterRunSearchSkill
 

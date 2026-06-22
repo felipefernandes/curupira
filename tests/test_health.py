@@ -1,10 +1,7 @@
-import sys
-import os
 import pytest
 from unittest.mock import patch, mock_open
 
 from core import health
-from core import config
 
 @pytest.fixture
 def mock_config():

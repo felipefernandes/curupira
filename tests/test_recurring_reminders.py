@@ -3,10 +3,9 @@ Tests for recurring reminders & scheduled tasks.
 Ref: Issue #76 — https://github.com/felipefernandes/curupira/issues/76
 """
 
-import asyncio
 import unittest
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from unittest.mock import AsyncMock, MagicMock
 
 from skills.reminders import (
     ReminderManager,

@@ -8,7 +8,7 @@ used in the responder() handler, without importing the full bot module.
 import re
 import logging
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 from telegram.error import TelegramError
 from telegram.constants import ParseMode
 

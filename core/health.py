@@ -1,5 +1,4 @@
 import os
-import shutil
 import subprocess
 import urllib.request
 import urllib.error

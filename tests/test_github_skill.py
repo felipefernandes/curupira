@@ -6,7 +6,6 @@ Ref: Issue #163 — Adequação para o SKILLS_FRAMEWORK.md
 import os
 import sys
 import pytest
-import pytest_asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -150,7 +149,6 @@ class TestGithubListRepos:
 
     @pytest.mark.asyncio
     async def test_http_error(self, skill):
-        import httpx
         mock_client = AsyncMock()
         _http_status_error(500, mock_client)
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)
@@ -212,7 +210,6 @@ class TestGithubListIssues:
 
     @pytest.mark.asyncio
     async def test_repo_not_found(self, skill):
-        import httpx
         mock_client = AsyncMock()
         _http_status_error(404, mock_client)
         mock_client.__aenter__ = AsyncMock(return_value=mock_client)

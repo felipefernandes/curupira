@@ -1,6 +1,5 @@
 
 import asyncio
-import logging
 from pathlib import Path
 from typing import Dict, Any, Optional
 from skills.reminders import ListRemindersSkill, ReminderManager

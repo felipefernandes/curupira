@@ -1,5 +1,4 @@
 import re
-import datetime
 
 def preprocess(text):
     # Current regex

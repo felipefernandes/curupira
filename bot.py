@@ -4,7 +4,6 @@ from telegram.constants import ParseMode
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes, Application
 from core import config
 import asyncio
-import re
 from datetime import datetime
 import logging
 from typing import Optional
@@ -163,7 +162,13 @@ async def acesso_negado(update: Update):
 async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.from_user:
         return
-    assert memory_manager is not None
+
+    if memory_manager is None:
+        logging.warning("responder: Tentativa de processar mensagem, mas memory_manager está desativado.")
+        await update.message.reply_text(
+            "⚠️ O sistema de memória e histórico está desativado. Por favor, ative-o nas configurações para conversar comigo."
+        )
+        return
 
     user_id = update.message.from_user.id
 
@@ -213,7 +218,7 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
             name = await memory_manager.get_fact_value(user_id, "personal_name") or "Usuário"
             
             # Improved informal reply as requested:
-            welcome_back = f"Entendido! Configuração concluída! Como posso ajudar hoje?"
+            welcome_back = "Entendido! Configuração concluída! Como posso ajudar hoje?"
             
             await update.message.reply_text(welcome_back)
             await memory_manager.log_message(user_id, "model", welcome_back)
@@ -358,7 +363,13 @@ async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
     if is_task:
         # Run message through the agent brain to trigger skills
         try:
-            assert memory_manager is not None
+            if memory_manager is None:
+                logging.error(f"execute_reminder: Não foi possível executar a tarefa {reminder_id} porque memory_manager está desativado.")
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"⚠️ Erro ao executar tarefa agendada: {message}. O sistema de memória está desativado."
+                )
+                return
             user_facts = await memory_manager.get_facts(chat_id)
             assistant_surname = await memory_manager.get_fact_value(chat_id, "assistant_surname") or ""
             agent_context = {
@@ -605,7 +616,6 @@ async def post_init(application: Application):
             logging.info(f"Calendar sync job agendado (intervalo: {config.GCAL_SYNC_INTERVAL_MINUTES} minutos)")
 
             # Google Calendar Token Health Check (daily at 8 AM)
-            from telegram.ext import JobQueue
             application.job_queue.run_daily(
                 check_token_health,
                 time=datetime.strptime("08:00", "%H:%M").time(),

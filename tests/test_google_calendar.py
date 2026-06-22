@@ -9,13 +9,12 @@ import pytest
 import json
 from pathlib import Path
 from unittest.mock import Mock, patch, AsyncMock, MagicMock
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from skills.google_calendar import (
     GoogleCalendarSkill,
     INVALID_AUTH_CODE_PLACEHOLDERS,
-    TOKEN_FILE,
-    DATA_DIR
+    TOKEN_FILE
 )
 
 
@@ -74,16 +73,13 @@ class TestSkillInitialization:
         assert skill.skill_group == "calendar"
         assert skill.skill_group_emoji == "📅"
 
-    def test_data_directory_creation(self):
+    def test_data_directory_creation(self, tmp_path):
         """Verifica que diretório data/ é criado na inicialização."""
-        # Remover temporariamente se existir
-        import shutil
-        if DATA_DIR.exists():
-            shutil.rmtree(DATA_DIR)
+        temp_data_dir = tmp_path / "data"
 
-        GoogleCalendarSkill()
-
-        assert DATA_DIR.exists()
+        with patch("skills.google_calendar.DATA_DIR", temp_data_dir):
+            GoogleCalendarSkill()
+            assert temp_data_dir.exists()
 
     @patch('skills.google_calendar.GCAL_CLIENT_ID', None)
     @patch('skills.google_calendar.GCAL_CLIENT_SECRET', None)
@@ -239,7 +235,6 @@ class TestTokenManagement:
     def test_load_token_deletion_failure_logged(self, skill, cleanup_token_file):
         """Verifica que falha ao deletar token corrompido é logada."""
         from unittest.mock import patch
-        from pathlib import Path
 
         # Criar arquivo corrompido
         with open(TOKEN_FILE, "w") as f:

@@ -16,10 +16,8 @@ Estratégia de isolamento:
 
 import importlib
 import importlib.util
-import os
 import sys
 import textwrap
-import pytest
 from pathlib import Path
 from unittest.mock import patch, mock_open
 

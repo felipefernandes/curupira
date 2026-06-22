@@ -7,6 +7,7 @@ estes testes devem ser atualizados para refletir o novo comportamento.
 """
 import pytest
 import json
+import httpx
 from pathlib import Path
 from unittest.mock import Mock, patch, AsyncMock, MagicMock
 from datetime import datetime
@@ -665,3 +666,278 @@ class TestListCalendarEvents:
 
 # NOTA: Testes para _add_calendar_event e _cancel_calendar_event
 # requerem mock de httpx.AsyncClient e serão adicionados conforme necessário.
+
+
+class TestMultipleCalendarsAndWriteTarget:
+    """Testa múltiplos calendários (listagem, deduplicação, resiliência) e alvo de escrita."""
+
+    @pytest.mark.asyncio
+    @patch('skills.google_calendar.GCAL_CALENDAR_IDS', ['cal1', 'cal2'])
+    async def test_list_events_multiple_calendars_success(self, skill):
+        """Verifica se eventos de múltiplos calendários são unificados."""
+        mock_client = MagicMock()
+        mock_response1 = MagicMock()
+        mock_response1.status_code = 200
+        mock_response1.json.return_value = {
+            "items": [{"id": "ev1", "summary": "Evento 1", "start": {"dateTime": "2026-03-11T10:00:00Z"}}]
+        }
+        
+        mock_response2 = MagicMock()
+        mock_response2.status_code = 200
+        mock_response2.json.return_value = {
+            "items": [{"id": "ev2", "summary": "Evento 2", "start": {"dateTime": "2026-03-11T12:00:00Z"}}]
+        }
+
+        # Mock mock_client.get para retornar as respostas diferentes dependendo da chamada
+        async def mock_get(url, *args, **kwargs):
+            if "cal1" in url:
+                return mock_response1
+            elif "cal2" in url:
+                return mock_response2
+            raise Exception("URL inválido no mock")
+
+        mock_client.get = mock_get
+        mock_client.aclose = AsyncMock()
+
+        # Mock datetime.now()
+        mock_now = datetime(2026, 3, 11, 8, 0, 0)
+
+        with patch.object(skill, '_get_client', return_value=mock_client), \
+             patch('skills.google_calendar.datetime') as mock_datetime:
+            mock_datetime.now.return_value = mock_now
+            mock_datetime.fromisoformat = datetime.fromisoformat
+            result = await skill._list_calendar_events(time_range="today")
+
+        assert result["status"] == "success"
+        events = result["data"]["events"]
+        assert len(events) == 2
+        assert events[0]["id"] == "ev1"
+        assert events[1]["id"] == "ev2"
+
+    @pytest.mark.asyncio
+    @patch('skills.google_calendar.GCAL_CALENDAR_IDS', ['cal1', 'cal2'])
+    async def test_list_events_multiple_calendars_deduplication(self, skill):
+        """Verifica se eventos com mesmo iCalUID são deduplicados e ordenados corretamente."""
+        mock_client = MagicMock()
+        mock_response1 = MagicMock()
+        mock_response1.status_code = 200
+        mock_response1.json.return_value = {
+            "items": [
+                {"id": "ev1", "iCalUID": "shared_uid", "summary": "Alinhamento", "start": {"dateTime": "2026-03-11T15:00:00Z"}},
+                {"id": "ev2", "iCalUID": "unique_uid_1", "summary": "Dentista", "start": {"dateTime": "2026-03-11T10:00:00Z"}}
+            ]
+        }
+        
+        mock_response2 = MagicMock()
+        mock_response2.status_code = 200
+        mock_response2.json.return_value = {
+            # O mesmo evento "Alinhamento" compartilhado (mesmo iCalUID)
+            "items": [{"id": "ev3", "iCalUID": "shared_uid", "summary": "Alinhamento", "start": {"dateTime": "2026-03-11T15:00:00Z"}}]
+        }
+
+        async def mock_get(url, *args, **kwargs):
+            if "cal1" in url:
+                return mock_response1
+            return mock_response2
+
+        mock_client.get = mock_get
+        mock_client.aclose = AsyncMock()
+        mock_now = datetime(2026, 3, 11, 8, 0, 0)
+
+        with patch.object(skill, '_get_client', return_value=mock_client), \
+             patch('skills.google_calendar.datetime') as mock_datetime:
+            mock_datetime.now.return_value = mock_now
+            mock_datetime.fromisoformat = datetime.fromisoformat
+            result = await skill._list_calendar_events(time_range="today")
+
+        assert result["status"] == "success"
+        events = result["data"]["events"]
+        # De 3 eventos recebidos brutos, 2 devem restar após deduplicação de "shared_uid"
+        assert len(events) == 2
+        # Devem estar ordenados cronologicamente: Dentista (10:00) primeiro, Alinhamento (15:00) depois
+        assert events[0]["summary"] == "Dentista"
+        assert events[1]["summary"] == "Alinhamento"
+
+    @pytest.mark.asyncio
+    @patch('skills.google_calendar.GCAL_CALENDAR_IDS', ['valid_cal', 'failing_cal'])
+    async def test_list_events_multiple_calendars_partial_failure(self, skill):
+        """Verifica se falha em um calendário é tolerada (resiliência)."""
+        mock_client = MagicMock()
+        mock_response1 = MagicMock()
+        mock_response1.status_code = 200
+        mock_response1.json.return_value = {
+            "items": [{"id": "ev1", "summary": "Evento Válido", "start": {"dateTime": "2026-03-11T10:00:00Z"}}]
+        }
+
+        async def mock_get(url, *args, **kwargs):
+            if "valid_cal" in url:
+                return mock_response1
+            # Simula um erro HTTP 403 no calendário proibido/inexistente
+            response_error = MagicMock()
+            response_error.status_code = 403
+            raise httpx.HTTPStatusError("Forbidden", request=MagicMock(), response=response_error)
+
+        mock_client.get = mock_get
+        mock_client.aclose = AsyncMock()
+        mock_now = datetime(2026, 3, 11, 8, 0, 0)
+
+        with patch.object(skill, '_get_client', return_value=mock_client), \
+             patch('skills.google_calendar.datetime') as mock_datetime:
+            mock_datetime.now.return_value = mock_now
+            mock_datetime.fromisoformat = datetime.fromisoformat
+            result = await skill._list_calendar_events(time_range="today")
+
+        # Deve ser "success" porque o calendário válido retornou resultados com resiliência
+        assert result["status"] == "success"
+        events = result["data"]["events"]
+        assert len(events) == 1
+        assert events[0]["summary"] == "Evento Válido"
+
+    @pytest.mark.asyncio
+    @patch('skills.google_calendar.GCAL_WRITE_CALENDAR_ID', 'write_target_cal')
+    async def test_add_event_uses_write_calendar_id(self, skill):
+        """Verifica se criação de evento usa a agenda especificada em GCAL_WRITE_CALENDAR_ID."""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "id": "new_event_123",
+            "summary": "Reunião de Escrita",
+            "start": {"dateTime": "2026-03-11T15:00:00Z"},
+            "htmlLink": "http://link"
+        }
+        mock_response.raise_for_status = MagicMock()
+        
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client.aclose = AsyncMock()
+
+        with patch.object(skill, '_get_client', return_value=mock_client):
+            result = await skill._add_calendar_event(
+                summary="Reunião de Escrita",
+                start_time="2026-03-11T15:00:00Z"
+            )
+
+        assert result["status"] == "success"
+        # Verifica se o endpoint POST foi chamado com a agenda de escrita correta
+        mock_client.post.assert_called_once()
+        call_url = mock_client.post.call_args[0][0]
+        assert "write_target_cal" in call_url
+
+    @pytest.mark.asyncio
+    @patch('skills.google_calendar.GCAL_WRITE_CALENDAR_ID', 'write_target_cal')
+    async def test_cancel_event_uses_write_calendar_id(self, skill):
+        """Verifica se cancelamento de evento usa a agenda especificada em GCAL_WRITE_CALENDAR_ID."""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 204
+        mock_response.raise_for_status = MagicMock()
+        
+        mock_client.delete = AsyncMock(return_value=mock_response)
+        mock_client.aclose = AsyncMock()
+
+        with patch.object(skill, '_get_client', return_value=mock_client):
+            result = await skill._cancel_calendar_event(event_id="delete_event_123")
+
+        assert result["status"] == "success"
+        # Verifica se o endpoint DELETE foi chamado com a agenda de escrita correta
+        mock_client.delete.assert_called_once()
+        call_url = mock_client.delete.call_args[0][0]
+        assert "write_target_cal" in call_url
+
+    @patch('skills.google_calendar.GCAL_CALENDARS', {'primary': 'primary', 'work': 'ffernandes@gazeus.com'})
+    def test_resolve_calendar_id_alias(self, skill):
+        """Verifica se resolve aliases corretamente (case-insensitive) e faz fallback."""
+        assert skill._resolve_calendar_id("work", "fallback") == "ffernandes@gazeus.com"
+        assert skill._resolve_calendar_id("WORK", "fallback") == "ffernandes@gazeus.com"
+        assert skill._resolve_calendar_id("primary", "fallback") == "primary"
+        # Sem solicitado -> usa fallback
+        assert skill._resolve_calendar_id(None, "fallback") == "fallback"
+        # Se não é um alias -> retorna o próprio ID
+        assert skill._resolve_calendar_id("outro_email@gmail.com", "fallback") == "outro_email@gmail.com"
+
+    @pytest.mark.asyncio
+    @patch('skills.google_calendar.GCAL_CALENDARS', {'primary': 'primary', 'work': 'ffernandes@gazeus.com'})
+    @patch('skills.google_calendar.GCAL_CALENDAR_IDS', ['primary', 'ffernandes@gazeus.com'])
+    async def test_list_events_with_specific_calendar_id(self, skill):
+        """Verifica se apenas a agenda informada em calendar_id é consultada."""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "items": [{"id": "ev_work", "summary": "Daily Gazeus", "start": {"dateTime": "2026-03-11T10:00:00Z"}}]
+        }
+        
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.aclose = AsyncMock()
+        mock_now = datetime(2026, 3, 11, 8, 0, 0)
+
+        with patch.object(skill, '_get_client', return_value=mock_client), \
+             patch('skills.google_calendar.datetime') as mock_datetime:
+            mock_datetime.now.return_value = mock_now
+            mock_datetime.fromisoformat = datetime.fromisoformat
+            result = await skill._list_calendar_events(time_range="today", calendar_id="work")
+
+        assert result["status"] == "success"
+        events = result["data"]["events"]
+        assert len(events) == 1
+        assert events[0]["summary"] == "Daily Gazeus"
+        
+        # O mock_client deve ter sido chamado apenas uma vez com a URL do calendário do trabalho (Gazeus)
+        mock_client.get.assert_called_once()
+        call_url = mock_client.get.call_args[0][0]
+        assert "ffernandes@gazeus.com" in call_url
+
+    @pytest.mark.asyncio
+    @patch('skills.google_calendar.GCAL_CALENDARS', {'primary': 'primary', 'work': 'ffernandes@gazeus.com'})
+    @patch('skills.google_calendar.GCAL_WRITE_CALENDAR_ID', 'primary')
+    async def test_add_event_with_specific_calendar_id(self, skill):
+        """Verifica se criação de evento na agenda especificada via calendar_id funciona."""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "id": "new_event_123",
+            "summary": "Daily",
+            "start": {"dateTime": "2026-03-11T15:00:00Z"},
+            "htmlLink": "http://link"
+        }
+        mock_response.raise_for_status = MagicMock()
+        
+        mock_client.post = AsyncMock(return_value=mock_response)
+        mock_client.aclose = AsyncMock()
+
+        with patch.object(skill, '_get_client', return_value=mock_client):
+            result = await skill._add_calendar_event(
+                summary="Daily",
+                start_time="2026-03-11T15:00:00Z",
+                calendar_id="work"
+            )
+
+        assert result["status"] == "success"
+        mock_client.post.assert_called_once()
+        call_url = mock_client.post.call_args[0][0]
+        # Deve ter sido direcionado para o email do trabalho
+        assert "ffernandes@gazeus.com" in call_url
+
+    @pytest.mark.asyncio
+    @patch('skills.google_calendar.GCAL_CALENDARS', {'primary': 'primary', 'work': 'ffernandes@gazeus.com'})
+    @patch('skills.google_calendar.GCAL_WRITE_CALENDAR_ID', 'primary')
+    async def test_cancel_event_with_specific_calendar_id(self, skill):
+        """Verifica se cancelamento de evento na agenda especificada via calendar_id funciona."""
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 204
+        mock_response.raise_for_status = MagicMock()
+        
+        mock_client.delete = AsyncMock(return_value=mock_response)
+        mock_client.aclose = AsyncMock()
+
+        with patch.object(skill, '_get_client', return_value=mock_client):
+            result = await skill._cancel_calendar_event(event_id="delete_123", calendar_id="work")
+
+        assert result["status"] == "success"
+        mock_client.delete.assert_called_once()
+        call_url = mock_client.delete.call_args[0][0]
+        # Deve ter sido deletado da agenda do trabalho
+        assert "ffernandes@gazeus.com" in call_url
+

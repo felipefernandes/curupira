@@ -19,7 +19,7 @@ from google.oauth2.credentials import Credentials
 
 from skills.memory import DB_FILE
 from skills.reminders import ReminderManager
-from core.config import GCAL_CALENDAR_ID
+from core.config import GCAL_CALENDAR_IDS
 
 # Security module for token encryption
 import json
@@ -181,32 +181,78 @@ class CalendarReminderBridge:
                 },
                 timeout=10.0,
             ) as client:
-                response = await client.get(
-                    f"/calendars/{GCAL_CALENDAR_ID}/events",
-                    params={
-                        "timeMin": time_min,
-                        "timeMax": time_max,
-                        "singleEvents": True,
-                        "orderBy": "startTime",
-                        "maxResults": 20,
-                    },
-                )
-                response.raise_for_status()
-                data = response.json()
 
+                async def fetch_calendar(calendar_id: str) -> list:
+                    try:
+                        res = await client.get(
+                            f"/calendars/{calendar_id}/events",
+                            params={
+                                "timeMin": time_min,
+                                "timeMax": time_max,
+                                "singleEvents": True,
+                                "orderBy": "startTime",
+                                "maxResults": 20,
+                            },
+                        )
+                        res.raise_for_status()
+                        return res.json().get("items", [])
+                    except httpx.HTTPStatusError as err:
+                        self.logger.error(
+                            f"Erro HTTP {err.response.status_code} ao sincronizar agenda {calendar_id}"
+                        )
+                        return []
+                    except Exception as err:
+                        self.logger.error(
+                            f"Erro inesperado ao sincronizar agenda {calendar_id}: {err}"
+                        )
+                        return []
+
+                # Executa busca concorrente em todas as agendas configuradas
+                tasks = [fetch_calendar(cal_id) for cal_id in GCAL_CALENDAR_IDS]
+                results = await asyncio.gather(*tasks)
+
+                raw_items = []
+                for items in results:
+                    raw_items.extend(items)
+
+                # Deduplicação em memória para evitar criar lembretes idênticos
+                seen_uids = set()
+                seen_keys = set()
                 events = []
-                for item in data.get("items", []):
-                    # Extract event details
+                for item in raw_items:
+                    ical_uid = item.get("iCalUID")
+                    event_id = item.get("id")
+                    
+                    start_val = item.get("start", {}).get("dateTime") or item.get("start", {}).get("date")
+                    summary = item.get("summary", "Evento sem título").strip()
+                    fallback_key = (summary, start_val)
+
+                    if ical_uid:
+                        if ical_uid in seen_uids:
+                            continue
+                        seen_uids.add(ical_uid)
+                    elif event_id:
+                        if event_id in seen_uids:
+                            continue
+                        seen_uids.add(event_id)
+                    else:
+                        if fallback_key in seen_keys:
+                            continue
+                        seen_keys.add(fallback_key)
+
+                    # Garante que tenhamos um iCalUID único ou ID para salvar como external_id
                     event = {
-                        "id": item.get("id"),
-                        "iCalUID": item.get("iCalUID"),
-                        "summary": item.get("summary", "Evento sem título"),
-                        "start": item.get("start", {}).get("dateTime") or item.get("start", {}).get("date"),
+                        "id": event_id,
+                        "iCalUID": ical_uid or event_id or f"{summary}_{start_val}",
+                        "summary": summary,
+                        "start": start_val,
                         "description": item.get("description", ""),
                     }
                     events.append(event)
 
-                self.logger.info(f"Fetched {len(events)} upcoming events from Google Calendar")
+                self.logger.info(
+                    f"Fetched e deduplicados {len(events)} evento(s) de {len(GCAL_CALENDAR_IDS)} calendário(s)"
+                )
                 return events
 
         except httpx.TimeoutException:
@@ -217,15 +263,6 @@ class CalendarReminderBridge:
             return []
         except httpx.HTTPStatusError as e:
             self.logger.error(f"HTTP error ao buscar eventos: {e.response.status_code}")
-
-            # SECURITY: Log apenas erro estruturado, não response body completo
-            try:
-                error_data = e.response.json()
-                error_message = error_data.get("error", {}).get("message", "unknown")
-                self.logger.error(f"Erro da API Calendar: {error_message}")
-            except Exception:
-                pass  # Se resposta não for JSON, apenas status code já foi logado
-
             return []
         except Exception as e:
             self.logger.error(f"Erro ao buscar eventos do calendário: {e}")

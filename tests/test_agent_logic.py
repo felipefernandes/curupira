@@ -278,6 +278,7 @@ async def test_process_message_tool_execution(agent, mock_groq_client):
 # --- _parse_failed_generation tests ---
 
 
+
 class TestSanitizeText:
     """Tests for AgentBrain._sanitize_text."""
 
@@ -301,6 +302,7 @@ class TestSanitizeText:
         # \x1b (ESC) e \x00 (NUL) não são imprimíveis nem \n, \r, \t
         sanitized = AgentBrain._sanitize_text(text_with_null)
         assert sanitized == "TextoCom[31mLixo"
+
 
 
 

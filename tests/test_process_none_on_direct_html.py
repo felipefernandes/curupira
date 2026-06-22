@@ -261,6 +261,7 @@ async def test_process_returns_text_with_mixed_tools(agent):
 # ── failed_generation recovery path (line 1091) ───────────────────────────────
 
 
+
 # ── Gemini path (line 1290) ────────────────────────────────────────────────────
 
 @pytest.mark.asyncio

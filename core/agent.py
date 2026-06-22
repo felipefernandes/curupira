@@ -722,7 +722,13 @@ class AgentBrain:
         tools_context = "\n".join(available_tools_desc) if available_tools_desc else "Nenhuma ferramenta disponível no momento."
 
         user_name = context.get('user_name', 'Usuário')
-        current_time_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now = datetime.now()
+        weekday_map = {
+            0: "segunda-feira", 1: "terça-feira", 2: "quarta-feira", 
+            3: "quinta-feira", 4: "sexta-feira", 5: "sábado", 6: "domingo"
+        }
+        weekday_pt = weekday_map.get(now.weekday(), "")
+        current_time_str = f"{weekday_pt}, {now.strftime('%Y-%m-%d %H:%M:%S')}"
 
         # Build bot full name — "Curupira" + optional surname set during onboarding
         assistant_surname = context.get('assistant_surname', '').strip()

@@ -903,11 +903,27 @@ class GoogleCalendarSkill(BaseSkill):
                     except Exception as parse_err:
                         self.logger.warning(f"Erro ao parsear datas de evento de dia inteiro: {parse_err}")
 
+                # Determinar o dia da semana em português
+                weekday_pt = ""
+                if start_val:
+                    try:
+                        date_str = start_val[:10]
+                        from datetime import date
+                        event_date = date.fromisoformat(date_str)
+                        weekday_map = {
+                            0: "segunda-feira", 1: "terça-feira", 2: "quarta-feira", 
+                            3: "quinta-feira", 4: "sexta-feira", 5: "sábado", 6: "domingo"
+                        }
+                        weekday_pt = weekday_map.get(event_date.weekday(), "")
+                    except Exception as weekday_err:
+                        self.logger.warning(f"Erro ao calcular dia da semana para o evento: {weekday_err}")
+
                 event = {
                     "id": event_id,
                     "summary": summary,
                     "start": start_val,
                     "end": end_datetime or end_date,
+                    "weekday": weekday_pt,
                     "description": item.get("description", ""),
                 }
                 events.append(event)

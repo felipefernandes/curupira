@@ -653,6 +653,56 @@ class TestListCalendarEvents:
         events = result["data"]["events"]
         assert len(events) == 1
         assert events[0]["id"] == "event_today"
+        assert events[0]["weekday"] == "quarta-feira"
+
+    @pytest.mark.asyncio
+    async def test_list_calendar_events_includes_weekday_field(self, skill):
+        """Verifica se o campo weekday é adicionado corretamente para cada dia da semana."""
+        mock_api_response = {
+            "items": [
+                {
+                    "id": "event_mon",
+                    "summary": "Evento Segunda",
+                    "start": {"date": "2026-03-09"},
+                    "end": {"date": "2026-03-10"},
+                },
+                {
+                    "id": "event_wed",
+                    "summary": "Evento Quarta",
+                    "start": {"dateTime": "2026-03-11T10:00:00-03:00"},
+                    "end": {"dateTime": "2026-03-11T11:00:00-03:00"},
+                },
+            ]
+        }
+
+        mock_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = mock_api_response
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client.get = AsyncMock(return_value=mock_response)
+        mock_client.aclose = AsyncMock()
+
+        mock_now = datetime(2026, 3, 9, 8, 0, 0) # 2026-03-09 é Segunda
+
+        with patch.object(skill, '_get_client', return_value=mock_client), \
+             patch('skills.google_calendar.datetime') as mock_datetime:
+            mock_datetime.now.return_value = mock_now
+            mock_datetime.fromisoformat = datetime.fromisoformat
+            result = await skill._list_calendar_events(time_range="week")
+
+        assert result["status"] == "success"
+        events = result["data"]["events"]
+        assert len(events) == 2
+
+        # event_mon should be "segunda-feira"
+        event_mon = next(e for e in events if e["id"] == "event_mon")
+        assert event_mon["weekday"] == "segunda-feira"
+
+        # event_wed should be "quarta-feira"
+        event_wed = next(e for e in events if e["id"] == "event_wed")
+        assert event_wed["weekday"] == "quarta-feira"
 
     @pytest.mark.asyncio
     async def test_list_calendar_events_not_authenticated(self, skill):

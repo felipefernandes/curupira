@@ -849,7 +849,7 @@ class GoogleCalendarSkill(BaseSkill):
             # Determinar as agendas a serem consultadas resolvendo aliases
             resolved_cals = []
             if calendar_id and calendar_id.strip().lower() not in ("all", "todos"):
-                resolved_cals = [self._resolve_calendar_id(calendar_id, None)]
+                resolved_cals = [self._resolve_calendar_id(calendar_id, "")]
             else:
                 resolved_cals = GCAL_CALENDAR_IDS
 

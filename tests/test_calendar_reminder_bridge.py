@@ -2,6 +2,7 @@
 Testes para CalendarReminderBridge
 """
 import pytest
+import httpx
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch, MagicMock, AsyncMock
@@ -240,3 +241,111 @@ class TestEventReminderCreation:
                 # Deve ser parseável
                 datetime.fromisoformat(params["timeMin"].replace("Z", "+00:00"))
                 datetime.fromisoformat(params["timeMax"].replace("Z", "+00:00"))
+
+
+class TestBridgeEventDeduplication:
+    """Verifica regras de deduplicação e resiliência na busca do lembrete bridge."""
+
+    @pytest.mark.asyncio
+    @patch('skills.calendar_reminder_bridge.GCAL_CALENDAR_IDS', ['primary', 'ffernandes@gazeus.com'])
+    async def test_fetch_upcoming_events_deduplication(self, bridge):
+        """Verifica se deduplica corretamente eventos na busca para lembretes."""
+        with patch.object(bridge, '_get_valid_credentials', return_value=MagicMock(token="test_token")):
+            with patch('httpx.AsyncClient') as mock_client_class:
+                mock_response_1 = MagicMock()
+                mock_response_1.status_code = 200
+                mock_response_1.json.return_value = {
+                    "items": [
+                        {
+                            "id": "event_id_1",
+                            "iCalUID": "shared_uid_123",
+                            "summary": "Daily Reunião",
+                            "start": {"dateTime": "2026-03-11T10:00:00Z"}
+                        },
+                        {
+                            "summary": "Lembrete sem ID",
+                            "start": {"dateTime": "2026-03-11T12:00:00Z"}
+                        }
+                    ]
+                }
+
+                mock_response_2 = MagicMock()
+                mock_response_2.status_code = 200
+                mock_response_2.json.return_value = {
+                    "items": [
+                        {
+                            "id": "event_id_2",
+                            "iCalUID": "shared_uid_123", # Duplicado por UID
+                            "summary": "Daily Reunião",
+                            "start": {"dateTime": "2026-03-11T10:00:00Z"}
+                        },
+                        {
+                            "summary": "Lembrete sem ID", # Duplicado por fallback_key (título + início)
+                            "start": {"dateTime": "2026-03-11T12:00:00Z"}
+                        },
+                        {
+                            "id": "event_id_3",
+                            "iCalUID": "diff_uid_456",
+                            "summary": "Daily Reunião",  # Mesmo título e início, mas ID diferente -> NÃO deduplica
+                            "start": {"dateTime": "2026-03-11T10:00:00Z"}
+                        }
+                    ]
+                }
+
+                mock_client_instance = AsyncMock()
+                mock_client_instance.get = AsyncMock(side_effect=[mock_response_1, mock_response_2])
+                mock_client_instance.__aenter__.return_value = mock_client_instance
+                mock_client_instance.__aexit__.return_value = None
+
+                mock_client_class.return_value = mock_client_instance
+
+                events = await bridge._fetch_upcoming_events()
+
+                # Deve resultar em 3 eventos após a deduplicação:
+                # 1. "shared_uid_123" (do primeiro calendário)
+                # 2. "Lembrete sem ID" (do primeiro calendário)
+                # 3. "diff_uid_456" (do segundo calendário, que não colide com shared_uid_123)
+                assert len(events) == 3
+                uids = [e["iCalUID"] for e in events]
+                assert "shared_uid_123" in uids
+                assert "diff_uid_456" in uids
+                assert "Lembrete sem ID_2026-03-11T12:00:00Z" in uids
+
+    @pytest.mark.asyncio
+    @patch('skills.calendar_reminder_bridge.GCAL_CALENDAR_IDS', ['primary', 'broken_calendar'])
+    async def test_fetch_upcoming_events_resilience(self, bridge):
+        """Verifica se falha em uma das agendas não impede o carregamento das outras."""
+        with patch.object(bridge, '_get_valid_credentials', return_value=MagicMock(token="test_token")):
+            with patch('httpx.AsyncClient') as mock_client_class:
+                mock_response_ok = MagicMock()
+                mock_response_ok.status_code = 200
+                mock_response_ok.json.return_value = {
+                    "items": [
+                        {
+                            "id": "ok_event",
+                            "summary": "Evento Funcional",
+                            "start": {"dateTime": "2026-03-11T10:00:00Z"}
+                        }
+                    ]
+                }
+
+                # Simula um erro 403 (ou conexão) para o broken_calendar
+                mock_response_error = MagicMock()
+                mock_response_error.status_code = 403
+                mock_response_error.raise_for_status = MagicMock(side_effect=httpx.HTTPStatusError("Forbidden", request=MagicMock(), response=mock_response_error))
+
+                mock_client_instance = AsyncMock()
+                # Primeiro get retorna ok, segundo lança exceção ao chamar raise_for_status
+                mock_client_instance.get = AsyncMock(side_effect=[mock_response_ok, mock_response_error])
+                mock_client_instance.__aenter__.return_value = mock_client_instance
+                mock_client_instance.__aexit__.return_value = None
+
+                mock_client_class.return_value = mock_client_instance
+
+                # Não deve estourar erro
+                events = await bridge._fetch_upcoming_events()
+
+                # Deve ter capturado o evento do calendário funcional
+                assert len(events) == 1
+                assert events[0]["summary"] == "Evento Funcional"
+

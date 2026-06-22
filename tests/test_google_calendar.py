@@ -941,3 +941,203 @@ class TestMultipleCalendarsAndWriteTarget:
         # Deve ter sido deletado da agenda do trabalho
         assert "ffernandes@gazeus.com" in call_url
 
+
+class TestEventDeduplication:
+    """Verifica as regras de deduplicação e coexistência de eventos."""
+
+    @pytest.mark.asyncio
+    @patch('skills.google_calendar.GCAL_CALENDARS', {'primary': 'primary', 'work': 'ffernandes@gazeus.com'})
+    @patch('skills.google_calendar.GCAL_CALENDAR_IDS', ['primary', 'ffernandes@gazeus.com'])
+    async def test_deduplication_by_ical_uid(self, skill):
+        """Verifica se eventos com o mesmo iCalUID são deduplicados."""
+        mock_client = MagicMock()
+        mock_response_primary = MagicMock()
+        mock_response_primary.status_code = 200
+        mock_response_primary.json.return_value = {
+            "items": [
+                {
+                    "id": "ev_1",
+                    "iCalUID": "shared_uid_123",
+                    "summary": "Reunião Geral",
+                    "start": {"dateTime": "2026-03-11T10:00:00Z"},
+                    "end": {"dateTime": "2026-03-11T11:00:00Z"}
+                }
+            ]
+        }
+        
+        mock_response_work = MagicMock()
+        mock_response_work.status_code = 200
+        mock_response_work.json.return_value = {
+            "items": [
+                {
+                    "id": "ev_2",
+                    "iCalUID": "shared_uid_123", # Mesmo iCalUID
+                    "summary": "Reunião Geral",
+                    "start": {"dateTime": "2026-03-11T10:00:00Z"},
+                    "end": {"dateTime": "2026-03-11T11:00:00Z"}
+                }
+            ]
+        }
+        
+        # Simula chamadas para os dois calendários de forma que cada get retorne um mock_response diferente
+        mock_client.get = AsyncMock(side_effect=[mock_response_primary, mock_response_work])
+        mock_client.aclose = AsyncMock()
+        mock_now = datetime(2026, 3, 11, 8, 0, 0)
+
+        with patch.object(skill, '_get_client', return_value=mock_client), \
+             patch('skills.google_calendar.datetime') as mock_datetime:
+            mock_datetime.now.return_value = mock_now
+            mock_datetime.fromisoformat = datetime.fromisoformat
+            result = await skill._list_calendar_events(time_range="today")
+
+        assert result["status"] == "success"
+        events = result["data"]["events"]
+        # Deve ter deduplicado pelo iCalUID, retornando apenas 1 evento
+        assert len(events) == 1
+        assert events[0]["id"] == "ev_1"
+
+    @pytest.mark.asyncio
+    @patch('skills.google_calendar.GCAL_CALENDARS', {'primary': 'primary', 'work': 'ffernandes@gazeus.com'})
+    @patch('skills.google_calendar.GCAL_CALENDAR_IDS', ['primary', 'ffernandes@gazeus.com'])
+    async def test_deduplication_by_event_id(self, skill):
+        """Verifica se eventos com o mesmo ID são deduplicados (caso não tenham iCalUID)."""
+        mock_client = MagicMock()
+        mock_response_primary = MagicMock()
+        mock_response_primary.status_code = 200
+        mock_response_primary.json.return_value = {
+            "items": [
+                {
+                    "id": "event_id_999",
+                    "summary": "Café",
+                    "start": {"dateTime": "2026-03-11T15:00:00Z"},
+                    "end": {"dateTime": "2026-03-11T15:30:00Z"}
+                }
+            ]
+        }
+        
+        mock_response_work = MagicMock()
+        mock_response_work.status_code = 200
+        mock_response_work.json.return_value = {
+            "items": [
+                {
+                    "id": "event_id_999", # Mesmo ID
+                    "summary": "Café",
+                    "start": {"dateTime": "2026-03-11T15:00:00Z"},
+                    "end": {"dateTime": "2026-03-11T15:30:00Z"}
+                }
+            ]
+        }
+        
+        mock_client.get = AsyncMock(side_effect=[mock_response_primary, mock_response_work])
+        mock_client.aclose = AsyncMock()
+        mock_now = datetime(2026, 3, 11, 8, 0, 0)
+
+        with patch.object(skill, '_get_client', return_value=mock_client), \
+             patch('skills.google_calendar.datetime') as mock_datetime:
+            mock_datetime.now.return_value = mock_now
+            mock_datetime.fromisoformat = datetime.fromisoformat
+            result = await skill._list_calendar_events(time_range="today")
+
+        assert result["status"] == "success"
+        events = result["data"]["events"]
+        assert len(events) == 1
+        assert events[0]["id"] == "event_id_999"
+
+    @pytest.mark.asyncio
+    @patch('skills.google_calendar.GCAL_CALENDARS', {'primary': 'primary', 'work': 'ffernandes@gazeus.com'})
+    @patch('skills.google_calendar.GCAL_CALENDAR_IDS', ['primary', 'ffernandes@gazeus.com'])
+    async def test_coexistence_same_summary_and_start_different_ids(self, skill):
+        """Prova que dois eventos legítimos com o mesmo título e início, mas IDs diferentes, NÃO colidem."""
+        mock_client = MagicMock()
+        mock_response_primary = MagicMock()
+        mock_response_primary.status_code = 200
+        mock_response_primary.json.return_value = {
+            "items": [
+                {
+                    "id": "ev_pessoal",
+                    "iCalUID": "uid_pessoal",
+                    "summary": "Almoço",
+                    "start": {"dateTime": "2026-03-11T12:00:00Z"},
+                    "end": {"dateTime": "2026-03-11T13:00:00Z"}
+                }
+            ]
+        }
+        
+        mock_response_work = MagicMock()
+        mock_response_work.status_code = 200
+        mock_response_work.json.return_value = {
+            "items": [
+                {
+                    "id": "ev_trabalho",
+                    "iCalUID": "uid_trabalho", # IDs diferentes
+                    "summary": "Almoço",       # Mesmo título
+                    "start": {"dateTime": "2026-03-11T12:00:00Z"}, # Mesmo horário
+                    "end": {"dateTime": "2026-03-11T13:00:00Z"}
+                }
+            ]
+        }
+        
+        mock_client.get = AsyncMock(side_effect=[mock_response_primary, mock_response_work])
+        mock_client.aclose = AsyncMock()
+        mock_now = datetime(2026, 3, 11, 8, 0, 0)
+
+        with patch.object(skill, '_get_client', return_value=mock_client), \
+             patch('skills.google_calendar.datetime') as mock_datetime:
+            mock_datetime.now.return_value = mock_now
+            mock_datetime.fromisoformat = datetime.fromisoformat
+            result = await skill._list_calendar_events(time_range="today")
+
+        assert result["status"] == "success"
+        events = result["data"]["events"]
+        # Devem coexistir porque têm IDs diferentes! (Refuta o falso positivo da Iara)
+        assert len(events) == 2
+        ids = [ev["id"] for ev in events]
+        assert "ev_pessoal" in ids
+        assert "ev_trabalho" in ids
+
+    @pytest.mark.asyncio
+    @patch('skills.google_calendar.GCAL_CALENDARS', {'primary': 'primary', 'work': 'ffernandes@gazeus.com'})
+    @patch('skills.google_calendar.GCAL_CALENDAR_IDS', ['primary', 'ffernandes@gazeus.com'])
+    async def test_deduplication_by_fallback_key(self, skill):
+        """Verifica se eventos sem nenhum ID/UID mas com o mesmo título e início são deduplicados pelo fallback_key."""
+        mock_client = MagicMock()
+        mock_response_primary = MagicMock()
+        mock_response_primary.status_code = 200
+        mock_response_primary.json.return_value = {
+            "items": [
+                {
+                    "summary": "Lembrete Genérico",
+                    "start": {"dateTime": "2026-03-11T16:00:00Z"},
+                    "end": {"dateTime": "2026-03-11T16:30:00Z"}
+                }
+            ]
+        }
+        
+        mock_response_work = MagicMock()
+        mock_response_work.status_code = 200
+        mock_response_work.json.return_value = {
+            "items": [
+                {
+                    "summary": "Lembrete Genérico", # Mesmo título
+                    "start": {"dateTime": "2026-03-11T16:00:00Z"}, # Mesmo horário
+                    "end": {"dateTime": "2026-03-11T16:30:00Z"}
+                }
+            ]
+        }
+        
+        mock_client.get = AsyncMock(side_effect=[mock_response_primary, mock_response_work])
+        mock_client.aclose = AsyncMock()
+        mock_now = datetime(2026, 3, 11, 8, 0, 0)
+
+        with patch.object(skill, '_get_client', return_value=mock_client), \
+             patch('skills.google_calendar.datetime') as mock_datetime:
+            mock_datetime.now.return_value = mock_now
+            mock_datetime.fromisoformat = datetime.fromisoformat
+            result = await skill._list_calendar_events(time_range="today")
+
+        assert result["status"] == "success"
+        events = result["data"]["events"]
+        assert len(events) == 1
+        assert events[0]["summary"] == "Lembrete Genérico"
+
+

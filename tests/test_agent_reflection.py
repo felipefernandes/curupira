@@ -20,7 +20,7 @@ async def test_reflect_groq_success(mock_agent):
     # Mock Config
     with patch("core.config.AI_PROVIDER", "groq"), \
          patch("core.config.GROQ_API_KEY", "valid_key"), \
-         patch("core.config.GROQ_MODEL", "llama-test"), \
+         patch("core.config.GROQ_MODEL_WORKER", "llama-test"), \
          patch("core.config.REFLECTION_ENABLED", True):
         
         # Mock Client Response — choices como lista real para garantir .content como string
@@ -107,7 +107,7 @@ async def test_reflect_cross_provider(mock_agent):
     # 2. Config says use Groq for reflection
     with patch("core.config.AI_PROVIDER", "groq"), \
          patch("core.config.GROQ_API_KEY", "groq_key_123"), \
-         patch("core.config.GROQ_MODEL", "llama-test"), \
+         patch("core.config.GROQ_MODEL_WORKER", "llama-test"), \
          patch("core.config.REFLECTION_ENABLED", True):
         
         mock_message = MagicMock()
@@ -136,7 +136,7 @@ async def test_reflect_invalid_hour(mock_agent):
     """Test reflect when context has an invalid hour (should default to -1)."""
     with patch("core.config.AI_PROVIDER", "groq"), \
          patch("core.config.GROQ_API_KEY", "valid_key"), \
-         patch("core.config.GROQ_MODEL", "llama-test"), \
+         patch("core.config.GROQ_MODEL_WORKER", "llama-test"), \
          patch("core.config.REFLECTION_ENABLED", True):
         
         mock_message = MagicMock()
@@ -162,7 +162,7 @@ async def test_reflect_greeting_regex_compilation(mock_agent):
     """Test reflect regex compilation and caching for greetings."""
     with patch("core.config.AI_PROVIDER", "groq"), \
          patch("core.config.GROQ_API_KEY", "valid_key"), \
-         patch("core.config.GROQ_MODEL", "llama-test"), \
+         patch("core.config.GROQ_MODEL_WORKER", "llama-test"), \
          patch("core.config.REFLECTION_ENABLED", True):
         
         mock_message = MagicMock()

@@ -125,7 +125,7 @@ Agora analise o seguinte comando:"""
     def __init__(self):
         self.logger = logging.getLogger("LLMSecurityGuard")
         self._client = None
-        self._model = "llama-3.1-8b-instant"  # Fast model for low latency
+        self._model = config.GROQ_MODEL_WORKER  # Fast model for low latency
 
         # Command evaluation cache
         self._eval_cache: Dict[str, Tuple[bool, str]] = {}

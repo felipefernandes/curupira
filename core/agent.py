@@ -24,20 +24,6 @@ import time
 class AgentBrain:
     """Agente responsável por gerenciar habilidades e integrações com APIs."""
 
-    # Compiled patterns for Llama-3 malformed tool call recovery
-    _RE_FUNC_PARENS = re.compile(r'<function=(\w+)\((.*?)\)</function>', re.DOTALL)  # <function=name(args)></function> (CORRIGIDO: sem > extra antes de </function>)
-    _RE_FUNC_ANGLES = re.compile(r'<function=([a-zA-Z0-9_]+)>(\{.*?\})</function>', re.DOTALL)      # <function=name>{"args":...}</function>
-    _RE_FUNC_COLON  = re.compile(r'<function=(\w+)":\s*(.*?)</function>', re.DOTALL)  # <function=name":args</function>
-    _RE_FUNC_SLASH  = re.compile(r'<function/([a-zA-Z0-9_]+)>?(\{.*?\})</function>', re.DOTALL)   # <function/name>{...}</function> or <function/name{...}</function>
-    _RE_FUNC_DIRECT_JSON = re.compile(r'<function=([a-zA-Z0-9_]+)(\{.*?\})>?</function>', re.DOTALL)  # <function=name{"args":...}> (nome colado direto no JSON)
-    _RE_FUNC_DOUBLE_EQUALS = re.compile(r'<function=([a-zA-Z0-9_]+)=(\{.*?\})>?</function>', re.DOTALL)  # <function=name={"args":...}> (dois sinais de igual)
-    _RE_FUNC_WITH_SPACES = re.compile(r'<function=([a-zA-Z0-9_]+)\s+(\{.*?\})\s*>?</function>', re.DOTALL)  # <function=name {"args":...}></function> (com espaços)
-    _RE_FUNC_AMPERSAND = re.compile(r'<function=name:([a-zA-Z0-9_]+)&(.+?)</function>', re.DOTALL)  # <function=name:google_calendar&action:list&time_range:today</function>
-
-    # Catch-all pattern to strip any remaining <function...> tags from final output
-    _RE_FUNC_CLEANUP = re.compile(r'<function[=/][^>]*>.*?</function>', re.DOTALL)
-    _RE_FUNC_UNCLOSED = re.compile(r'<function[=/][^>]*>', re.DOTALL)
-
     # Compiled patterns to strip CoT reasoning blocks (Qwen3, DeepSeek-R1, etc.)
     _RE_THINK_BLOCK = re.compile(r'<think>(?:.*?</think>|.*$)', re.DOTALL)
     
@@ -291,58 +277,6 @@ class AgentBrain:
             self.logger.error(f"Error executing {tool_name}: {e}")
             return json.dumps({"error": str(e)}), False
 
-    @staticmethod
-    def _parse_failed_generation(failed_gen: str) -> Optional[Tuple[str, dict]]:
-        """Parse a Groq failed_generation string into (fn_name, fn_args).
-
-        Returns None if the string does not contain a recognisable tool call.
-        """
-        if not failed_gen or ('<function=' not in failed_gen and '<function/' not in failed_gen):
-            return None
-
-        # <function=name(args)></function>
-        match = AgentBrain._RE_FUNC_PARENS.search(failed_gen)
-        if not match:
-            # <function=name>args</function>
-            match = AgentBrain._RE_FUNC_ANGLES.search(failed_gen)
-        if not match:
-            # <function=name":args</function>  (Llama colon-quote format)
-            match = AgentBrain._RE_FUNC_COLON.search(failed_gen)
-        if not match:
-            # <function/name{...}> (novo formato)
-            match = AgentBrain._RE_FUNC_SLASH.search(failed_gen)
-        if not match:
-            # <function=name={"args":...}> (dois sinais de igual)
-            match = AgentBrain._RE_FUNC_DOUBLE_EQUALS.search(failed_gen)
-        if not match:
-            # <function=name{"args":...}> (nome colado direto no JSON)
-            match = AgentBrain._RE_FUNC_DIRECT_JSON.search(failed_gen)
-        if not match:
-            # <function=name {"args":...} </function> (com espaços)
-            match = AgentBrain._RE_FUNC_WITH_SPACES.search(failed_gen)
-        if not match:
-            # <function=name:google_calendar&action:list&time_range:today</function>
-            match = AgentBrain._RE_FUNC_AMPERSAND.search(failed_gen)
-            if match:
-                fn_name = match.group(1)
-                # Parse ampersand-separated key:value pairs
-                args_str = match.group(2)
-                fn_args = {}
-                for pair in args_str.split('&'):
-                    if ':' in pair:
-                        key, value = pair.split(':', 1)
-                        fn_args[key.strip()] = value.strip()
-                return fn_name, fn_args
-        if not match:
-            return None
-
-        fn_name = match.group(1)
-        try:
-            fn_args = json.loads(match.group(2))
-        except json.JSONDecodeError:
-            fn_args = {}
-
-        return fn_name, fn_args
 
     def _is_retryable_error(self, e: Exception) -> bool:
         """Determines if an exception is a retryable rate limit error."""
@@ -420,7 +354,7 @@ class AgentBrain:
 
 
 
-    def _resolve_reflection_provider(self) -> Tuple[bool, Optional[Any], Optional[str]]:
+    def _resolve_reflection_provider(self, use_worker: bool = False) -> Tuple[bool, Optional[Any], Optional[str]]:
         """Resolve the LLM provider for reflection/briefing.
 
         Returns:
@@ -441,7 +375,7 @@ class AgentBrain:
                 self.logger.error("Groq library not installed.")
                 return False, None, None
             use_groq = True
-            model = config.GROQ_MODEL
+            model = config.GROQ_MODEL_WORKER if use_worker else config.GROQ_MODEL
         elif config.AI_PROVIDER == 'gemini':
             if not config.GEMINI_API_KEY:
                 self.logger.warning("AI_PROVIDER is 'gemini' but GEMINI_API_KEY is missing.")
@@ -470,7 +404,7 @@ class AgentBrain:
         if not config.REFLECTION_ENABLED:
             return None
 
-        use_groq, client, model = self._resolve_reflection_provider()
+        use_groq, client, model = self._resolve_reflection_provider(use_worker=True)
         if not client or not model:
             return None
 
@@ -836,7 +770,8 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
         
         if self.provider == 'groq':
             client = self._get_groq_client()
-            if not client: return "Erro: Cliente Groq não inicializado."
+            if not client:
+                return "Erro: Cliente Groq não inicializado."
 
             messages: List[Any] = [{"role": "system", "content": system_prompt}]
 
@@ -893,26 +828,31 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                             
                             # FIX for Groq/Llama3 hallucination: sometimes it puts args in the name
                             # e.g. 'get_weather {"city": "São Paulo"}'
-                            # FIX for Groq/Llama3 hallucination: sometimes it puts args in the name
-                            # e.g. 'get_weather {"city": "São Paulo"}' or 'add_reminder={"..."}'
-                            if " {" in fn_name or "={" in fn_name:
-                                try:
-                                    if "={" in fn_name:
-                                        parts = fn_name.split("={", 1)
-                                    else:
-                                        parts = fn_name.split(" {", 1)
-                                        
-                                    fn_name = parts[0]
-                                    fn_args = json.loads("{" + parts[1])
-                                    self.logger.warning(f"Fixed malformed tool call. Name: {fn_name}, Args: {fn_args}")
-                                except Exception as e:
-                                    self.logger.error(f"Failed to fix malformed tool name: {fn_name} - {e}")
+                            # Resilient name and args parsing
+                            fn_name = fn_name.strip()
+                            if " " in fn_name:
+                                self.logger.warning(f"Malformed tool name containing spaces: '{fn_name}'")
+                                parts = fn_name.split(None, 1)
+                                potential_name = parts[0].strip()
+                                if potential_name in self.skills:
+                                    fn_name = potential_name
 
+                            raw_args = tool_call.function.arguments or "{}"
                             try:
-                                if not fn_args: # Only parse if not already extracted from name
-                                    fn_args = json.loads(tool_call.function.arguments)
+                                fn_args = json.loads(raw_args)
                             except json.JSONDecodeError:
-                                pass
+                                self.logger.warning(f"Failed to parse arguments JSON: '{raw_args}'. Trying resilient parsing.")
+                                try:
+                                    start_idx = raw_args.find('{')
+                                    end_idx = raw_args.rfind('}')
+                                    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                                        json_candidate = raw_args[start_idx:end_idx+1]
+                                        fn_args = json.loads(json_candidate)
+                                    else:
+                                        fn_args = {}
+                                except Exception as inner_err:
+                                    self.logger.error(f"Resilient JSON parser failed: {inner_err}")
+                                    fn_args = {}
 
                             result_str, _dispatched = await self._execute_tool_call(fn_name, fn_args, context, on_direct_reply=on_direct_reply)
                             _tool_call_count += 1
@@ -926,199 +866,28 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                                 "content": result_str
                             })
 
-                            # Persist tool interaction for future context
                             await self._persist_tool_interaction(
                                 context, tool_call.id, fn_name, fn_args, result_str
                             )
                         continue # Re-prompt Agent with tool outputs
 
-                    # Fallback: Check for Llama-3 style <function> XML in content if no tool_calls
                     content = msg.content or ""
-                    if "<function=" in content or "<function/" in content:
-                        try:
-                            # Try multiple regex patterns to detect malformed tool calls
-                            match = self._RE_FUNC_ANGLES.search(content)  # <function=name>{...}</function>
-                            if not match:
-                                match = self._RE_FUNC_SLASH.search(content)  # <function/name{...}>
-                            if not match:
-                                match = self._RE_FUNC_PARENS.search(content)  # <function=name(...)></function>
-                            if not match:
-                                match = self._RE_FUNC_COLON.search(content)  # <function=name":...></function>
-                            if not match:
-                                match = self._RE_FUNC_DOUBLE_EQUALS.search(content)  # <function=name={"args":...}>
-                            if not match:
-                                match = self._RE_FUNC_DIRECT_JSON.search(content)  # <function=name{"args":...}>
-                            if not match:
-                                match = self._RE_FUNC_WITH_SPACES.search(content)  # <function=name {"args":...} </function>
-
-                            # Special handling for ampersand format
-                            if not match:
-                                ampersand_match = self._RE_FUNC_AMPERSAND.search(content)
-                                if ampersand_match:
-                                    fn_name = ampersand_match.group(1)
-                                    args_str = ampersand_match.group(2)
-                                    self.logger.warning(f"Detected ampersand-format XML tool call: {fn_name}")
-
-                                    preamble = content[:ampersand_match.start()].strip()
-                                    if preamble and on_intermediate_reply:
-                                        try:
-                                            await on_intermediate_reply(preamble)
-                                        except Exception as cb_err:
-                                            self.logger.error(f"Error in on_intermediate_reply (Ampersand): {cb_err}")
-
-                                    # Parse ampersand-separated key:value pairs
-                                    fn_args = {}
-                                    for pair in args_str.split('&'):
-                                        if ':' in pair:
-                                            key, value = pair.split(':', 1)
-                                            fn_args[key.strip()] = value.strip()
-
-                                    result_str, _dispatched = await self._execute_tool_call(fn_name, fn_args, context, on_direct_reply=on_direct_reply)
-                                    _tool_call_count += 1
-                                    if _dispatched:
-                                        _direct_html_count += 1
-
-                                    # CRITICAL FIX: Rewrite history to look like a VALID tool call
-                                    fake_tool_id = f"call_{uuid.uuid4().hex[:8]}"
-
-                                    synthetic_msg = {
-                                        "role": "assistant",
-                                        "content": None,
-                                        "tool_calls": [{
-                                            "id": fake_tool_id,
-                                            "type": "function",
-                                            "function": {
-                                                "name": fn_name,
-                                                "arguments": json.dumps(fn_args)
-                                            }
-                                        }]
-                                    }
-                                    messages.append(synthetic_msg)
-
-                                    messages.append({
-                                        "role": "tool",
-                                        "tool_call_id": fake_tool_id,
-                                        "name": fn_name,
-                                        "content": result_str
-                                    })
-                                    await self._persist_tool_interaction(
-                                        context, fake_tool_id, fn_name, fn_args, result_str
-                                    )
-                                    continue # Loop back to get final response
-
-                            if match:
-                                fn_name = match.group(1)
-                                args_str = match.group(2)
-                                self.logger.warning(f"Detected malformed XML tool call in content: {fn_name}")
-
-                                preamble = content[:match.start()].strip()
-                                if preamble and on_intermediate_reply:
-                                    try:
-                                        await on_intermediate_reply(preamble)
-                                    except Exception as cb_err:
-                                        self.logger.error(f"Error in on_intermediate_reply (Llama XML): {cb_err}")
-
-                                try:
-                                    # Try to parse strict JSON first
-                                    fn_args = json.loads(args_str)
-                                except json.JSONDecodeError:
-                                    # Sometimes args are not quoted keys? Just pass empty for safety if complex
-                                    self.logger.warning(f"Could not parse args from XML: {args_str}")
-                                    fn_args = {}
-
-                                result_str, _dispatched = await self._execute_tool_call(fn_name, fn_args, context, on_direct_reply=on_direct_reply)
-                                _tool_call_count += 1
-                                if _dispatched:
-                                    _direct_html_count += 1
-
-                                # CRITICAL FIX: Rewrite history to look like a VALID tool call
-                                # Groq API rejects <function> tags in content on next turn
-                                fake_tool_id = f"call_{uuid.uuid4().hex[:8]}"
-
-                                # Create a synthetic assistant message with proper tool_calls
-                                synthetic_msg = {
-                                    "role": "assistant",
-                                    "content": None, # Hide the ugly XML from history
-                                    "tool_calls": [{
-                                        "id": fake_tool_id,
-                                        "type": "function",
-                                        "function": {
-                                            "name": fn_name,
-                                            "arguments": json.dumps(fn_args)
-                                        }
-                                    }]
-                                }
-                                messages.append(synthetic_msg)
-
-                                messages.append({
-                                    "role": "tool",
-                                    "tool_call_id": fake_tool_id,
-                                    "name": fn_name,
-                                    "content": result_str
-                                })
-                                await self._persist_tool_interaction(
-                                    context, fake_tool_id, fn_name, fn_args, result_str
-                                )
-                                continue # Loop back to get final response
-                        except Exception as e:
-                            self.logger.error(f"Error parsing XML tool call: {e}")
-
-                    # Sanitize response: remove any remaining <function...> tags
-                    # that weren't caught by regex patterns (compiled constants)
-                    clean_content = self._RE_FUNC_CLEANUP.sub('', content)
-                    clean_content = self._RE_FUNC_UNCLOSED.sub('', clean_content)
-
-                    # Suppress LLM follow-up when all tool calls delivered via direct_html
+                    
+                    # Strip CoT reasoning block if present
+                    clean_content = self._RE_THINK_BLOCK.sub('', content).strip()
+                    
                     if _direct_html_count > 0 and _direct_html_count == _tool_call_count:
                         return None
-                    return clean_content.strip()
+                    return clean_content
 
                 except Exception as e:
-                    # Recover from Groq 400 "tool_use_failed" errors
-                    # Llama sometimes generates <function=name(args)></function>
-                    # which Groq rejects before returning the response.
-                    err_body = getattr(e, 'body', None) or {}
-                    failed_gen = err_body.get('error', {}).get('failed_generation', '') if isinstance(err_body, dict) else ''
-                    parsed = self._parse_failed_generation(failed_gen)
-                    if parsed:
-                        fn_name, fn_args = parsed
-                        self.logger.warning(f"Recovered tool call from failed_generation: {fn_name}")
-
-                        result_str, _dispatched = await self._execute_tool_call(fn_name, fn_args, context, on_direct_reply=on_direct_reply)
-                        _tool_call_count += 1
-                        if _dispatched:
-                            _direct_html_count += 1
-
-                        fake_tool_id = f"call_{uuid.uuid4().hex[:8]}"
-                        messages.append({
-                            "role": "assistant",
-                            "content": None,
-                            "tool_calls": [{
-                                "id": fake_tool_id,
-                                "type": "function",
-                                "function": {
-                                    "name": fn_name,
-                                    "arguments": json.dumps(fn_args)
-                                }
-                            }]
-                        })
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": fake_tool_id,
-                            "name": fn_name,
-                            "content": result_str
-                        })
-                        await self._persist_tool_interaction(
-                            context, fake_tool_id, fn_name, fn_args, result_str
-                        )
-                        continue  # Re-prompt with tool result
-
                     self.logger.error(f"Groq API Error: {e}")
                     return "Desculpe, tive um problema de conexão com meu cérebro digital."
 
         elif self.provider == 'gemini':
             client = self._get_gemini_client()
-            if not client: return "Erro: Cliente Gemini não inicializado."
+            if not client:
+                return "Erro: Cliente Gemini não inicializado."
             
             # Lazy import types
             from google.genai import types
@@ -1223,7 +992,6 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                              except Exception as e:
                                  self.logger.warning(f"Erro ao salvar token usage: {e}")
                      
-                     text_parts = []
                      function_calls = []
                      text_content = ""
                      
@@ -1260,7 +1028,7 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                          # Gemini expects a function_response part
                          try:
                              result_dict = json.loads(result_str)
-                         except:
+                         except Exception:
                              result_dict = {"output": result_str}
 
                          contents.append(
@@ -1280,9 +1048,8 @@ Os dados abaixo descrevem o USUÁRIO (não você). Use-os proativamente — nunc
                          )
                          continue
                      else:
-                         # Sanitize response: remove any remaining <function...> tags (compiled constants)
-                        clean_text = self._RE_FUNC_CLEANUP.sub('', text_content)
-                        clean_text = self._RE_FUNC_UNCLOSED.sub('', clean_text)
+                        # Strip CoT reasoning block if present
+                        clean_text = self._RE_THINK_BLOCK.sub('', text_content).strip()
 
                         # Suppress LLM follow-up when all tool calls delivered via direct_html
                         if _direct_html_count > 0 and _direct_html_count == _tool_call_count:

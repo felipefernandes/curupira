@@ -260,53 +260,6 @@ async def test_process_returns_text_with_mixed_tools(agent):
 
 # ── failed_generation recovery path (line 1091) ───────────────────────────────
 
-@pytest.mark.asyncio
-async def test_process_returns_none_via_failed_generation_recovery(agent):
-    """
-    When Groq returns a 400 with failed_generation, the recovered tool call
-    uses direct_html → process() must return None (line 1091 + 1074).
-    """
-    direct_reply_calls = []
-
-    async def mock_direct_reply(html: str):
-        direct_reply_calls.append(html)
-
-    mock_skill = AsyncMock()
-    mock_skill.name = "list_reminders"
-    mock_skill.description = "list"
-    mock_skill.parameters = {}
-    mock_skill.execute.return_value = {
-        "status": "success",
-        "data": [],
-        "direct_html": "<b>0 lembretes.</b>",
-    }
-    agent.register_skill(mock_skill)
-
-    # First call: Groq 400 with failed_generation
-    error = Exception("tool_use_failed")
-    error.body = {  # type: ignore[attr-defined]
-        "error": {
-            "failed_generation": '<function=list_reminders({})</function>'
-        }
-    }
-    # Second call after recovery: plain text (should be suppressed)
-    final_resp = _make_groq_text_response("Você tem 0 lembretes.")
-
-    mock_client = MagicMock()
-    mock_client.chat.completions.create = AsyncMock(
-        side_effect=[error, final_resp]
-    )
-
-    with patch.object(agent, "_get_groq_client", return_value=mock_client):
-        result = await agent.process(
-            "lista meus lembretes",
-            {},
-            on_direct_reply=mock_direct_reply,
-        )
-
-    assert direct_reply_calls == ["<b>0 lembretes.</b>"]
-    assert result is None
-
 
 # ── Gemini path (line 1290) ────────────────────────────────────────────────────
 

@@ -34,8 +34,10 @@ heartbeat_interval = 1800
 [ai.groq]
 # Deixe vazio para usar GROQ_API_KEY do .env
 api_key = ""
-# Modelo padrão. Opções: llama-3.1-8b-instant, llama-3.3-70b-versatile
-model = "llama-3.1-8b-instant"
+# Modelo padrão.
+model = "openai/gpt-oss-120b"
+# Modelo worker de baixa latência (Security Guard, RSS, Reflexão)
+model_worker = "qwen/qwen3.6-27b"
 # Temperatura para diálogo (0.0 = determinístico, 1.0 = criativo)
 temperature = 0.7
 # Temperatura usada durante a reflexão do heartbeat
@@ -103,7 +105,7 @@ pandascore_key = ""
 # Habilitar reflexão proativa durante o heartbeat
 enabled = true
 # Modelo usado para reflexão (pode ser diferente do modelo principal)
-model = "llama-3.3-70b-versatile"
+model = "qwen/qwen3.6-27b"
 # Janela para saudação matinal (hora de início e fim, formato 24h)
 greeting_hour_start = 7
 greeting_hour_end   = 9

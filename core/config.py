@@ -143,7 +143,8 @@ AI_PROVIDER: str = (_cfg("AI_PROVIDER", "bot", "ai_provider", default="groq") or
 # ── Groq ───────────────────────────────────────────────────────────────
 
 GROQ_API_KEY: Optional[str] = _cfg("GROQ_API_KEY", "ai", "groq", "api_key") or None
-GROQ_MODEL: str = _cfg("GROQ_MODEL", "ai", "groq", "model", default="llama-3.1-8b-instant")
+GROQ_MODEL: str = _cfg("GROQ_MODEL", "ai", "groq", "model", default="openai/gpt-oss-120b")
+GROQ_MODEL_WORKER: str = _cfg("GROQ_MODEL_WORKER", "ai", "groq", "model_worker", default="qwen/qwen3.6-27b")
 GROQ_TEMPERATURE: float = _cfg_float(
     "GROQ_TEMPERATURE", "ai", "groq", "temperature", default=0.7
 )

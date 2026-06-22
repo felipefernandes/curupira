@@ -77,7 +77,7 @@ class RssReadSkill(BaseSkill):
             
         client = AsyncGroq(api_key=api_key)
         response = await client.chat.completions.create(
-            model=getattr(config, "GROQ_MODEL", "llama-3.1-8b-instant"),
+            model=getattr(config, "GROQ_MODEL_WORKER", "qwen/qwen3.6-27b"),
             messages=[{"role": "user", "content": prompt}],
             max_tokens=600,
             temperature=0.3

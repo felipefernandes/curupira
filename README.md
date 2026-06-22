@@ -28,7 +28,7 @@ Baseado na **Arquitetura da Restrição** e no **Conceito Diet**, ele transforma
 *   **💓 Heartbeat & Proatividade**: Sistema de agendamento interno (`JobQueue`) que permite ao bot iniciar interações e monitorar o sistema sem dependências externas (cron).
 *   **⏰ Lembretes Naturais**: Peça *"Me lembre de tirar o bolo em 20 min"* e o Curupira entende, agenda e te avisa.
 *   **🌦️ Previsão do Tempo**: Pergunte *"Vai chover?"* e ele verifica a previsão local (Open-Meteo) para você.
-*   **🔌 Multi-Provedor de IA**: Suporte nativo para **Groq** (LLaMA 3 - *default para velocidade*) e **Google Gemini** (Flash - *para janelas de contexto maiores*).
+*   **🔌 Multi-Provedor de IA**: Suporte nativo para **Groq** (modelos GPT-OSS e Qwen - *default para velocidade e raciocínio*) e **Google Gemini** (Flash - *para janelas de contexto maiores*).
 *   **🌡️ Monitoramento de Hardware**: Pergunte *"Como está o sistema?"* para ver uso de CPU, RAM, Disco e Temperatura do Raspberry Pi em tempo real.
 *   **📰 RSS Reader**: Peça *"Quais são as notícias de hoje?"* e o Curupira busca as últimas manchetes de feeds RSS/Atom configurados.
 *   **📅 Google Calendar**: Integração completa com OAuth2 para listar, adicionar e cancelar eventos. Sincronização automática que transforma eventos em lembretes proativos.

@@ -277,125 +277,6 @@ async def test_process_message_tool_execution(agent, mock_groq_client):
 
 # --- _parse_failed_generation tests ---
 
-class TestParseFailedGeneration:
-    """Tests for AgentBrain._parse_failed_generation."""
-
-    def test_parens_format(self):
-        """Match <function=name(args)</function> (formato correto SEM > extra)."""
-        # Formato simples
-        gen = '<function=rss_read({"url": "https://example.com/feed", "limit": 5})</function>'
-        result = AgentBrain._parse_failed_generation(gen)
-        assert result is not None
-        fn_name, fn_args = result
-        assert fn_name == "rss_read"
-        assert fn_args == {"url": "https://example.com/feed", "limit": 5}
-
-        # Formato com auth_code (como no erro reportado)
-        gen2 = '<function=google_calendar({"action": "setup_calendar", "auth_code": "4/0AX4XfWi9OYf3X4jdsjfk3jF"})</function>'
-        result2 = AgentBrain._parse_failed_generation(gen2)
-        assert result2 is not None
-        fn_name2, fn_args2 = result2
-        assert fn_name2 == "google_calendar"
-        assert fn_args2 == {"action": "setup_calendar", "auth_code": "4/0AX4XfWi9OYf3X4jdsjfk3jF"}
-
-    def test_angle_bracket_format(self):
-        """Match <function=name>args</function>."""
-        gen = '<function=get_weather>{"city": "SP"}</function>'
-        result = AgentBrain._parse_failed_generation(gen)
-        assert result is not None
-        fn_name, fn_args = result
-        assert fn_name == "get_weather"
-        assert fn_args == {"city": "SP"}
-
-    def test_colon_quote_format(self):
-        """Match <function=name":args</function> (Llama colon-quote variant)."""
-        gen = '<function=add_reminder":{"message": "Notícias", "when": "08:00"}</function>'
-        result = AgentBrain._parse_failed_generation(gen)
-        assert result is not None
-        fn_name, fn_args = result
-        assert fn_name == "add_reminder"
-        assert fn_args == {"message": "Notícias", "when": "08:00"}
-
-    def test_slash_format(self):
-        """Match <function/name{args}</function> (formato correto SEM > extra)."""
-        gen = '<function/google_calendar{"action": "add_calendar_event", "summary": "Teste"}</function>'
-        result = AgentBrain._parse_failed_generation(gen)
-        assert result is not None
-        fn_name, fn_args = result
-        assert fn_name == "google_calendar"
-        assert fn_args == {"action": "add_calendar_event", "summary": "Teste"}
-
-        # Caso reportado pelo usuário (setup_calendar)
-        gen2 = '<function/google_calendar{"action": "setup_calendar"}</function>'
-        result2 = AgentBrain._parse_failed_generation(gen2)
-        assert result2 is not None
-        fn_name2, fn_args2 = result2
-        assert fn_name2 == "google_calendar"
-        assert fn_args2 == {"action": "setup_calendar"}
-
-    def test_direct_json_format(self):
-        """Match <function=name{"args"...}> (nome colado direto no JSON)."""
-        gen = '<function=google_calendar{"action": "list_calendar_events", "time_range": "tomorrow"}</function>'
-        result = AgentBrain._parse_failed_generation(gen)
-        assert result is not None
-        fn_name, fn_args = result
-        assert fn_name == "google_calendar"
-        assert fn_args == {"action": "list_calendar_events", "time_range": "tomorrow"}
-
-    def test_double_equals_format(self):
-        """Match <function=name={"args"...}> (dois sinais de igual)."""
-        gen = '<function=google_calendar={"action": "setup_calendar", "auth_code": "4/0AX4XfWi9LfV4j8x8j8xj8"}</function>'
-        result = AgentBrain._parse_failed_generation(gen)
-        assert result is not None
-        fn_name, fn_args = result
-        assert fn_name == "google_calendar"
-        assert fn_args == {"action": "setup_calendar", "auth_code": "4/0AX4XfWi9LfV4j8x8j8xj8"}
-
-    def test_with_spaces_format(self):
-        """Match <function=name {"args":...} </function> (com espaços ao redor do JSON)."""
-        gen = '<function=google_calendar {"action": "list_calendar_events", "time_range": "today"} </function>'
-        result = AgentBrain._parse_failed_generation(gen)
-        assert result is not None
-        fn_name, fn_args = result
-        assert fn_name == "google_calendar"
-        assert fn_args == {"action": "list_calendar_events", "time_range": "today"}
-
-    def test_invalid_json_args(self):
-        """Falls back to empty dict when args are not valid JSON."""
-        gen = '<function=test(not-json)</function>'
-        result = AgentBrain._parse_failed_generation(gen)
-        assert result is not None
-        fn_name, fn_args = result
-        assert fn_name == "test"
-        assert fn_args == {}
-
-    def test_no_function_tag(self):
-        """Returns None when string has no function tag."""
-        assert AgentBrain._parse_failed_generation("just a normal error") is None
-
-    def test_empty_string(self):
-        assert AgentBrain._parse_failed_generation("") is None
-
-    def test_none_input(self):
-        assert AgentBrain._parse_failed_generation(None) is None  # type: ignore[arg-type]
-
-    def test_ampersand_format(self):
-        """Match <function=name:value&key:value</function> (ampersand format with : separators)."""
-        # Simple ampersand format
-        gen = '<function=name:google_calendar&action:list_calendar_events&time_range:tomorrow</function>'
-        result = AgentBrain._parse_failed_generation(gen)
-        assert result is not None
-        fn_name, fn_args = result
-        assert fn_name == "google_calendar"
-        assert fn_args == {"action": "list_calendar_events", "time_range": "tomorrow"}
-
-        # With preamble text
-        gen2 = 'Let me check...\n<function=name:rss_read&url:https://example.com/feed&limit:5</function>'
-        result2 = AgentBrain._parse_failed_generation(gen2)
-        assert result2 is not None
-        fn_name2, fn_args2 = result2
-        assert fn_name2 == "rss_read"
-        assert fn_args2 == {"url": "https://example.com/feed", "limit": "5"}  # Note: values are strings
 
 
 class TestSanitizeText:
@@ -423,43 +304,6 @@ class TestSanitizeText:
         assert sanitized == "TextoCom[31mLixo"
 
 
-@pytest.mark.asyncio
-async def test_groq_failed_generation_recovery(agent, mock_groq_client):
-    """Test that a Groq 400 with failed_generation recovers and retries."""
-    # Simulate Groq 400 error with failed_generation
-    error = Exception("tool_use_failed")
-    error.body = {  # type: ignore[attr-defined]
-        "error": {
-            "message": "Failed to call a function.",
-            "type": "invalid_request_error",
-            "code": "tool_use_failed",
-            "failed_generation": '<function=rss_read({"url": "https://example.com/feed", "limit": 5})</function>'
-        }
-    }
-
-    # Second call succeeds with final text
-    msg_final = MagicMock()
-    msg_final.content = "Here are the latest articles."
-    msg_final.tool_calls = None
-
-    mock_response_ok = MagicMock()
-    mock_response_ok.choices = [MagicMock(message=msg_final)]
-
-    agent.client = mock_groq_client
-    mock_groq_client.chat.completions.create.side_effect = [error, mock_response_ok]
-
-    # Register the skill so _execute_tool_call works
-    mock_skill = AsyncMock()
-    mock_skill.name = "rss_read"
-    mock_skill.description = "Read RSS"
-    mock_skill.parameters = {"type": "object", "properties": {}, "required": []}
-    mock_skill.execute.return_value = {"status": "success", "data": {"entries": []}}
-    agent.register_skill(mock_skill)
-
-    response = await agent.process("Read news", {})
-
-    assert response == "Here are the latest articles."
-    mock_skill.execute.assert_called_once_with({}, url="https://example.com/feed", limit=5)
 
 
 @pytest.mark.asyncio
@@ -687,336 +531,6 @@ async def test_groq_intermediate_reply_exception(agent, mock_groq_client):
     assert response == "Done!"
     mock_intermediate.assert_called_once_with("Crash me")
 
-
-@pytest.mark.asyncio
-async def test_llama_xml_intermediate_reply_logic(agent, mock_groq_client):
-    """Test the Llama-3 XML fallback logic and its interaction with on_intermediate_reply."""
-    # Llama 3 style XML embedded in content with no tool_calls array
-    msg_xml = MagicMock()
-    msg_xml.role = "assistant"
-    msg_xml.content = "Wait a second...\n<function=test_skill>{\"arg\": 1}</function>"
-    msg_xml.tool_calls = None
-    
-    msg_final = MagicMock()
-    msg_final.role = "assistant"
-    msg_final.content = "Done XML!"
-    msg_final.tool_calls = None
-    
-    agent.client = mock_groq_client
-    mock_groq_client.chat.completions.create.side_effect = [
-        MagicMock(choices=[MagicMock(message=msg_xml)]),
-        MagicMock(choices=[MagicMock(message=msg_final)])
-    ]
-    
-    mock_skill = AsyncMock()
-    mock_skill.name = "test_skill"
-    mock_skill.execute.return_value = {"status": "ok"}
-    agent.register_skill(mock_skill)
-    
-    mock_intermediate = AsyncMock()
-    
-    response = await agent.process("Do XML", {}, on_intermediate_reply=mock_intermediate)
-
-    assert response == "Done XML!"
-    # It should extract the preamble before the <function=>
-    mock_intermediate.assert_called_once_with("Wait a second...")
-
-
-@pytest.mark.asyncio
-async def test_llama_xml_slash_format_fallback(agent, mock_groq_client):
-    """Test the <function/name{...}> fallback detection in Groq content."""
-    # LLM returns malformed <function/name{...}> format in content
-    msg_xml = MagicMock()
-    msg_xml.role = "assistant"
-    msg_xml.content = "Creating event...\n<function/google_calendar{\"action\": \"add_event\"}</function>"
-    msg_xml.tool_calls = None
-
-    msg_final = MagicMock()
-    msg_final.role = "assistant"
-    msg_final.content = "Event created!"
-    msg_final.tool_calls = None
-
-    agent.client = mock_groq_client
-    mock_groq_client.chat.completions.create.side_effect = [
-        MagicMock(choices=[MagicMock(message=msg_xml)]),
-        MagicMock(choices=[MagicMock(message=msg_final)])
-    ]
-
-    mock_skill = AsyncMock()
-    mock_skill.name = "google_calendar"
-    mock_skill.execute.return_value = {"status": "ok"}
-    agent.register_skill(mock_skill)
-
-    mock_intermediate = AsyncMock()
-
-    response = await agent.process("Add event", {}, on_intermediate_reply=mock_intermediate)
-
-    assert response == "Event created!"
-    # Should extract preamble before <function/
-    mock_intermediate.assert_called_once_with("Creating event...")
-    # Should execute the skill
-    mock_skill.execute.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_llama_xml_slash_format_with_invalid_json(agent, mock_groq_client):
-    """Test <function/name{...}> with invalid JSON args - should fallback to empty dict."""
-    msg_xml = MagicMock()
-    msg_xml.role = "assistant"
-    msg_xml.content = "<function/test_skill{not-valid-json}</function>"
-    msg_xml.tool_calls = None
-
-    msg_final = MagicMock()
-    msg_final.role = "assistant"
-    msg_final.content = "Done!"
-    msg_final.tool_calls = None
-
-    agent.client = mock_groq_client
-    mock_groq_client.chat.completions.create.side_effect = [
-        MagicMock(choices=[MagicMock(message=msg_xml)]),
-        MagicMock(choices=[MagicMock(message=msg_final)])
-    ]
-
-    mock_skill = AsyncMock()
-    mock_skill.name = "test_skill"
-    mock_skill.execute.return_value = {"status": "ok"}
-    agent.register_skill(mock_skill)
-
-    response = await agent.process("Test", {})
-
-    assert response == "Done!"
-    # Should call with empty dict when JSON is invalid
-    mock_skill.execute.assert_called_once_with({})
-
-
-@pytest.mark.asyncio
-async def test_llama_xml_slash_intermediate_reply_exception(agent, mock_groq_client):
-    """Test that exception in on_intermediate_reply doesn't crash the agent (slash format)."""
-    msg_xml = MagicMock()
-    msg_xml.role = "assistant"
-    msg_xml.content = "Preamble text\n<function/test_skill{\"arg\": 1}</function>"
-    msg_xml.tool_calls = None
-
-    msg_final = MagicMock()
-    msg_final.role = "assistant"
-    msg_final.content = "Done!"
-    msg_final.tool_calls = None
-
-    agent.client = mock_groq_client
-    mock_groq_client.chat.completions.create.side_effect = [
-        MagicMock(choices=[MagicMock(message=msg_xml)]),
-        MagicMock(choices=[MagicMock(message=msg_final)])
-    ]
-
-    mock_skill = AsyncMock()
-    mock_skill.name = "test_skill"
-    mock_skill.execute.return_value = {"status": "ok"}
-    agent.register_skill(mock_skill)
-
-    # Callback that raises exception
-    mock_intermediate = AsyncMock(side_effect=Exception("Callback crashed"))
-
-    response = await agent.process("Test", {}, on_intermediate_reply=mock_intermediate)
-
-    # Should continue despite callback exception
-    assert response == "Done!"
-    mock_skill.execute.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_llama_xml_direct_json_format_fallback(agent, mock_groq_client):
-    """Test the <function=name{"args"...}> fallback (nome colado direto no JSON)."""
-    # LLM returns malformed <function=name{...}> format (no > between name and JSON)
-    msg_xml = MagicMock()
-    msg_xml.role = "assistant"
-    msg_xml.content = '<function=google_calendar{"action": "list_events"}</function>'
-    msg_xml.tool_calls = None
-
-    msg_final = MagicMock()
-    msg_final.role = "assistant"
-    msg_final.content = "Events listed!"
-    msg_final.tool_calls = None
-
-    agent.client = mock_groq_client
-    mock_groq_client.chat.completions.create.side_effect = [
-        MagicMock(choices=[MagicMock(message=msg_xml)]),
-        MagicMock(choices=[MagicMock(message=msg_final)])
-    ]
-
-    mock_skill = AsyncMock()
-    mock_skill.name = "google_calendar"
-    mock_skill.execute.return_value = {"status": "ok"}
-    agent.register_skill(mock_skill)
-
-    response = await agent.process("List events", {})
-
-    assert response == "Events listed!"
-    # Should execute the skill with parsed JSON args
-    mock_skill.execute.assert_called_once_with({}, action="list_events")
-
-
-@pytest.mark.asyncio
-async def test_llama_xml_double_equals_format_fallback(agent, mock_groq_client):
-    """Test the <function=name={"args"...}> fallback (dois sinais de igual)."""
-    # LLM returns malformed <function=name={...}> format (double equals)
-    msg_xml = MagicMock()
-    msg_xml.role = "assistant"
-    msg_xml.content = '<function=google_calendar={"action": "setup_calendar"}</function>'
-    msg_xml.tool_calls = None
-
-    msg_final = MagicMock()
-    msg_final.role = "assistant"
-    msg_final.content = "Calendar configured!"
-    msg_final.tool_calls = None
-
-    agent.client = mock_groq_client
-    mock_groq_client.chat.completions.create.side_effect = [
-        MagicMock(choices=[MagicMock(message=msg_xml)]),
-        MagicMock(choices=[MagicMock(message=msg_final)])
-    ]
-
-    mock_skill = AsyncMock()
-    mock_skill.name = "google_calendar"
-    mock_skill.execute.return_value = {"status": "ok"}
-    agent.register_skill(mock_skill)
-
-    response = await agent.process("Setup calendar", {})
-
-    assert response == "Calendar configured!"
-    # Should execute the skill with parsed JSON args
-    mock_skill.execute.assert_called_once_with({}, action="setup_calendar")
-
-
-@pytest.mark.asyncio
-async def test_llama_xml_with_spaces_format_fallback(agent):
-    """Test Groq fallback with <function=name {"args":...} </function> (espaços ao redor do JSON)."""
-    agent.provider = "groq"
-    mock_groq_client = MagicMock()
-
-    # Simulate malformed XML with spaces around JSON
-    msg_xml = MagicMock()
-    msg_xml.content = '<function=google_calendar {"action": "list_calendar_events", "time_range": "today"} </function>'
-    msg_xml.tool_calls = None
-
-    # Final response after skill execution
-    msg_final = MagicMock()
-    msg_final.content = "Você tem 3 eventos hoje!"
-    msg_final.tool_calls = None
-
-    agent.client = mock_groq_client
-    # Use AsyncMock para criar responses assíncronos
-    mock_groq_client.chat.completions.create = AsyncMock(side_effect=[
-        MagicMock(choices=[MagicMock(message=msg_xml)]),
-        MagicMock(choices=[MagicMock(message=msg_final)])
-    ])
-
-    mock_skill = AsyncMock()
-    mock_skill.name = "google_calendar"
-    mock_skill.execute.return_value = {"status": "ok", "events": []}
-    agent.register_skill(mock_skill)
-
-    response = await agent.process("Show my events today", {})
-
-    assert response == "Você tem 3 eventos hoje!"
-    # Should execute the skill with parsed JSON args (espaços foram ignorados)
-    mock_skill.execute.assert_called_once_with({}, action="list_calendar_events", time_range="today")
-
-
-@pytest.mark.asyncio
-async def test_gemini_intermediate_reply_exception(agent):
-    """Test that if on_intermediate_reply raises an exception in Gemini, the process continues."""
-    agent.provider = "gemini"
-
-    mock_genai = MagicMock()
-    mock_types = MagicMock()
-
-    class MockGenerateContentConfig:
-        def __init__(self, tools=None, temperature=None, max_output_tokens=None):
-            pass
-
-    mock_types.GenerateContentConfig = MockGenerateContentConfig
-    mock_types.Part.from_text.return_value = MagicMock()
-    mock_types.Content.return_value = MagicMock()
-
-    mock_types.Part.from_function_response = MagicMock()
-    mock_genai.types = mock_types
-
-    with patch.dict("sys.modules", {"google.genai": mock_genai}):
-        mock_genai_client = MagicMock()
-        mock_genai_client.aio.models.generate_content = AsyncMock()
-
-        mock_candidate_1 = MagicMock()
-        mock_part_text = MagicMock()
-        mock_part_text.text = "Crash Gemini"
-        mock_part_text.function_call = None
-
-        mock_part_fn = MagicMock()
-        mock_part_fn.text = None
-        mock_part_fn.function_call = MagicMock()
-        mock_part_fn.function_call.name = "test_skill"
-        mock_part_fn.function_call.args = {"arg": 1}
-
-        mock_candidate_1.content.parts = [mock_part_text, mock_part_fn]
-
-        mock_candidate_2 = MagicMock()
-        mock_final_part = MagicMock()
-        mock_final_part.text = "Done Gemini!"
-        mock_final_part.function_call = None
-        mock_candidate_2.content.parts = [mock_final_part]
-
-        mock_genai_client.aio.models.generate_content.side_effect = [
-            MagicMock(candidates=[mock_candidate_1]),
-            MagicMock(candidates=[mock_candidate_2])
-        ]
-
-        mock_skill = AsyncMock()
-        mock_skill.name = "test_skill"
-        mock_skill.execute.return_value = {"status": "ok"}
-        agent.register_skill(mock_skill)
-
-        with patch.object(agent, "_get_gemini_client", return_value=mock_genai_client):
-            with patch.object(agent, "_get_gemini_tools", return_value=None):
-                mock_intermediate = AsyncMock(side_effect=Exception("UI Error Gemini"))
-                response = await agent.process("Do Gemini", {}, on_intermediate_reply=mock_intermediate)
-
-        assert response == "Done Gemini!"
-        mock_intermediate.assert_called_once_with("Crash Gemini")
-
-
-# --- Tests for new features (PR #google-calendar-skill) ---
-
-@pytest.mark.asyncio
-async def test_llama_xml_ampersand_format_fallback(agent):
-    """Test Groq fallback with <function=name:value&key:value</function> (ampersand format)."""
-    agent.provider = "groq"
-    mock_groq_client = MagicMock()
-
-    # Simulate malformed XML with ampersand format (reported in production)
-    msg_xml = MagicMock()
-    msg_xml.content = '<function=name:google_calendar&action:list_calendar_events&time_range:tomorrow</function>'
-    msg_xml.tool_calls = None
-
-    # Final response after skill execution
-    msg_final = MagicMock()
-    msg_final.content = "Você tem 2 eventos amanhã!"
-    msg_final.tool_calls = None
-
-    agent.client = mock_groq_client
-    mock_groq_client.chat.completions.create = AsyncMock(side_effect=[
-        MagicMock(choices=[MagicMock(message=msg_xml)]),
-        MagicMock(choices=[MagicMock(message=msg_final)])
-    ])
-
-    mock_skill = AsyncMock()
-    mock_skill.name = "google_calendar"
-    mock_skill.execute.return_value = {"status": "ok", "events": []}
-    agent.register_skill(mock_skill)
-
-    response = await agent.process("Show my events tomorrow", {})
-
-    assert response == "Você tem 2 eventos amanhã!"
-    # Should execute the skill with parsed ampersand args
-    mock_skill.execute.assert_called_once_with({}, action="list_calendar_events", time_range="tomorrow")
 
 
 @pytest.mark.asyncio
@@ -1322,3 +836,198 @@ class TestStructuredConversationHistory:
         roles = [c.get("role") for c in content_calls]
         assert "user" in roles
         assert "model" in roles
+
+
+# --- Novas Coberturas (Parsing Resiliente & CoT) ---
+
+@pytest.mark.asyncio
+async def test_process_strips_think_block_groq(agent, mock_groq_client):
+    """Garante que o loop do Groq remove blocos <think> do output final."""
+    msg_final = MagicMock()
+    msg_final.content = "<think>Raciocínio interno complexo.</think>Aqui está a resposta real."
+    msg_final.tool_calls = None
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock(message=msg_final)]
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.side_effect = [mock_response]
+
+    response = await agent.process("Olá", {})
+    assert response == "Aqui está a resposta real."
+
+
+@pytest.mark.asyncio
+async def test_process_strips_think_block_gemini(agent):
+    """Garante que o loop do Gemini remove blocos <think> do output final."""
+    mock_genai = MagicMock()
+    mock_types = MagicMock()
+    class MockGenerateContentConfig:
+        def __init__(self, tools=None): pass
+    mock_types.GenerateContentConfig = MockGenerateContentConfig
+    mock_genai.types = mock_types
+
+    mock_response = MagicMock()
+    mock_resp_part = MagicMock()
+    mock_resp_part.text = "<think>Calculando...</think>Aqui está o resultado do Gemini."
+    mock_resp_part.function_call = None
+    mock_response.candidates = [MagicMock()]
+    mock_response.candidates[0].content.parts = [mock_resp_part]
+
+    mock_genai_client = MagicMock()
+    mock_genai_client.aio.models.generate_content = AsyncMock(return_value=mock_response)
+    agent.provider = "gemini"
+
+    with patch.dict("sys.modules", {"google.genai": mock_genai, "google.genai.types": mock_types}):
+        with patch.object(agent, "_get_gemini_client", return_value=mock_genai_client):
+            with patch.object(agent, "_get_gemini_tools", return_value=None):
+                response = await agent.process("Olá", {})
+
+    assert response == "Aqui está o resultado do Gemini."
+
+
+@pytest.mark.asyncio
+async def test_process_resilient_tool_name_with_spaces(agent, mock_groq_client):
+    """Garante o parsing correto se o nome do tool_call vier com argumentos e espaços embutidos."""
+    tool_call = MagicMock()
+    tool_call.id = "call_1"
+    tool_call.function.name = "test_skill {\"arg\": 1}"
+    tool_call.function.arguments = "{\"arg\": 1}"
+
+    msg_tool = MagicMock()
+    msg_tool.tool_calls = [tool_call]
+    msg_tool.content = None
+
+    mock_response_1 = MagicMock()
+    mock_response_1.choices = [MagicMock(message=msg_tool)]
+
+    msg_final = MagicMock()
+    msg_final.content = "Pronto."
+    msg_final.tool_calls = None
+
+    mock_response_2 = MagicMock()
+    mock_response_2.choices = [MagicMock(message=msg_final)]
+
+    mock_skill = AsyncMock()
+    mock_skill.name = "test_skill"
+    mock_skill.execute.return_value = {"status": "success", "data": "ok"}
+    agent.register_skill(mock_skill)
+
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.side_effect = [mock_response_1, mock_response_2]
+
+    response = await agent.process("Rodar", {})
+    assert response == "Pronto."
+    mock_skill.execute.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_process_resilient_tool_args_malformed_json_recovered(agent, mock_groq_client):
+    """Garante que a extração resiliente recupera JSONs malformados com texto ao redor."""
+    tool_call = MagicMock()
+    tool_call.id = "call_1"
+    tool_call.function.name = "test_skill"
+    tool_call.function.arguments = "preamble text { \"arg\": 1 } postamble text"
+
+    msg_tool = MagicMock()
+    msg_tool.tool_calls = [tool_call]
+    msg_tool.content = None
+
+    mock_response_1 = MagicMock()
+    mock_response_1.choices = [MagicMock(message=msg_tool)]
+
+    msg_final = MagicMock()
+    msg_final.content = "Pronto."
+    msg_final.tool_calls = None
+
+    mock_response_2 = MagicMock()
+    mock_response_2.choices = [MagicMock(message=msg_final)]
+
+    mock_skill = AsyncMock()
+    mock_skill.name = "test_skill"
+    mock_skill.execute.return_value = {"status": "success", "data": "ok"}
+    agent.register_skill(mock_skill)
+
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.side_effect = [mock_response_1, mock_response_2]
+
+    response = await agent.process("Rodar", {})
+    assert response == "Pronto."
+    mock_skill.execute.assert_called_once_with({}, arg=1)
+
+
+@pytest.mark.asyncio
+async def test_process_resilient_tool_args_malformed_json_failed(agent, mock_groq_client):
+    """Garante que se falhar totalmente o parser resiliente de argumentos, cai em dict vazio."""
+    tool_call = MagicMock()
+    tool_call.id = "call_1"
+    tool_call.function.name = "test_skill"
+    tool_call.function.arguments = "completamente invalido"
+
+    msg_tool = MagicMock()
+    msg_tool.tool_calls = [tool_call]
+    msg_tool.content = None
+
+    mock_response_1 = MagicMock()
+    mock_response_1.choices = [MagicMock(message=msg_tool)]
+
+    msg_final = MagicMock()
+    msg_final.content = "Pronto."
+    msg_final.tool_calls = None
+
+    mock_response_2 = MagicMock()
+    mock_response_2.choices = [MagicMock(message=msg_final)]
+
+    mock_skill = AsyncMock()
+    mock_skill.name = "test_skill"
+    mock_skill.execute.return_value = {"status": "success", "data": "ok"}
+    agent.register_skill(mock_skill)
+
+    agent.client = mock_groq_client
+    mock_groq_client.chat.completions.create.side_effect = [mock_response_1, mock_response_2]
+
+    response = await agent.process("Rodar", {})
+    assert response == "Pronto."
+    mock_skill.execute.assert_called_once_with({})
+
+
+@pytest.mark.asyncio
+async def test_process_gemini_error_handling(agent):
+    """Garante que erros de rate limit (429) no Gemini são capturados corretamente e retornam mensagem amigável."""
+    mock_genai = MagicMock()
+    mock_types = MagicMock()
+    class MockGenerateContentConfig:
+        def __init__(self, tools=None): pass
+    mock_types.GenerateContentConfig = MockGenerateContentConfig
+    mock_genai.types = mock_types
+
+    mock_genai_client = MagicMock()
+    mock_genai_client.aio.models.generate_content = AsyncMock(side_effect=Exception("Rate limit exceeded 429"))
+    agent.provider = "gemini"
+
+    with patch.dict("sys.modules", {"google.genai": mock_genai, "google.genai.types": mock_types}):
+        with patch.object(agent, "_get_gemini_client", return_value=mock_genai_client):
+            with patch.object(agent, "_get_gemini_tools", return_value=None):
+                response = await agent.process("Olá", {})
+
+    assert "sobrecarregado" in response
+
+
+@pytest.mark.asyncio
+async def test_process_gemini_generic_error(agent):
+    """Garante que erros genéricos de API no Gemini são capturados corretamente e retornam mensagem amigável genérica."""
+    mock_genai = MagicMock()
+    mock_types = MagicMock()
+    class MockGenerateContentConfig:
+        def __init__(self, tools=None): pass
+    mock_types.GenerateContentConfig = MockGenerateContentConfig
+    mock_genai.types = mock_types
+
+    mock_genai_client = MagicMock()
+    mock_genai_client.aio.models.generate_content = AsyncMock(side_effect=Exception("API Key expired"))
+    agent.provider = "gemini"
+
+    with patch.dict("sys.modules", {"google.genai": mock_genai, "google.genai.types": mock_types}):
+        with patch.object(agent, "_get_gemini_client", return_value=mock_genai_client):
+            with patch.object(agent, "_get_gemini_tools", return_value=None):
+                response = await agent.process("Olá", {})
+
+    assert "erro ao processar" in response

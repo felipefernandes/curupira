@@ -332,6 +332,51 @@ class TestJobHunterGetDefaultsSkill(unittest.IsolatedAsyncioTestCase):
 
     @patch("skills.job_hunter.config.JOB_HUNTER_URL", FAKE_URL)
     @patch("skills.job_hunter.config.JOB_HUNTER_TOKEN", FAKE_TOKEN)
+    @patch("skills.job_hunter.config.JOB_HUNTER_SOURCES", None)
+    @patch("skills.job_hunter.config.JOB_HUNTER_KEYWORDS", None)
+    @patch("skills.job_hunter.config.JOB_HUNTER_SCORE_CUTOFF", None)
+    @patch("skills.job_hunter.requests.get")
+    async def test_get_defaults_resilient_prompt_keys(self, mock_get):
+        expected = {
+            "sources": ["gupy.io"],
+            "keywords": ["Product Manager"],
+            "score_cutoff": 7.0,
+            "evaluation_prompt": "Prompt agnóstico de avaliação",
+        }
+        mock_response = MagicMock()
+        mock_response.json.return_value = expected
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        result = await self.skill.execute({})
+
+        data = result["data"]
+        self.assertEqual(data["effective_criteria"]["prompt_evaluation"], "Prompt agnóstico de avaliação")
+
+    @patch("skills.job_hunter.config.JOB_HUNTER_URL", FAKE_URL)
+    @patch("skills.job_hunter.config.JOB_HUNTER_TOKEN", FAKE_TOKEN)
+    @patch("skills.job_hunter.config.JOB_HUNTER_SOURCES", None)
+    @patch("skills.job_hunter.config.JOB_HUNTER_KEYWORDS", None)
+    @patch("skills.job_hunter.config.JOB_HUNTER_SCORE_CUTOFF", None)
+    @patch("skills.job_hunter.requests.get")
+    async def test_get_defaults_null_prompt_fallback(self, mock_get):
+        expected = {
+            "sources": ["gupy.io"],
+            "keywords": ["Product Manager"],
+            "score_cutoff": 7.0,
+        }
+        mock_response = MagicMock()
+        mock_response.json.return_value = expected
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        result = await self.skill.execute({})
+
+        data = result["data"]
+        self.assertEqual(data["effective_criteria"]["prompt_evaluation"], "")
+
+    @patch("skills.job_hunter.config.JOB_HUNTER_URL", FAKE_URL)
+    @patch("skills.job_hunter.config.JOB_HUNTER_TOKEN", FAKE_TOKEN)
     @patch("skills.job_hunter.asyncio.wait_for")
     async def test_timeout_returns_error(self, mock_wait_for):
         async def raise_timeout(coro, timeout):

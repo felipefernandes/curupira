@@ -219,6 +219,8 @@ class JobHunterGetDefaultsSkill(BaseSkill):
             effective_keywords = config.JOB_HUNTER_KEYWORDS if config.JOB_HUNTER_KEYWORDS is not None else server_defaults.get("keywords")
             effective_score_cutoff = config.JOB_HUNTER_SCORE_CUTOFF if config.JOB_HUNTER_SCORE_CUTOFF is not None else server_defaults.get("score_cutoff")
 
+            prompt_evaluation = server_defaults.get("prompt_override") or server_defaults.get("evaluation_prompt")
+
             return self.success({
                 "server_defaults": server_defaults,
                 "local_overrides": {
@@ -230,7 +232,7 @@ class JobHunterGetDefaultsSkill(BaseSkill):
                     "sources": effective_sources,
                     "keywords": effective_keywords,
                     "score_cutoff": effective_score_cutoff,
-                    "prompt_evaluation": server_defaults.get("prompt_override"),
+                    "prompt_evaluation": prompt_evaluation,
                 }
             })
         except asyncio.TimeoutError:

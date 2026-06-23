@@ -219,7 +219,11 @@ class JobHunterGetDefaultsSkill(BaseSkill):
             effective_keywords = config.JOB_HUNTER_KEYWORDS if config.JOB_HUNTER_KEYWORDS is not None else server_defaults.get("keywords")
             effective_score_cutoff = config.JOB_HUNTER_SCORE_CUTOFF if config.JOB_HUNTER_SCORE_CUTOFF is not None else server_defaults.get("score_cutoff")
 
-            prompt_evaluation = server_defaults.get("prompt_override") or server_defaults.get("evaluation_prompt")
+            prompt_evaluation = (
+                server_defaults.get("prompt_override")
+                or server_defaults.get("evaluation_prompt")
+                or ""
+            )
 
             return self.success({
                 "server_defaults": server_defaults,

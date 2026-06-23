@@ -155,7 +155,14 @@ class JobHunterRunSearchSkill(BaseSkill):
                 f"Job Hunter: busca concluída — fetched={result.get('fetched')}, "
                 f"approved={result.get('approved')}"
             )
-            return self.success(result)
+            return self.success({
+                "search_results": result,
+                "effective_criteria_used": {
+                    "sources": sources,
+                    "keywords": keywords,
+                    "score_cutoff": score_cutoff,
+                }
+            })
         except asyncio.TimeoutError:
             return self.error("Timeout ao executar a busca de vagas (>95s).")
         except requests.HTTPError as e:

@@ -67,8 +67,9 @@ class TestJobHunterRunSearchSkill(unittest.IsolatedAsyncioTestCase):
         result = await self.skill.execute({})
 
         self.assertEqual(result["status"], "success")
-        self.assertEqual(result["data"]["fetched"], 10)
-        self.assertEqual(result["data"]["approved"], 2)
+        self.assertEqual(result["data"]["search_results"]["fetched"], 10)
+        self.assertEqual(result["data"]["search_results"]["approved"], 2)
+        self.assertEqual(result["data"]["effective_criteria_used"]["score_cutoff"], None)
         # Body should be empty (no overrides)
         _, call_kwargs = mock_post.call_args
         self.assertEqual(call_kwargs["json"], {})
@@ -89,6 +90,25 @@ class TestJobHunterRunSearchSkill(unittest.IsolatedAsyncioTestCase):
 
         _, call_kwargs = mock_post.call_args
         self.assertEqual(call_kwargs["json"]["prompt_override"], "Avalie vagas de jogos indie.")
+
+    @patch("skills.job_hunter.config.JOB_HUNTER_URL", FAKE_URL)
+    @patch("skills.job_hunter.config.JOB_HUNTER_TOKEN", FAKE_TOKEN)
+    @patch("skills.job_hunter.config.JOB_HUNTER_SOURCES", ["lever.co"])
+    @patch("skills.job_hunter.config.JOB_HUNTER_KEYWORDS", ["Agente de IA"])
+    @patch("skills.job_hunter.config.JOB_HUNTER_SCORE_CUTOFF", 7.5)
+    @patch("skills.job_hunter.requests.post")
+    async def test_run_search_returns_effective_criteria_in_data(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"status": "success", "fetched": 1, "approved": 1}
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        result = await self.skill.execute({})
+
+        criteria = result["data"]["effective_criteria_used"]
+        self.assertEqual(criteria["sources"], ["lever.co"])
+        self.assertEqual(criteria["keywords"], ["Agente de IA"])
+        self.assertEqual(criteria["score_cutoff"], 7.5)
 
     @patch("skills.job_hunter.config.JOB_HUNTER_URL", FAKE_URL)
     @patch("skills.job_hunter.config.JOB_HUNTER_TOKEN", FAKE_TOKEN)

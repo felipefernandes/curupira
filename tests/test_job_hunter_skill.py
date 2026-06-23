@@ -182,6 +182,26 @@ class TestJobHunterRunSearchSkill(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(body["keywords"], ["Agente de IA"])
         self.assertEqual(body["score_cutoff"], 7.5)
 
+    @patch("skills.job_hunter.config.JOB_HUNTER_URL", FAKE_URL)
+    @patch("skills.job_hunter.config.JOB_HUNTER_TOKEN", FAKE_TOKEN)
+    @patch("skills.job_hunter.config.JOB_HUNTER_SOURCES", [])
+    @patch("skills.job_hunter.config.JOB_HUNTER_KEYWORDS", ["Agente de IA"])
+    @patch("skills.job_hunter.config.JOB_HUNTER_SCORE_CUTOFF", 7.5)
+    @patch("skills.job_hunter.requests.post")
+    async def test_run_search_empty_sources_not_overridden_by_kwargs(self, mock_post):
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"status": "success", "fetched": 1, "approved": 0}
+        mock_response.raise_for_status = MagicMock()
+        mock_post.return_value = mock_response
+
+        # A IA tenta sugerir gupy.io, mas config.toml tem [] que deve prevalecer
+        await self.skill.execute({}, sources=["gupy.io"])
+
+        _, call_kwargs = mock_post.call_args
+        body = call_kwargs["json"]
+        self.assertNotIn("sources", body) # Como sources é [], ele não vai no JSON (if sources:)
+        self.assertEqual(body["keywords"], ["Agente de IA"])
+
     # --- Error handling ---
 
     @patch("skills.job_hunter.config.JOB_HUNTER_URL", FAKE_URL)
@@ -257,6 +277,9 @@ class TestJobHunterGetDefaultsSkill(unittest.IsolatedAsyncioTestCase):
 
     @patch("skills.job_hunter.config.JOB_HUNTER_URL", FAKE_URL)
     @patch("skills.job_hunter.config.JOB_HUNTER_TOKEN", FAKE_TOKEN)
+    @patch("skills.job_hunter.config.JOB_HUNTER_SOURCES", None)
+    @patch("skills.job_hunter.config.JOB_HUNTER_KEYWORDS", None)
+    @patch("skills.job_hunter.config.JOB_HUNTER_SCORE_CUTOFF", None)
     @patch("skills.job_hunter.requests.get")
     async def test_get_defaults_success(self, mock_get):
         expected = {
@@ -271,11 +294,41 @@ class TestJobHunterGetDefaultsSkill(unittest.IsolatedAsyncioTestCase):
 
         result = await self.skill.execute({})
 
-        self.assertEqual(result["data"]["sources"], ["gupy.io"])
-        self.assertEqual(result["data"]["score_cutoff"], 7.0)
+        data = result["data"]
+        self.assertEqual(data["server_defaults"]["sources"], ["gupy.io"])
+        self.assertEqual(data["effective_criteria"]["sources"], ["gupy.io"])
+        self.assertEqual(data["effective_criteria"]["score_cutoff"], 7.0)
         mock_get.assert_called_once()
         call_args = mock_get.call_args
         self.assertIn("/api/config_endpoint", call_args[0][0])
+
+    @patch("skills.job_hunter.config.JOB_HUNTER_URL", FAKE_URL)
+    @patch("skills.job_hunter.config.JOB_HUNTER_TOKEN", FAKE_TOKEN)
+    @patch("skills.job_hunter.config.JOB_HUNTER_SOURCES", ["lever.co"])
+    @patch("skills.job_hunter.config.JOB_HUNTER_KEYWORDS", ["Agente de IA"])
+    @patch("skills.job_hunter.config.JOB_HUNTER_SCORE_CUTOFF", 8.0)
+    @patch("skills.job_hunter.requests.get")
+    async def test_get_defaults_with_local_overrides(self, mock_get):
+        expected = {
+            "sources": ["gupy.io"],
+            "keywords": ["Product Manager"],
+            "score_cutoff": 7.0,
+            "prompt_override": "Prompt default do servidor",
+        }
+        mock_response = MagicMock()
+        mock_response.json.return_value = expected
+        mock_response.raise_for_status = MagicMock()
+        mock_get.return_value = mock_response
+
+        result = await self.skill.execute({})
+
+        data = result["data"]
+        self.assertEqual(data["server_defaults"]["sources"], ["gupy.io"])
+        self.assertEqual(data["local_overrides"]["sources"], ["lever.co"])
+        self.assertEqual(data["effective_criteria"]["sources"], ["lever.co"])
+        self.assertEqual(data["effective_criteria"]["keywords"], ["Agente de IA"])
+        self.assertEqual(data["effective_criteria"]["score_cutoff"], 8.0)
+        self.assertEqual(data["effective_criteria"]["prompt_evaluation"], "Prompt default do servidor")
 
     @patch("skills.job_hunter.config.JOB_HUNTER_URL", FAKE_URL)
     @patch("skills.job_hunter.config.JOB_HUNTER_TOKEN", FAKE_TOKEN)

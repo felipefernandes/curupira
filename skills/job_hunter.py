@@ -104,13 +104,13 @@ class JobHunterRunSearchSkill(BaseSkill):
         # config.toml takes priority over LLM-provided kwargs to prevent
         # hallucinated values (e.g. from failed_generation recovery) from
         # overriding the user's personal preferences.
-        sources: Optional[List[str]] = config.JOB_HUNTER_SOURCES or _kw_sources
-        keywords: Optional[List[str]] = config.JOB_HUNTER_KEYWORDS or _kw_keywords
+        sources: Optional[List[str]] = config.JOB_HUNTER_SOURCES if config.JOB_HUNTER_SOURCES is not None else _kw_sources
+        keywords: Optional[List[str]] = config.JOB_HUNTER_KEYWORDS if config.JOB_HUNTER_KEYWORDS is not None else _kw_keywords
         prompt_override: Optional[str] = kwargs.get("prompt_override")
-        score_cutoff: Optional[float] = config.JOB_HUNTER_SCORE_CUTOFF or _kw_cutoff
+        score_cutoff: Optional[float] = config.JOB_HUNTER_SCORE_CUTOFF if config.JOB_HUNTER_SCORE_CUTOFF is not None else _kw_cutoff
 
-        sources_origin = "config" if config.JOB_HUNTER_SOURCES else "kwargs"
-        keywords_origin = "config" if config.JOB_HUNTER_KEYWORDS else "kwargs"
+        sources_origin = "config" if config.JOB_HUNTER_SOURCES is not None else "kwargs"
+        keywords_origin = "config" if config.JOB_HUNTER_KEYWORDS is not None else "kwargs"
         cutoff_origin = "config" if config.JOB_HUNTER_SCORE_CUTOFF is not None else "kwargs"
 
         logger.info(
@@ -213,7 +213,26 @@ class JobHunterGetDefaultsSkill(BaseSkill):
                 timeout=20,
             )
             response.raise_for_status()
-            return self.success(response.json())
+            server_defaults = response.json()
+
+            effective_sources = config.JOB_HUNTER_SOURCES if config.JOB_HUNTER_SOURCES is not None else server_defaults.get("sources")
+            effective_keywords = config.JOB_HUNTER_KEYWORDS if config.JOB_HUNTER_KEYWORDS is not None else server_defaults.get("keywords")
+            effective_score_cutoff = config.JOB_HUNTER_SCORE_CUTOFF if config.JOB_HUNTER_SCORE_CUTOFF is not None else server_defaults.get("score_cutoff")
+
+            return self.success({
+                "server_defaults": server_defaults,
+                "local_overrides": {
+                    "sources": config.JOB_HUNTER_SOURCES,
+                    "keywords": config.JOB_HUNTER_KEYWORDS,
+                    "score_cutoff": config.JOB_HUNTER_SCORE_CUTOFF,
+                },
+                "effective_criteria": {
+                    "sources": effective_sources,
+                    "keywords": effective_keywords,
+                    "score_cutoff": effective_score_cutoff,
+                    "prompt_evaluation": server_defaults.get("prompt_override"),
+                }
+            })
         except asyncio.TimeoutError:
             return self.error("Timeout ao buscar configurações do servidor (>20s).")
         except requests.HTTPError as e:

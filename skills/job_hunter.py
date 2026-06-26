@@ -57,7 +57,7 @@ class JobHunterRunSearchSkill(BaseSkill):
             "type": "object",
             "properties": {
                 "sources": {
-                    "type": "array",
+                    "type": ["array", "null"],
                     "items": {"type": "string"},
                     "description": (
                         "Lista de domínios para buscar vagas "
@@ -66,7 +66,7 @@ class JobHunterRunSearchSkill(BaseSkill):
                     ),
                 },
                 "keywords": {
-                    "type": "array",
+                    "type": ["array", "null"],
                     "items": {"type": "string"},
                     "description": (
                         "Lista de palavras-chave para a busca "
@@ -75,14 +75,14 @@ class JobHunterRunSearchSkill(BaseSkill):
                     ),
                 },
                 "prompt_override": {
-                    "type": "string",
+                    "type": ["string", "null"],
                     "description": (
                         "Prompt customizado para avaliação das vagas pela IA. "
                         "Se omitido, usa o prompt padrão do servidor."
                     ),
                 },
                 "score_cutoff": {
-                    "type": "number",
+                    "type": ["number", "null"],
                     "description": (
                         "Nota mínima (0-10) para uma vaga ser aprovada. "
                         "Se omitido, usa a configuração pessoal ou o default do servidor."

@@ -47,7 +47,8 @@ function install_daemon {
     cat <<EOF > "$SERVICE_FILE"
 [Unit]
 Description=Curupira BOT Service
-After=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple

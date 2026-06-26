@@ -405,7 +405,11 @@ async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
             except Exception as send_err:
                 logging.error(f"Failed to notify user of task error for reminder {reminder_id}: {send_err}")
     else:
-        await context.bot.send_message(chat_id=chat_id, text=f"⏰ Lembrete: {message}")
+        try:
+            await context.bot.send_message(chat_id=chat_id, text=f"⏰ Lembrete: {message}")
+        except Exception as e:
+            task_error = True
+            logging.error(f"Error sending simple reminder {reminder_id}: {e}")
 
     # --- Reschedule or mark as sent ---
     if recurrence:

@@ -159,7 +159,7 @@ async def acesso_negado(update: Update):
     await update.message.reply_text("⛔ Acesso negado. Este bot é privado.")
 
 # Message Handler (AI)
-async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE, transcribed_text: Optional[str] = None):
     if not update.message or not update.message.from_user:
         return
 
@@ -176,7 +176,7 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await acesso_negado(update)
         return
 
-    user_msg = update.message.text or ""
+    user_msg = transcribed_text or update.message.text or ""
     user_name = update.message.from_user.username or "Unknown"
     full_name = update.message.from_user.full_name or "Unknown"
 
@@ -323,6 +323,59 @@ async def responder(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except TelegramError:
             # Last resort: send as plain text
             await _msg.reply_text(response_text)
+
+# Voice Message Handler (Audio Transcription)
+async def handle_voice_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message or not update.message.from_user:
+        return
+
+    user_id = update.message.from_user.id
+    if not is_authorized(user_id):
+        await acesso_negado(update)
+        return
+
+    if not update.message.voice:
+        return
+
+    # Envia sinalizador de que está gravando/digitando resposta
+    await update.message.reply_chat_action(action="typing")
+
+    import tempfile
+    import os
+
+    # Download do arquivo de áudio recebido
+    voice_file = await update.message.voice.get_file()
+    temp_dir = tempfile.gettempdir()
+    temp_path = os.path.join(temp_dir, f"curupira_voice_{update.message.message_id}.ogg")
+
+    try:
+        await voice_file.download_to_drive(custom_path=temp_path)
+        
+        # Envia áudio para transcrição
+        transcribed_text = await brain.transcribe_audio(temp_path)
+        
+        if not transcribed_text or not transcribed_text.strip():
+            await update.message.reply_text("🔇 Não consegui identificar nenhuma fala neste áudio.")
+            return
+
+        logging.info(f"Áudio transcrevido com sucesso: '{transcribed_text}'")
+        
+        # Encaminha o texto transcrito para o responder normal
+        await responder(update, context, transcribed_text=transcribed_text)
+        
+    except NotImplementedError as e:
+        logging.warning(f"Transcrição falhou pois o provider não suporta: {e}")
+        await update.message.reply_text("⚠️ Meu cérebro de IA atual não oferece suporte para transcrição de áudio.")
+    except Exception as e:
+        logging.error(f"Erro ao transcrever mensagem de voz: {e}", exc_info=True)
+        await update.message.reply_text("❌ Desculpe, não consegui transcrever seu áudio no momento.")
+    finally:
+        # Exclusão segura do arquivo temporário
+        if os.path.exists(temp_path):
+            try:
+                os.remove(temp_path)
+            except Exception as cleanup_err:
+                logging.error(f"Erro ao apagar arquivo temporário de áudio: {cleanup_err}")
 
 # --- JOB QUEUE CALLBACKS ---
 async def execute_reminder(context: ContextTypes.DEFAULT_TYPE):
@@ -692,6 +745,7 @@ def main():
     
     app.add_handler(CommandHandler("status", status))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), responder))
+    app.add_handler(MessageHandler(filters.VOICE, handle_voice_message))
     
     print(f"Bot Curupira iniciado com trava de segurança! Provedor: {config.AI_PROVIDER}")
     app.run_polling()

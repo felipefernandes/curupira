@@ -132,3 +132,53 @@ async def test_handle_voice_unexpected_error():
         )
         mock_responder.assert_not_called()
         mock_remove.assert_called_once()
+
+@pytest.mark.asyncio
+async def test_handle_voice_message_none():
+    """Should exit early if update.message or update.message.from_user is None."""
+    update = MagicMock(spec=Update)
+    update.message = None
+    context = _make_context()
+    
+    # Should return early without raising
+    await handle_voice_message(update, context)
+
+    update_with_msg = MagicMock(spec=Update)
+    message = MagicMock()
+    message.from_user = None
+    update_with_msg.message = message
+    
+    await handle_voice_message(update_with_msg, context)
+
+@pytest.mark.asyncio
+async def test_handle_voice_no_voice_object():
+    """Should exit early if update.message.voice is None."""
+    update = MagicMock(spec=Update)
+    message = MagicMock()
+    message.from_user.id = 12345
+    message.voice = None
+    update.message = message
+    
+    context = _make_context()
+    with patch("bot.is_authorized", return_value=True):
+        await handle_voice_message(update, context)
+
+@pytest.mark.asyncio
+async def test_handle_voice_remove_error():
+    """Should log error but not crash if os.remove raises an exception during cleanup."""
+    update, mock_file = _make_voice_update(user_id=12345)
+    context = _make_context()
+    
+    with patch("bot.is_authorized", return_value=True), \
+         patch("bot.brain") as mock_brain, \
+         patch("bot.responder", AsyncMock()), \
+         patch("os.path.exists", return_value=True), \
+         patch("os.remove", side_effect=OSError("Permission denied")), \
+         patch("bot.logging.error") as mock_log_error:
+         
+        mock_brain.transcribe_audio = AsyncMock(return_value="Transcrito")
+        
+        await handle_voice_message(update, context)
+        
+        # Verify the error was logged
+        mock_log_error.assert_called_with("Erro ao apagar arquivo temporário de áudio: Permission denied")

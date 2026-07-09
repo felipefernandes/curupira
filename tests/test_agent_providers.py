@@ -179,3 +179,11 @@ async def test_transcribe_audio_not_implemented():
         gemini_agent = AgentBrain("gemini")
         with pytest.raises(NotImplementedError):
             await gemini_agent.transcribe_audio("dummy.ogg")
+
+@pytest.mark.asyncio
+async def test_transcribe_audio_groq_no_client(agent):
+    """Should raise RuntimeError if Groq client cannot be initialized."""
+    agent.client = None
+    with patch.object(agent, "_get_groq_client", return_value=None):
+        with pytest.raises(RuntimeError, match="Cliente Groq não inicializado"):
+            await agent.transcribe_audio("dummy.ogg")

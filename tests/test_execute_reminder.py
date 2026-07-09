@@ -341,6 +341,42 @@ class TestExecuteReminderCallback(unittest.IsolatedAsyncioTestCase):
         # Should not mark as sent
         mgr.mark_as_sent.assert_not_awaited()
 
+    async def test_is_task_false_send_message_error_does_not_mark_sent(self):
+        """When send_message raises an exception for is_task=False, does not mark the reminder as sent."""
+        context = _make_context(reminder_data={"id": 82, "msg": "tomar café"})
+        mgr = _make_reminder_manager(message="tomar café", is_task=False, recurrence=None)
+        mem_mgr = _make_memory_manager()
+        brain = MagicMock()
+        context.bot.send_message.side_effect = RuntimeError("Telegram connection failed")
+
+        await _execute_reminder_impl(context, mgr, mem_mgr, brain)
+
+        context.bot.send_message.assert_awaited_once()
+        # Should not mark as sent because of the exception
+        mgr.mark_as_sent.assert_not_awaited()
+
+    async def test_is_task_false_send_message_error_reschedules_recurring(self):
+        """When send_message raises an exception for is_task=False and recurrence is set, still reschedules the reminder."""
+        context = _make_context(reminder_data={"id": 83, "msg": "tomar café"})
+        from datetime import datetime, timedelta
+        remind_at = datetime.now() + timedelta(hours=1)
+        mgr = _make_reminder_manager(message="tomar café", is_task=False, recurrence="daily", remind_at=remind_at)
+        mgr.reset_recurring_reminder = AsyncMock()
+        mgr._next_occurrence = MagicMock(return_value=datetime.now() + timedelta(days=1))
+        
+        mem_mgr = _make_memory_manager()
+        brain = MagicMock()
+        context.bot.send_message.side_effect = RuntimeError("Telegram connection failed")
+
+        await _execute_reminder_impl(context, mgr, mem_mgr, brain)
+
+        context.bot.send_message.assert_awaited_once()
+        # Should still reschedule even if the message failed to send
+        mgr.reset_recurring_reminder.assert_awaited_once()
+        context.job_queue.run_once.assert_called_once()
+        # Should not mark as sent
+        mgr.mark_as_sent.assert_not_awaited()
+
 
 if __name__ == "__main__":
     unittest.main()

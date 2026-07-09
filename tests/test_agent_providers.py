@@ -145,3 +145,45 @@ def test_get_gemini_tools_valid(agent):
         
     # Validation: Reset skills to ensure isolation
     agent.skills = {}
+
+# --- Audio Transcription Tests ---
+
+@pytest.mark.asyncio
+async def test_transcribe_audio_groq(agent):
+    """Should successfully transcribe audio via Groq Whisper API."""
+    mock_client = AsyncMock()
+    mock_transcription = MagicMock()
+    mock_transcription.text = "Transcrito com sucesso"
+    
+    # Mock nested client.audio.transcriptions.create
+    mock_client.audio = MagicMock()
+    mock_client.audio.transcriptions = MagicMock()
+    mock_client.audio.transcriptions.create = AsyncMock(return_value=mock_transcription)
+    
+    agent.client = mock_client
+    
+    from unittest.mock import mock_open, ANY
+    with patch("builtins.open", mock_open(read_data=b"audio_bytes")):
+        with patch("core.agent.config.GROQ_WHISPER_MODEL", "whisper-large-v3-turbo"):
+            text = await agent.transcribe_audio("dummy.ogg")
+            assert text == "Transcrito com sucesso"
+            mock_client.audio.transcriptions.create.assert_called_once_with(
+                file=ANY,
+                model="whisper-large-v3-turbo"
+            )
+
+@pytest.mark.asyncio
+async def test_transcribe_audio_not_implemented():
+    """Should raise NotImplementedError for non-groq providers."""
+    with patch("core.agent.config.GEMINI_API_KEY", "fake_key"):
+        gemini_agent = AgentBrain("gemini")
+        with pytest.raises(NotImplementedError):
+            await gemini_agent.transcribe_audio("dummy.ogg")
+
+@pytest.mark.asyncio
+async def test_transcribe_audio_groq_no_client(agent):
+    """Should raise RuntimeError if Groq client cannot be initialized."""
+    agent.client = None
+    with patch.object(agent, "_get_groq_client", return_value=None):
+        with pytest.raises(RuntimeError, match="Cliente Groq não inicializado"):
+            await agent.transcribe_audio("dummy.ogg")

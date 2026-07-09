@@ -147,6 +147,33 @@ class AgentBrain:
             self.logger.error("Google GenAI library not installed.")
             return None
 
+    async def transcribe_audio(self, file_path: str) -> str:
+        """Transcreve um arquivo de áudio utilizando o provedor configurado.
+        
+        Args:
+            file_path: Caminho local do arquivo de áudio.
+            
+        Returns:
+            Texto transcrito do áudio.
+        """
+        if self.provider == 'groq':
+            client = self._get_groq_client()
+            if not client:
+                raise RuntimeError("Cliente Groq não inicializado.")
+            
+            self.logger.info(f"Enviando áudio para transcrição no Groq usando modelo {config.GROQ_WHISPER_MODEL}...")
+            with open(file_path, "rb") as audio_file:
+                # O Groq API espera um arquivo binário e envia via multipart/form-data
+                transcription = await client.audio.transcriptions.create(  # type: ignore[union-attr]
+                    file=audio_file,
+                    model=config.GROQ_WHISPER_MODEL
+                )
+                return transcription.text
+        else:
+            raise NotImplementedError(
+                f"Transcriçao de áudio não é suportada atualmente no provedor '{self.provider}'."
+            )
+
     def _get_groq_tools(self) -> List[Dict[str, Any]]:
         """Converts registered skills to Groq/OpenAI tool format."""
         tools = []

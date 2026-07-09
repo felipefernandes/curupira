@@ -151,6 +151,9 @@ GROQ_TEMPERATURE: float = _cfg_float(
 GROQ_TEMPERATURE_REFLECTION: float = _cfg_float(
     "GROQ_TEMPERATURE_REFLECTION", "ai", "groq", "temperature_reflection", default=0.0
 )
+GROQ_WHISPER_MODEL: str = _cfg(
+    "GROQ_WHISPER_MODEL", "ai", "groq", "whisper_model", default="whisper-large-v3-turbo"
+)
 
 # ── Gemini ─────────────────────────────────────────────────────────────
 

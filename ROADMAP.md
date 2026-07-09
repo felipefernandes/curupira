@@ -101,7 +101,7 @@ Foco em simplificar a manutenção para usuários não-técnicos e aumentar a co
 
 ### 💼 v1.0.0: O Assistente Pessoal Completo ("Day-to-day Helper")
 Integrações essenciais para rotina e facilidades da vida pessoal.
-- [ ] **Compreensão de Áudio:** Ouvir e processar solicitações via voz. (Issue #60)
+- [x] **Compreensão de Áudio:** Ouvir e processar solicitações via voz. (Issue #60)
 - [x] **Google Agenda:** OAuth2, listagem/criação/cancelamento de eventos, sincronização automática com lembretes. (Issue #48)
 - [ ] **Tempo de Transporte:** Consultas de rotas e estimativa (Maps). (Issue #61)
 - [ ] **Compras Inteligentes:** Gerenciamento e auxílio em compras de casa/mantimentos. (Issue #62)

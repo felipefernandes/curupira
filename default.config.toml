@@ -42,6 +42,8 @@ model_worker = "qwen/qwen3.6-27b"
 temperature = 0.7
 # Temperatura usada durante a reflexão do heartbeat
 temperature_reflection = 0.0
+# Modelo para transcrição de áudio (whisper-large-v3 ou whisper-large-v3-turbo)
+whisper_model = "whisper-large-v3-turbo"
 
 # ─── Provedor Gemini ──────────────────────────────────────────────────
 [ai.gemini]

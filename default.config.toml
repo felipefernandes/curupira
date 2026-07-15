@@ -64,9 +64,10 @@ hardware  = true
 memory    = true
 daily_briefing = true  # Briefing matinal (clima + agenda + notícias)
 github    = false   # Requer GITHUB_PERSONAL_ACCESS_TOKEN
-ai_news   = false   # Agregador de notícias sobre IA (opcional)
 
 # NOTA: rss, job_hunter, sports e ai_news possuem seções próprias abaixo
+# ([skills.rss], [skills.job_hunter], [skills.sports], [skills.ai_news]).
+# Para desabilitá-las, use variáveis de ambiente:
 #   SKILL_RSS_ENABLED=false
 #   SKILL_JOB_HUNTER_ENABLED=false
 #   SKILL_SPORTS_ENABLED=false
@@ -74,7 +75,7 @@ ai_news   = false   # Agregador de notícias sobre IA (opcional)
 
 # ─── Configurações específicas por skill ──────────────────────────────
 
-[ai_news]
+[skills.ai_news]
 # URL base do servidor REST API do mcp_ai_news.
 api_url = "https://mcp-ai-news.onrender.com"
 # Fontes/Categorias a serem buscadas no briefing. Opções válidas: "news", "arxiv", "github".

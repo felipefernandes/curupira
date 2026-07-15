@@ -179,7 +179,7 @@ _SKILLS_DEFAULTS: Dict[str, bool] = {
     "job_hunter":       True,
     "sports":           True,
     "github":           False,
-    "ai_news":          False,
+    "ai_news":          True,
     "usage_report":     True,
     "system_control":   True,
     "daily_briefing":   True,
@@ -278,14 +278,14 @@ else:
 # ── AI News ────────────────────────────────────────────────────────────
 
 AI_NEWS_API_URL: str = (
-    _cfg("AI_NEWS_API_URL", "ai_news", "api_url", default="https://mcp-ai-news.onrender.com") or ""
+    _cfg("AI_NEWS_API_URL", "skills", "ai_news", "api_url", default="https://mcp-ai-news.onrender.com") or ""
 ).rstrip("/")
 
 _ai_news_sources_env = os.getenv("AI_NEWS_FETCH_SOURCES")
 if _ai_news_sources_env:
     AI_NEWS_FETCH_SOURCES = [s.strip() for s in _ai_news_sources_env.split(",") if s.strip()]
 else:
-    _toml_ai_news_sources = _toml_get("ai_news", "fetch_sources")
+    _toml_ai_news_sources = _toml_get("skills", "ai_news", "fetch_sources")
     AI_NEWS_FETCH_SOURCES = (
         _toml_ai_news_sources if isinstance(_toml_ai_news_sources, list) else ["news", "arxiv", "github"]
     )
@@ -298,7 +298,7 @@ if _ai_news_limit_env:
         logger.error("AI_NEWS_LIMIT_PER_SOURCE inválido. Usando 3.")
         AI_NEWS_LIMIT_PER_SOURCE = 3
 else:
-    _toml_ai_news_limit = _toml_get("ai_news", "limit_per_source")
+    _toml_ai_news_limit = _toml_get("skills", "ai_news", "limit_per_source")
     AI_NEWS_LIMIT_PER_SOURCE = (
         int(_toml_ai_news_limit) if _toml_ai_news_limit is not None else 3
     )

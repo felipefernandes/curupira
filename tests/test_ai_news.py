@@ -19,6 +19,7 @@ def test_ai_news_skill_properties(ai_news_skill):
     assert ai_news_skill.display_name == "🤖 Notícias de IA"
     assert ai_news_skill.skill_group == "ai_news"
     assert ai_news_skill.skill_group_emoji == "🤖"
+    assert "Obtém as últimas notícias" in ai_news_skill.description
     assert "source" in ai_news_skill.parameters["properties"]
 
 
@@ -150,6 +151,48 @@ async def test_execute_api_failures_gracefully(ai_news_skill):
     # 3. Test Request exception (propagates exception via gather and returns error status)
     async_mock_get_exc = AsyncMock(side_effect=httpx.RequestError("Erro de Conexão"))
     with patch("httpx.AsyncClient.get", async_mock_get_exc):
+        result = await ai_news_skill.execute({"user_id": 123}, source="news")
+        assert result["status"] == "error"
+        assert "Falha total" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_execute_no_api_url():
+    """Test execute fails when api_url is empty."""
+    skill = AINewsSkill(api_url="")
+    skill.api_url = ""  # Force empty to test configuration error
+    result = await skill.execute({"user_id": 123}, source="news")
+    assert result["status"] == "error"
+    assert "não configurada" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_execute_no_tasks(ai_news_skill):
+    """Test execute returns success empty when source category is invalid."""
+    result = await ai_news_skill.execute({"user_id": 123}, source="invalid_source")
+    assert result["status"] == "success"
+    assert len(result["data"]["entries"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_execute_json_not_a_list(ai_news_skill):
+    """Test execute returns success empty when API returns JSON that is not a list (e.g. dict)."""
+    mock_dict_response = MagicMock()
+    mock_dict_response.status_code = 200
+    mock_dict_response.json.return_value = {"error": "API Key Expired"}
+
+    async_mock_get = AsyncMock(return_value=mock_dict_response)
+    with patch("httpx.AsyncClient.get", async_mock_get):
+        result = await ai_news_skill.execute({"user_id": 123}, source="news")
+        assert result["status"] == "success"
+        assert len(result["data"]["entries"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_execute_unexpected_exception(ai_news_skill):
+    """Test execute propagates and handles unexpected exceptions correctly."""
+    async_mock_get = AsyncMock(side_effect=Exception("Erro inesperado do host"))
+    with patch("httpx.AsyncClient.get", async_mock_get):
         result = await ai_news_skill.execute({"user_id": 123}, source="news")
         assert result["status"] == "error"
         assert "Falha total" in result["error"]

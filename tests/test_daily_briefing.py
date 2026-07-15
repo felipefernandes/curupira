@@ -738,3 +738,19 @@ async def test_execute_daily_briefing_with_ai_news():
     assert data["news"][0]["source"] == "IA News"
     assert data["news"][0]["title"] == "Nova LLM incrivel"
     assert data["news"][0]["link"] == "https://ia.example.com"
+
+
+@pytest.mark.asyncio
+async def test_execute_daily_briefing_with_ai_news_exception():
+    """Verify that daily briefing handles exceptions in ai_news_skill gracefully."""
+    ai_news = AsyncMock()
+    ai_news.execute.side_effect = Exception("Conexão falhou")
+
+    skill = DailyBriefingSkill(ai_news_skill=ai_news)
+    result = await skill.execute({})
+
+    assert result["status"] == "success"
+    data = result["data"]
+    assert data["weather"] is None
+    assert data["events"] is None
+    assert data["news"] is None

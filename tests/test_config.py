@@ -134,3 +134,31 @@ def test_rss_feeds_wrong_type(monkeypatch):
         from core import config
 
     assert "G1" in config.RSS_FEEDS
+
+
+def test_ai_news_config_from_env(monkeypatch):
+    """Test AI_NEWS settings load from env variables."""
+    monkeypatch.setenv("AI_NEWS_API_URL", "https://custom-ai-news.com/")
+    monkeypatch.setenv("AI_NEWS_FETCH_SOURCES", "news,github")
+    monkeypatch.setenv("AI_NEWS_LIMIT_PER_SOURCE", "5")
+
+    with patch("dotenv.load_dotenv"), patch("pathlib.Path.is_file", return_value=False):
+        if 'core.config' in sys.modules:
+            importlib.reload(sys.modules['core.config'])
+        from core import config
+
+    assert config.AI_NEWS_API_URL == "https://custom-ai-news.com"
+    assert config.AI_NEWS_FETCH_SOURCES == ["news", "github"]
+    assert config.AI_NEWS_LIMIT_PER_SOURCE == 5
+
+
+def test_ai_news_config_invalid_limit(monkeypatch):
+    """Test AI_NEWS settings fallback on invalid limit."""
+    monkeypatch.setenv("AI_NEWS_LIMIT_PER_SOURCE", "invalid_int")
+
+    with patch("dotenv.load_dotenv"), patch("pathlib.Path.is_file", return_value=False):
+        if 'core.config' in sys.modules:
+            importlib.reload(sys.modules['core.config'])
+        from core import config
+
+    assert config.AI_NEWS_LIMIT_PER_SOURCE == 3

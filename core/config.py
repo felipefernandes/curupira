@@ -179,7 +179,7 @@ _SKILLS_DEFAULTS: Dict[str, bool] = {
     "job_hunter":       True,
     "sports":           True,
     "github":           False,
-    "ai_news":          False,
+    "ai_news":          True,
     "usage_report":     True,
     "system_control":   True,
     "daily_briefing":   True,

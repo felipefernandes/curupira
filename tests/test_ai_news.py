@@ -21,6 +21,8 @@ def test_ai_news_skill_properties(ai_news_skill):
     assert ai_news_skill.skill_group_emoji == "🤖"
     assert "Obtém as últimas notícias" in ai_news_skill.description
     assert "source" in ai_news_skill.parameters["properties"]
+    assert ai_news_skill.timeout == 60.0  # Default carregado do config
+    assert AINewsSkill(timeout=10.0).timeout == 10.0  # Customizado
 
 
 @pytest.mark.asyncio
@@ -119,7 +121,7 @@ async def test_execute_single_source(ai_news_skill):
         assert entries[0]["title"] == "Somente Noticias"
         # Verify call parameters
         async_mock_get.assert_called_once_with(
-            "https://test-mcp-ai-news.com/api/news", params={"limit": 1}
+            "https://test-mcp-ai-news.com/news", params={"limit": 1}
         )
 
 

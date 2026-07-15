@@ -15,10 +15,11 @@ class AINewsSkill(BaseSkill):
     by consuming the mcp_ai_news REST API.
     """
 
-    def __init__(self, api_url: Optional[str] = None):
+    def __init__(self, api_url: Optional[str] = None, timeout: Optional[float] = None):
         self.api_url = (api_url or config.AI_NEWS_API_URL).rstrip("/")
         self.default_sources = config.AI_NEWS_FETCH_SOURCES
         self.default_limit = config.AI_NEWS_LIMIT_PER_SOURCE
+        self.timeout = timeout or config.AI_NEWS_TIMEOUT
 
     @property
     def name(self) -> str:
@@ -106,14 +107,21 @@ class AINewsSkill(BaseSkill):
         return self.success({"entries": all_entries})
 
     async def _fetch_category(self, category: str, limit: int) -> List[Dict[str, Any]]:
-        # Map category to corresponding endpoint
-        endpoint = f"{self.api_url}/api/{category}"
-        params = {"limit": limit}
+        # Map category to corresponding endpoint and parameters based on mcp_ai_news design
+        if category == "arxiv":
+            endpoint = f"{self.api_url}/papers"
+            params = {"max_results": limit}
+        elif category == "github":
+            endpoint = f"{self.api_url}/github"
+            params = {"max_results": limit}
+        else:
+            endpoint = f"{self.api_url}/news"
+            params = {"limit": limit}
 
         try:
-            # Set a slightly longer timeout (15s) to handle Render cold start,
+            # Set a slightly longer timeout to handle Render cold start,
             # but avoid blocking the loop too much
-            async with httpx.AsyncClient(timeout=15.0) as client:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
                 response = await client.get(endpoint, params=params)
                 if response.status_code != 200:
                     logger.error(

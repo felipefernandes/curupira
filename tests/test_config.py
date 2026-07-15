@@ -141,6 +141,7 @@ def test_ai_news_config_from_env(monkeypatch):
     monkeypatch.setenv("AI_NEWS_API_URL", "https://custom-ai-news.com/")
     monkeypatch.setenv("AI_NEWS_FETCH_SOURCES", "news,github")
     monkeypatch.setenv("AI_NEWS_LIMIT_PER_SOURCE", "5")
+    monkeypatch.setenv("AI_NEWS_TIMEOUT", "45.0")
 
     with patch("dotenv.load_dotenv"), patch("pathlib.Path.is_file", return_value=False):
         if 'core.config' in sys.modules:
@@ -150,11 +151,13 @@ def test_ai_news_config_from_env(monkeypatch):
     assert config.AI_NEWS_API_URL == "https://custom-ai-news.com"
     assert config.AI_NEWS_FETCH_SOURCES == ["news", "github"]
     assert config.AI_NEWS_LIMIT_PER_SOURCE == 5
+    assert config.AI_NEWS_TIMEOUT == 45.0
 
 
 def test_ai_news_config_invalid_limit(monkeypatch):
-    """Test AI_NEWS settings fallback on invalid limit."""
+    """Test AI_NEWS settings fallback on invalid limit and timeout."""
     monkeypatch.setenv("AI_NEWS_LIMIT_PER_SOURCE", "invalid_int")
+    monkeypatch.setenv("AI_NEWS_TIMEOUT", "invalid_float")
 
     with patch("dotenv.load_dotenv"), patch("pathlib.Path.is_file", return_value=False):
         if 'core.config' in sys.modules:
@@ -162,3 +165,4 @@ def test_ai_news_config_invalid_limit(monkeypatch):
         from core import config
 
     assert config.AI_NEWS_LIMIT_PER_SOURCE == 3
+    assert config.AI_NEWS_TIMEOUT == 60.0

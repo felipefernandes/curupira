@@ -303,6 +303,19 @@ else:
         int(_toml_ai_news_limit) if _toml_ai_news_limit is not None else 3
     )
 
+_ai_news_timeout_env = os.getenv("AI_NEWS_TIMEOUT")
+if _ai_news_timeout_env:
+    try:
+        AI_NEWS_TIMEOUT = float(_ai_news_timeout_env)
+    except ValueError:
+        logger.error("AI_NEWS_TIMEOUT inválido. Usando 60.0.")
+        AI_NEWS_TIMEOUT = 60.0
+else:
+    _toml_ai_news_timeout = _toml_get("skills", "ai_news", "timeout")
+    AI_NEWS_TIMEOUT = (
+        float(_toml_ai_news_timeout) if _toml_ai_news_timeout is not None else 60.0
+    )
+
 # ── RSS ────────────────────────────────────────────────────────────────
 
 RSS_FEEDS_DEFAULT: Dict[str, str] = {

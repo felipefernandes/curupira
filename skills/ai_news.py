@@ -86,12 +86,22 @@ class AINewsSkill(BaseSkill):
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         all_entries: List[Dict[str, Any]] = []
+        errors_occurred = []
         for result in results:
             if isinstance(result, Exception):
-                logger.warning("Erro ao buscar categoria do mcp_ai_news: %s", result)
+                logger.error(
+                    "Exceção capturada na execução concorrente do mcp_ai_news: %s",
+                    result,
+                    exc_info=result,
+                )
+                errors_occurred.append(str(result))
                 continue
             if isinstance(result, list):
                 all_entries.extend(result)
+
+        # Se houveram erros de concorrência e nenhuma notícia foi obtida, reporta erro
+        if errors_occurred and not all_entries:
+            return self.error(f"Falha total ao buscar mcp_ai_news. Erros: {'; '.join(errors_occurred)}")
 
         return self.success({"entries": all_entries})
 
@@ -106,16 +116,32 @@ class AINewsSkill(BaseSkill):
             async with httpx.AsyncClient(timeout=15.0) as client:
                 response = await client.get(endpoint, params=params)
                 if response.status_code != 200:
-                    logger.warning(
-                        "API mcp_ai_news retornou status %s para a categoria %s",
+                    logger.error(
+                        "API mcp_ai_news retornou status %s para a categoria %s. Resposta: %s",
                         response.status_code,
                         category,
+                        response.text[:200],
                     )
                     return []
 
-                data = response.json()
+                try:
+                    data = response.json()
+                except ValueError as exc:
+                    logger.error(
+                        "Falha ao decodificar JSON do mcp_ai_news para %s: %s. Resposta: %s",
+                        category,
+                        exc,
+                        response.text[:200],
+                    )
+                    return []
+
                 if not isinstance(data, list):
-                    logger.warning("Resposta inválida da API mcp_ai_news para %s", category)
+                    logger.error(
+                        "Resposta inválida da API mcp_ai_news para %s (esperava lista, recebeu %s). Resposta: %s",
+                        category,
+                        type(data).__name__,
+                        str(data)[:200],
+                    )
                     return []
 
                 # Normalize entries
@@ -156,10 +182,10 @@ class AINewsSkill(BaseSkill):
                 return normalized
 
         except httpx.RequestError as exc:
-            logger.warning(
+            logger.error(
                 "Falha na requisição HTTP ao mcp_ai_news (%s): %s", category, exc
             )
+            raise exc
         except Exception as exc:
-            logger.warning("Erro inesperado ao buscar %s do mcp_ai_news: %s", category, exc)
-
-        return []
+            logger.error("Erro inesperado ao buscar %s do mcp_ai_news: %s", category, exc)
+            raise exc

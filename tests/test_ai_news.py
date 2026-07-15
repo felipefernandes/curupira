@@ -137,9 +137,19 @@ async def test_execute_api_failures_gracefully(ai_news_skill):
         assert result["status"] == "success"
         assert len(result["data"]["entries"]) == 0
 
-    # 2. Test Request exception
-    async_mock_get_exc = AsyncMock(side_effect=httpx.RequestError("Erro de Conexão"))
-    with patch("httpx.AsyncClient.get", async_mock_get_exc):
+    # 2. Test JSON parsing failure (ValueError)
+    mock_bad_json = MagicMock()
+    mock_bad_json.status_code = 200
+    mock_bad_json.json.side_effect = ValueError("JSON inválido")
+    async_mock_get_bad_json = AsyncMock(return_value=mock_bad_json)
+    with patch("httpx.AsyncClient.get", async_mock_get_bad_json):
         result = await ai_news_skill.execute({"user_id": 123}, source="news")
         assert result["status"] == "success"
         assert len(result["data"]["entries"]) == 0
+
+    # 3. Test Request exception (propagates exception via gather and returns error status)
+    async_mock_get_exc = AsyncMock(side_effect=httpx.RequestError("Erro de Conexão"))
+    with patch("httpx.AsyncClient.get", async_mock_get_exc):
+        result = await ai_news_skill.execute({"user_id": 123}, source="news")
+        assert result["status"] == "error"
+        assert "Falha total" in result["error"]

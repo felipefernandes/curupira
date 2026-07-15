@@ -61,7 +61,7 @@ class AINewsSkill(BaseSkill):
             "required": [],
         }
 
-    async def execute(self, context: Dict[str, Any], **kwargs) -> Dict[str, Any]:
+    async def execute(self, context: Dict[str, Any], **kwargs: Any) -> Dict[str, Any]:
         source = kwargs.get("source", "all")
         limit = kwargs.get("limit", self.default_limit)
 

@@ -18,10 +18,10 @@ class DailyBriefingSkill(BaseSkill):
 
     def __init__(
         self,
-        weather_skill: Optional[Any] = None,
-        calendar_skill: Optional[Any] = None,
-        rss_skill: Optional[Any] = None,
-        ai_news_skill: Optional[Any] = None,
+        weather_skill: Optional[BaseSkill] = None,
+        calendar_skill: Optional[BaseSkill] = None,
+        rss_skill: Optional[BaseSkill] = None,
+        ai_news_skill: Optional[BaseSkill] = None,
     ):
         self._weather = weather_skill
         self._calendar = calendar_skill

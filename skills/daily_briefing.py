@@ -21,10 +21,12 @@ class DailyBriefingSkill(BaseSkill):
         weather_skill: Optional[Any] = None,
         calendar_skill: Optional[Any] = None,
         rss_skill: Optional[Any] = None,
+        ai_news_skill: Optional[Any] = None,
     ):
         self._weather = weather_skill
         self._calendar = calendar_skill
         self._rss = rss_skill
+        self._ai_news = ai_news_skill
 
     @property
     def name(self) -> str:
@@ -107,30 +109,46 @@ class DailyBriefingSkill(BaseSkill):
     async def _gather_news(
         self, context: Dict[str, Any]
     ) -> Optional[List[Dict[str, Any]]]:
-        if self._rss is None:
-            return None
-
-        from core import config
-
-        feeds = list(config.RSS_FEEDS.keys())[:2]  # Max 2 feeds
         all_entries: List[Dict[str, Any]] = []
 
-        for feed_name in feeds:
+        # 1. RSS Feeds
+        if self._rss is not None:
+            from core import config
+
+            feeds = list(config.RSS_FEEDS.keys())[:2]  # Max 2 feeds
+            for feed_name in feeds:
+                try:
+                    result = await self._rss.execute(
+                        context, feed_identifier=feed_name, limit=3
+                    )
+                    if result.get("status") == "success":
+                        entries = result.get("data", {}).get("entries", [])
+                        for entry in entries:
+                            all_entries.append(
+                                {
+                                    "source": feed_name,
+                                    "title": entry.get("title", ""),
+                                    "link": entry.get("link", ""),
+                                }
+                            )
+                except Exception as e:
+                    logger.warning("RSS fetch error for %s: %s", feed_name, e)
+
+        # 2. AI News API (mcp_ai_news)
+        if self._ai_news is not None:
             try:
-                result = await self._rss.execute(
-                    context, feed_identifier=feed_name, limit=3
-                )
+                result = await self._ai_news.execute(context, source="all")
                 if result.get("status") == "success":
-                    entries = result.get("data", {}).get("entries", [])
-                    for entry in entries:
+                    ai_entries = result.get("data", {}).get("entries", [])
+                    for entry in ai_entries:
                         all_entries.append(
                             {
-                                "source": feed_name,
+                                "source": entry.get("source", "IA News"),
                                 "title": entry.get("title", ""),
                                 "link": entry.get("link", ""),
                             }
                         )
             except Exception as e:
-                logger.warning("RSS fetch error for %s: %s", feed_name, e)
+                logger.warning("AI News fetch error: %s", e)
 
         return all_entries if all_entries else None

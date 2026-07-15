@@ -114,6 +114,15 @@ if config.skill_enabled("usage_report"):
 else:
     logging.info("Skill 'usage_report' desabilitada pela configuração.")
 
+# Skill: AI News
+ai_news_skill = None
+if config.skill_enabled("ai_news"):
+    from skills.ai_news import AINewsSkill
+    ai_news_skill = AINewsSkill()
+    brain.register_skill(ai_news_skill)
+else:
+    logging.info("Skill 'ai_news' desabilitada pela configuração.")
+
 # Skill: Daily Briefing
 if config.skill_enabled("daily_briefing"):
     from skills.daily_briefing import DailyBriefingSkill
@@ -124,6 +133,7 @@ if config.skill_enabled("daily_briefing"):
         weather_skill=_briefing_weather,
         calendar_skill=_briefing_calendar,
         rss_skill=_briefing_rss,
+        ai_news_skill=ai_news_skill,
     )
     brain.register_skill(daily_briefing_skill)
 else:

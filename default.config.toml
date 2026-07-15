@@ -82,6 +82,8 @@ api_url = "https://mcp-ai-news.onrender.com"
 fetch_sources = ["news", "arxiv", "github"]
 # Limite de itens a buscar de cada fonte (máximo recomendado para poupar tokens: 3)
 limit_per_source = 3
+# Timeout da requisição em segundos (necessário valor alto devido a eventual cold start do Render)
+timeout = 60.0
 
 [skills.rss]
 # Feeds personalizados (sobrescreve os padrões se definido)

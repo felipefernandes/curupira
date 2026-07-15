@@ -707,3 +707,50 @@ async def test_heartbeat_falls_to_reflect_when_briefing_compose_returns_none():
     # But compose returned None, so no message sent from briefing path
     # reflect should still have been called (fall-through)
     mock_brain.reflect.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_execute_daily_briefing_with_ai_news():
+    """Verify that daily briefing integrates AI news when AINewsSkill is passed."""
+    ai_news = AsyncMock()
+    ai_news.execute.return_value = {
+        "status": "success",
+        "data": {
+            "entries": [
+                {
+                    "source": "IA News",
+                    "title": "Nova LLM incrivel",
+                    "link": "https://ia.example.com",
+                    "summary": "Resumo aqui."
+                }
+            ]
+        }
+    }
+
+    skill = DailyBriefingSkill(ai_news_skill=ai_news)
+    result = await skill.execute({})
+
+    assert result["status"] == "success"
+    data = result["data"]
+    assert data["weather"] is None
+    assert data["events"] is None
+    assert len(data["news"]) == 1
+    assert data["news"][0]["source"] == "IA News"
+    assert data["news"][0]["title"] == "Nova LLM incrivel"
+    assert data["news"][0]["link"] == "https://ia.example.com"
+
+
+@pytest.mark.asyncio
+async def test_execute_daily_briefing_with_ai_news_exception():
+    """Verify that daily briefing handles exceptions in ai_news_skill gracefully."""
+    ai_news = AsyncMock()
+    ai_news.execute.side_effect = Exception("Conexão falhou")
+
+    skill = DailyBriefingSkill(ai_news_skill=ai_news)
+    result = await skill.execute({})
+
+    assert result["status"] == "success"
+    data = result["data"]
+    assert data["weather"] is None
+    assert data["events"] is None
+    assert data["news"] is None
